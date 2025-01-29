@@ -27,8 +27,7 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/reaktiv"
-Documentation = "https://reaktiv.readthedocs.io"
+Homepage = "https://github.com/buiapp/reaktiv"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

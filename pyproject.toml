@@ -1,10 +1,37 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "signals-py"
+name = "reaktiv"
 version = "0.1.0"
-description = "Add your description here"
+description = "Reactive signals for Python with async support"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = [
-    "pytest>=8.3.4",
-    "pytest-asyncio>=0.25.3",
+authors = [{name = "Your Name", email = "your@email.com"}]
+license = {text = "MIT"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.20"
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/reaktiv"
+Documentation = "https://reaktiv.readthedocs.io"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v"

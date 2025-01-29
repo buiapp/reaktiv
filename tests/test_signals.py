@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from signal_library import Signal, Effect
+from reaktiv import Signal, Effect, ComputeSignal
 
 @pytest.mark.asyncio
 async def test_signal_initialization():
@@ -195,3 +195,68 @@ async def test_nested_effects():
     
     assert parent_executions == 2
     assert child_executions == 1
+
+@pytest.mark.asyncio
+async def test_compute_signal_basic():
+    source = Signal(5)
+    doubled = ComputeSignal(lambda: source.get() * 2)
+    assert doubled.get() == 10
+    source.set(6)
+    assert doubled.get() == 12
+
+@pytest.mark.asyncio
+async def test_compute_signal_dependencies():
+    a = Signal(2)
+    b = Signal(3)
+    sum_signal = ComputeSignal(lambda: a.get() + b.get())
+    assert sum_signal.get() == 5
+    a.set(4)
+    assert sum_signal.get() == 7
+    b.set(5)
+    assert sum_signal.get() == 9
+
+@pytest.mark.asyncio
+async def test_compute_signal_nested():
+    base = Signal(10)
+    increment = Signal(1)
+    computed = ComputeSignal(lambda: base.get() + increment.get())
+    doubled = ComputeSignal(lambda: computed.get() * 2)
+    assert doubled.get() == 22  # (10+1)*2
+    base.set(20)
+    assert doubled.get() == 42  # (20+1)*2
+    increment.set(2)
+    assert doubled.get() == 44  # (20+2)*2
+
+@pytest.mark.asyncio
+async def test_compute_signal_effect():
+    source = Signal(0)
+    squared = ComputeSignal(lambda: source.get() ** 2)
+    log = []
+    
+    async def log_squared():
+        log.append(squared.get())
+    
+    effect = Effect(log_squared)
+    effect.schedule()
+    await asyncio.sleep(0)
+    source.set(2)
+    await asyncio.sleep(0)
+    assert log == [0, 4]
+
+@pytest.mark.asyncio
+async def test_compute_dynamic_dependencies():
+    switch = Signal(True)
+    a = Signal(10)
+    b = Signal(20)
+    
+    dynamic = ComputeSignal(lambda: a.get() if switch.get() else b.get())
+    assert dynamic.get() == 10
+    
+    switch.set(False)
+    assert dynamic.get() == 20
+    
+    a.set(15)  # Shouldn't affect dynamic now
+    assert dynamic.get() == 20
+    
+    switch.set(True)
+    assert dynamic.get() == 15

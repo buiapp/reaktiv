@@ -1,6 +1,3 @@
-Here's the revised README with clear asyncio requirements:
-
-```markdown
 # reaktiv ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.

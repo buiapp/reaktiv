@@ -1,19 +1,26 @@
+Here's the revised README with clear asyncio requirements:
 
+```markdown
 # reaktiv ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
 
 ```python
+import asyncio
 from reaktiv import Signal, ComputeSignal, Effect
 
-count = Signal(0)
-doubled = ComputeSignal(lambda: count.get() * 2)
+async def main():
+    count = Signal(0)
+    doubled = ComputeSignal(lambda: count.get() * 2)
 
-async def log_count():
-    print(f"Count: {count.get()}, Doubled: {doubled.get()}")
+    async def log_count():
+        print(f"Count: {count.get()}, Doubled: {doubled.get()}")
 
-Effect(log_count).schedule()
-count.set(5)  # Triggers: "Count: 5, Doubled: 10"
+    Effect(log_count).schedule()
+    count.set(5)  # Triggers: "Count: 5, Doubled: 10"
+    await asyncio.sleep(0)  # Allow effects to process
+
+asyncio.run(main())
 ```
 
 ## Features
@@ -37,41 +44,50 @@ uv pip install reaktiv
 
 ### Basic Reactivity
 ```python
+import asyncio
 from reaktiv import Signal, Effect
 
-name = Signal("Alice")
+async def main():
+    name = Signal("Alice")
 
-async def greet():
-    print(f"Hello, {name.get()}!")
+    async def greet():
+        print(f"Hello, {name.get()}!")
 
-# Create and schedule effect
-greeter = Effect(greet)
-greeter.schedule()
+    # Create and schedule effect
+    greeter = Effect(greet)
+    greeter.schedule()
 
-name.set("Bob")  # Prints: "Hello, Bob!"
+    name.set("Bob")  # Prints: "Hello, Bob!"
+    await asyncio.sleep(0)  # Process effects
+
+asyncio.run(main())
 ```
 
 ### Async Effects
 ```python
-from reaktiv import Signal, Effect
 import asyncio
+from reaktiv import Signal, Effect
 
-data = Signal([])
+async def main():
+    data = Signal([])
 
-async def fetch_data():
-    await asyncio.sleep(0.1)
-    data.set([1, 2, 3])
+    async def fetch_data():
+        await asyncio.sleep(0.1)
+        data.set([1, 2, 3])
 
-Effect(fetch_data).schedule()
+    Effect(fetch_data).schedule()
+    await asyncio.sleep(0.2)  # Allow async effect to complete
+
+asyncio.run(main())
 ```
 
 ### Computed Values
 ```python
 from reaktiv import Signal, ComputeSignal
 
+# Synchronous context example
 price = Signal(100)
 tax_rate = Signal(0.2)
-
 total = ComputeSignal(lambda: price.get() * (1 + tax_rate.get()))
 
 print(total.get())  # 120.0
@@ -83,72 +99,39 @@ print(total.get())  # 125.0
 
 ### Signals
 ```python
-# Create
-user = Signal("Alice")
+import asyncio
+from reaktiv import Signal
 
-# Get value
-print(user.get())  # "Alice"
+async def main():
+    user = Signal("Alice")
+    print(user.get())  # "Alice"
+    user.set("Bob")
+    await asyncio.sleep(0)  # Process any dependent effects
 
-# Update value
-user.set("Bob")
+asyncio.run(main())
 ```
 
-### Computed Signals
+### Effects in Async Context
 ```python
-a = Signal(2)
-b = Signal(3)
-sum_signal = ComputeSignal(
-    lambda: a.get() + b.get(),
-    default=0  # Optional error fallback
-)
-```
+import asyncio
+from reaktiv import Signal, Effect
 
-### Effects
-```python
-async def stock_ticker():
-    price = stock.get()
-    print(f"Current price: {price}")
-    await save_to_db(price)
+async def main():
+    stock = Signal(100.0)
 
-# Create and schedule
-effect = Effect(stock_ticker)
-effect.schedule()
+    async def stock_ticker():
+        price = stock.get()
+        print(f"Current price: {price}")
+        await asyncio.sleep(0.1)
 
-# Dispose when done
-effect.dispose()
-```
+    effect = Effect(stock_ticker)
+    effect.schedule()
+    
+    stock.set(105.5)
+    await asyncio.sleep(0.2)
+    effect.dispose()
 
-## Advanced Usage
-
-### Error Handling in Computed
-```python
-# Safe computation with fallback
-divisor = Signal(2)
-safe_divide = ComputeSignal(
-    lambda: 10 / divisor.get(),
-    default=float('inf')
-)
-
-divisor.set(0)  # Prints traceback but maintains last valid value
-```
-
-### Nested Effects
-```python
-async def parent_effect():
-    if user.get().is_admin:
-        # Create child effect conditionally
-        Effect(child_effect).schedule()
-```
-
-### Dynamic Dependencies
-```python
-switch = Signal(True)
-a = Signal(10)
-b = Signal(20)
-
-dynamic = ComputeSignal(
-    lambda: a.get() if switch.get() else b.get()
-)
+asyncio.run(main())
 ```
 
 ---

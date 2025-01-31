@@ -260,3 +260,110 @@ async def test_compute_dynamic_dependencies():
     
     switch.set(True)
     assert dynamic.get() == 15
+
+@pytest.mark.asyncio
+async def test_diamond_dependency():
+    """Test computed signals with diamond-shaped dependencies"""
+    base = Signal(1)
+    a = ComputeSignal(lambda: base.get() + 1)
+    b = ComputeSignal(lambda: base.get() * 2)
+    c = ComputeSignal(lambda: a.get() + b.get())
+
+    # Initial values
+    assert c.get() == 4  # (1+1) + (1*2) = 4
+
+    # Update base and verify propagation
+    base.set(2)
+    await asyncio.sleep(0)
+    assert a.get() == 3
+    assert b.get() == 4
+    assert c.get() == 7  # 3 + 4
+
+    # Verify dependencies update properly
+    base.set(3)
+    await asyncio.sleep(0)
+    assert c.get() == 10  # (3+1) + (3*2) = 4 + 6 = 10
+
+@pytest.mark.asyncio
+async def test_dynamic_dependencies():
+    """Test computed signals that change their dependencies dynamically"""
+    switch = Signal(True)
+    a = Signal(10)
+    b = Signal(20)
+    
+    c = ComputeSignal(
+        lambda: a.get() if switch.get() else b.get()
+    )
+
+    # Initial state
+    assert c.get() == 10
+
+    # Switch dependency
+    switch.set(False)
+    await asyncio.sleep(0)
+    assert c.get() == 20
+
+    # Update original dependency (shouldn't affect)
+    a.set(15)
+    await asyncio.sleep(0)
+    assert c.get() == 20  # Still using b
+
+    # Update new dependency
+    b.set(25)
+    await asyncio.sleep(0)
+    assert c.get() == 25
+
+@pytest.mark.asyncio
+async def test_deep_nesting():
+    """Test 3-level deep computed signal dependencies"""
+    base = Signal(1)
+    level1 = ComputeSignal(lambda: base.get() * 2)
+    level2 = ComputeSignal(lambda: level1.get() + 5)
+    level3 = ComputeSignal(lambda: level2.get() * 3)
+
+    assert level3.get() == 21  # ((1*2)+5)*3
+
+    base.set(3)
+    await asyncio.sleep(0)
+    assert level3.get() == 33  # ((3*2)+5)*3
+
+@pytest.mark.asyncio
+async def test_overlapping_updates():
+    """Test scenario where multiple dependencies update simultaneously"""
+    x = Signal(1)
+    y = Signal(2)
+    a = ComputeSignal(lambda: x.get() + y.get())
+    b = ComputeSignal(lambda: x.get() - y.get())
+    c = ComputeSignal(lambda: a.get() * b.get())
+
+    assert c.get() == -3  # (1+2) * (1-2) = -3
+
+    # Update both base signals
+    x.set(4)
+    y.set(1)
+    await asyncio.sleep(0)
+    assert c.get() == 15  # (4+1) * (4-1) = 5*3
+
+@pytest.mark.asyncio
+async def test_circular_dependency_guard():
+    """Test protection against circular dependencies"""
+    switch = Signal(False)
+    s = Signal(1)
+    
+    # Create signals that will form a circular dependency when switch is True
+    a = ComputeSignal(lambda: s.get() + (b.get() if switch.get() else 0))
+    b = ComputeSignal(lambda: a.get() if switch.get() else 0)
+    
+    # Initial state (no circular dependency)
+    assert a.get() == 1  # 1 + 0
+    assert b.get() == 0
+    
+    # Activate circular dependency
+    switch.set(True)
+    
+    with pytest.raises(RuntimeError) as excinfo:
+        # Trigger computation cycle
+        s.set(2)
+        await asyncio.sleep(0)
+    
+    assert "Circular dependency detected" in str(excinfo.value)

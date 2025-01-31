@@ -51,9 +51,6 @@ async def main():
     alerts_effect.schedule()
     updates_effect.schedule()
     portfolio_effect.schedule()
-
-    # Initial update
-    await asyncio.sleep(0)
     
     # Run for 5 seconds
     await asyncio.sleep(5)

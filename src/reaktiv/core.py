@@ -49,33 +49,42 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         self._compute_fn = compute_fn
         self._default = default
         self._dependencies: Set[Signal] = set()
-        super().__init__(default)  # type: ignore
+        self._computing = False  # Track computation state
+        super().__init__(default)
         self._value: T = default  # type: ignore
         self._compute()
 
     def _compute(self) -> None:
-        old_deps = set(self._dependencies)
-        self._dependencies.clear()
-        
-        token = _current_effect.set(self)
+        if self._computing:
+            raise RuntimeError("Circular dependency detected")
+            
+        self._computing = True
         try:
-            new_value = self._compute_fn()
-        except Exception as e:
-            traceback.print_exc()
-            new_value = getattr(self, '_value', self._default)
+            old_deps = set(self._dependencies)
+            self._dependencies.clear()
+            
+            token = _current_effect.set(self)
+            try:
+                new_value = self._compute_fn()
+            except Exception as e:
+                traceback.print_exc()
+                new_value = getattr(self, '_value', self._default)
+            finally:
+                _current_effect.reset(token)
+
+            if new_value != self._value:
+                self._value = new_value
+                for subscriber in self._subscribers:
+                    subscriber.notify()
+
+            # Update dependencies
+            for signal in old_deps - self._dependencies:
+                signal.unsubscribe(self)
+            for signal in self._dependencies - old_deps:
+                signal.subscribe(self)
+                
         finally:
-            _current_effect.reset(token)
-
-        if new_value != self._value:
-            self._value = new_value
-            for subscriber in self._subscribers:
-                subscriber.notify()
-
-        # Update dependencies
-        for signal in old_deps - self._dependencies:
-            signal.unsubscribe(self)
-        for signal in self._dependencies - old_deps:
-            signal.subscribe(self)
+            self._computing = False
 
     def add_dependency(self, signal: Signal) -> None:
         self._dependencies.add(signal)

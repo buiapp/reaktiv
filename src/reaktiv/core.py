@@ -94,6 +94,9 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
 
     def get(self) -> T:
         return super().get()
+    
+    def set(self, new_value: T) -> None:
+        raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")
 
 class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies."""

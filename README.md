@@ -2,86 +2,54 @@
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
 
-```python
-import asyncio
-from reaktiv import Signal, ComputeSignal, Effect
+## Why reaktiv?
 
-async def main():
-    # Real-time stock prices
-    apple_price = Signal(195.00)
-    google_price = Signal(2750.00)
+If you've worked with modern frontend frameworks like React, Vue, or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. This is the magic behind dynamic UIs and real-time systems.
+
+But why should Python miss out on the benefits of reactivity? `reaktiv` brings these **reactive programming** advantages to your Python projects:
+
+- **Automatic state propagation:** Change a value once, and all dependent computations update automatically.
+- **Efficient updates:** Only the necessary parts are recomputed.
+- **Async-friendly:** Seamlessly integrates with Python's `asyncio` for managing real-time data flows.
+- **Zero external dependencies:** Lightweight and easy to incorporate into any project.
+- **Type-safe:** Fully annotated for clarity and maintainability.
+
+### Real-World Use Cases
+
+Reactive programming isn't just a frontend paradigm. In Python, it can simplify complex backend scenarios such as:
+
+- **Real-time data streams:** Stock prices, sensor readings, or live updates.
+- **User session management:** Keep track of state changes without heavy manual subscription management.
+- **Complex API workflows:** Automatically cascade changes across related computations.
+
+By combining these features, `reaktiv` provides a robust foundation for building **reactive, real-time systems** - whether for data streaming, live monitoring, or even Python-powered UI frameworks.
+
+## How it Works
+
+`reaktiv` provides three core primitives:
+
+1. **Signals**: Store a value and notify dependents when it changes.
+2. **Computed Signals**: Derive values that automatically update when dependencies change.
+3. **Effects**: Run side effects when signals or computed signals change.
+
+## Core Concepts
+
+```mermaid
+graph LR
+    A[Signal] -->|Value| B[Computed Signal]
+    A -->|Change| C[Effect]
+    B -->|Value| C
+    B -->|Change| C
+    C -->|Update| D[External System]
     
-    # User's portfolio
-    shares = Signal({
-        'AAPL': 100,
-        'GOOGL': 50
-    })
-
-    # Computed total portfolio value
-    portfolio_value = ComputeSignal(lambda: (
-        shares.get()['AAPL'] * apple_price.get() +
-        shares.get()['GOOGL'] * google_price.get()
-    ))
-
-    # Price alert system
-    async def check_alerts():
-        if apple_price.get() > 200:
-            print("📈 AAPL alert: Above $200!")
-        if google_price.get() < 2700:
-            print("📉 GOOGL alert: Below $2700!")
-
-    # Automatic updates
-    async def live_updates():
-        # Simulate real-time updates
-        while True:
-            await asyncio.sleep(1)
-            apple_price.set(apple_price.get() * 1.01)  # +1%
-            google_price.set(google_price.get() * 0.995)  # -0.5%
-            print(f"🍏 AAPL: ${apple_price.get():,.2f}  🌐 GOOGL: ${google_price.get():,.2f}")
-
-    # Track portfolio value
-    async def monitor_portfolio():
-        print(f"💰 Current value: ${portfolio_value.get():,.2f}")
-
-    # Set up effects
-    alerts_effect = Effect(check_alerts)
-    updates_effect = Effect(live_updates)
-    portfolio_effect = Effect(monitor_portfolio)
-
-    alerts_effect.schedule()
-    updates_effect.schedule()
-    portfolio_effect.schedule()
+    classDef signal fill:#4CAF50,color:white;
+    classDef computed fill:#2196F3,color:white;
+    classDef effect fill:#FF9800,color:white;
     
-    # Run for 5 seconds
-    await asyncio.sleep(5)
-
-asyncio.run(main())
+    class A,B signal;
+    class B computed;
+    class C effect;
 ```
-
-Output:
-
-```
-💰 Current value: $157,000.00
-🍏 AAPL: $196.95  🌐 GOOGL: $2,736.25
-💰 Current value: $156,507.50
-🍏 AAPL: $198.92  🌐 GOOGL: $2,722.57
-💰 Current value: $156,020.39
-🍏 AAPL: $200.91  🌐 GOOGL: $2,708.96
-📈 AAPL alert: Above $200!
-💰 Current value: $155,538.66
-🍏 AAPL: $202.92  🌐 GOOGL: $2,695.41
-📈 AAPL alert: Above $200!
-📉 GOOGL alert: Below $2700!
-```
-
-## Features
-
-⚡ **Angular-inspired reactivity**  
-✅ **First-class async/await support**  
-🧠 **Automatic dependency tracking**  
-💡 **Zero external dependencies**  
-🧩 **Type annotations throughout**  
-♻️ **Efficient memory management**
 
 ## Installation
 
@@ -94,6 +62,7 @@ uv pip install reaktiv
 ## Quick Start
 
 ### Basic Reactivity
+
 ```python
 import asyncio
 from reaktiv import Signal, Effect
@@ -105,6 +74,7 @@ async def main():
         print(f"Hello, {name.get()}!")
 
     # Create and schedule effect
+    # IMPORTANT: Assign the Effect to a variable to ensure it is not garbage collected.
     greeter = Effect(greet)
     greeter.schedule()
 
@@ -114,25 +84,8 @@ async def main():
 asyncio.run(main())
 ```
 
-### Async Effects
-```python
-import asyncio
-from reaktiv import Signal, Effect
-
-async def main():
-    data = Signal([])
-
-    async def fetch_data():
-        await asyncio.sleep(0.1)
-        data.set([1, 2, 3])
-
-    Effect(fetch_data).schedule()
-    await asyncio.sleep(0.2)  # Allow async effect to complete
-
-asyncio.run(main())
-```
-
 ### Computed Values
+
 ```python
 from reaktiv import Signal, ComputeSignal
 
@@ -146,45 +99,78 @@ tax_rate.set(0.25)
 print(total.get())  # 125.0
 ```
 
-## Core Concepts
+### Async Effects
 
-### Signals
-```python
-import asyncio
-from reaktiv import Signal
-
-async def main():
-    user = Signal("Alice")
-    print(user.get())  # "Alice"
-    user.set("Bob")
-    await asyncio.sleep(0)  # Process any dependent effects
-
-asyncio.run(main())
-```
-
-### Effects in Async Context
 ```python
 import asyncio
 from reaktiv import Signal, Effect
 
 async def main():
-    stock = Signal(100.0)
+    counter = Signal(0)
 
-    async def stock_ticker():
-        price = stock.get()
-        print(f"Current price: {price}")
-        await asyncio.sleep(0.1)
+    async def print_counter():
+        print(f"Counter value is: {counter.get()}")
 
-    effect = Effect(stock_ticker)
-    effect.schedule()
-    
-    stock.set(105.5)
-    await asyncio.sleep(0.2)
-    effect.dispose()
+    # IMPORTANT: Assign the Effect to a variable to prevent it from being garbage collected.
+    counter_effect = Effect(print_counter)
+    counter_effect.schedule()
+
+    for i in range(1, 4):
+        await asyncio.sleep(1)  # Simulate an asynchronous operation or delay.
+        counter.set(i)
+
+    # Wait a bit to allow the last effect to process.
+    await asyncio.sleep(1)
 
 asyncio.run(main())
 ```
 
----
+## Real-Time Example: Polling System
 
-**Inspired by** Angular Signals • **Built for** Python's async-first world
+```python
+import asyncio
+from reaktiv import Signal, ComputeSignal, Effect
+
+async def main():
+    candidate_a = Signal(100)
+    candidate_b = Signal(100)
+    
+    total_votes = ComputeSignal(lambda: candidate_a.get() + candidate_b.get())
+    percent_a = ComputeSignal(lambda: (candidate_a.get() / total_votes.get()) * 100)
+    percent_b = ComputeSignal(lambda: (candidate_b.get() / total_votes.get()) * 100)
+
+    async def display_results():
+        print(f"Total: {total_votes.get()} | A: {candidate_a.get()} ({percent_a.get():.1f}%) | B: {candidate_b.get()} ({percent_b.get():.1f}%)")
+
+    async def check_dominance():
+        if percent_a.get() > 60:
+            print("Alert: Candidate A is dominating!")
+        elif percent_b.get() > 60:
+            print("Alert: Candidate B is dominating!")
+
+    # Assign effects to variables to ensure they are retained
+    display_effect = Effect(display_results)
+    alert_effect = Effect(check_dominance)
+    
+    display_effect.schedule()
+    alert_effect.schedule()
+
+    for _ in range(3):
+        await asyncio.sleep(1)
+        candidate_a.set(candidate_a.get() + 40)
+        candidate_b.set(candidate_b.get() + 10)
+    
+    await asyncio.sleep(1)
+
+asyncio.run(main())
+```
+
+**Sample Output:**
+
+```
+Total: 200 | A: 100 (50.0%) | B: 100 (50.0%)
+Total: 250 | A: 140 (56.0%) | B: 110 (44.0%)
+Total: 300 | A: 180 (60.0%) | B: 120 (40.0%)
+Total: 350 | A: 220 (62.9%) | B: 130 (37.1%)
+Alert: Candidate A is dominating!
+```

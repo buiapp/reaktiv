@@ -174,3 +174,11 @@ Total: 300 | A: 180 (60.0%) | B: 120 (40.0%)
 Total: 350 | A: 220 (62.9%) | B: 130 (37.1%)
 Alert: Candidate A is dominating!
 ```
+
+## Examples
+
+You can find example scripts in the `examples` folder to help you get started with using this project.
+
+---
+
+**Inspired by** Angular Signals • **Built for** Python's async-first world • **Made in** Hamburg

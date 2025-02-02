@@ -1,9 +1,10 @@
 import asyncio
 import contextvars
 import traceback
+import inspect
 from typing import (
-    Generic, TypeVar, Optional, Callable, 
-    Coroutine, Set, Protocol, Any
+    Generic, TypeVar, Optional, Callable,
+    Coroutine, Set, Protocol, Any, Union
 )
 from weakref import WeakSet
 
@@ -99,13 +100,25 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")
 
 class Effect(DependencyTracker, Subscriber):
-    """Reactive effect that tracks signal dependencies."""
-    def __init__(self, coroutine: Callable[[], Coroutine[None, None, None]]):
-        self._coroutine = coroutine
+    """Reactive effect that tracks signal dependencies.
+
+    For asynchronous effects, notifications are debounced (only one scheduled run
+    is active at a time). For synchronous effects, every notification increments an
+    internal counter so that if multiple signals update while the effect is running,
+    the effect function is executed once per update.
+    """
+    def __init__(self, func: Callable[[], Union[None, Coroutine[Any, Any, Any]]]):
+        self._func = func  # May be synchronous or asynchronous.
         self._dependencies: Set[Signal] = set()
-        self._scheduled = False
         self._disposed = False
         self._new_dependencies: Optional[Set[Signal]] = None
+        # For async scheduling:
+        self._scheduled = False
+        # Determine whether the passed function is asynchronous.
+        self._is_async = asyncio.iscoroutinefunction(func)
+        # For synchronous effects, count pending notifications.
+        self._executing_sync = False
+        self._pending_sync = 0
 
     def add_dependency(self, signal: Signal) -> None:
         if self._disposed or self._new_dependencies is None:
@@ -113,13 +126,25 @@ class Effect(DependencyTracker, Subscriber):
         self._new_dependencies.add(signal)
 
     def notify(self) -> None:
-        self.schedule()
+        if self._is_async:
+            self.schedule()
+        else:
+            self._pending_sync += 1
+            if not self._executing_sync:
+                self._execute_sync()
 
     def schedule(self) -> None:
-        if self._disposed or self._scheduled:
+        if self._disposed:
             return
-        self._scheduled = True
-        asyncio.create_task(self._execute())
+        if self._is_async:
+            if self._scheduled:
+                return
+            self._scheduled = True
+            asyncio.create_task(self._execute())
+        else:
+            self._pending_sync += 1
+            if not self._executing_sync:
+                self._execute_sync()
 
     async def _execute(self) -> None:
         self._scheduled = False
@@ -129,7 +154,9 @@ class Effect(DependencyTracker, Subscriber):
         self._new_dependencies = set()
         token = _current_effect.set(self)
         try:
-            await self._coroutine()
+            result = self._func()
+            if inspect.isawaitable(result):
+                await result
         except Exception as e:
             traceback.print_exc()
         finally:
@@ -141,13 +168,41 @@ class Effect(DependencyTracker, Subscriber):
         new_deps = self._new_dependencies or set()
         self._new_dependencies = None
 
-        # Update subscriptions
+        # Update subscriptions: remove old ones and add new ones.
         for signal in self._dependencies - new_deps:
             signal.unsubscribe(self)
         for signal in new_deps - self._dependencies:
             signal.subscribe(self)
-
         self._dependencies = new_deps
+
+    def _execute_sync(self) -> None:
+        if self._disposed:
+            return
+        self._executing_sync = True
+        try:
+            # Process one notification per pending count.
+            while self._pending_sync > 0:
+                self._pending_sync -= 1
+                self._new_dependencies = set()
+                token = _current_effect.set(self)
+                try:
+                    self._func()
+                except Exception:
+                    traceback.print_exc()
+                finally:
+                    _current_effect.reset(token)
+                if self._disposed:
+                    return
+                new_deps = self._new_dependencies or set()
+                self._new_dependencies = None
+                # Update subscriptions.
+                for signal in self._dependencies - new_deps:
+                    signal.unsubscribe(self)
+                for signal in new_deps - self._dependencies:
+                    signal.subscribe(self)
+                self._dependencies = new_deps
+        finally:
+            self._executing_sync = False
 
     def dispose(self) -> None:
         if self._disposed:

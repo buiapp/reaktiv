@@ -14,13 +14,14 @@ from collections import deque
 # --------------------------------------------------
 
 _debug_enabled = False
+_suppress_debug = False  # When True, debug logging is suppressed
 
 def set_debug(enabled: bool) -> None:
     global _debug_enabled
     _debug_enabled = enabled
 
 def debug_log(msg: str) -> None:
-    if _debug_enabled:
+    if _debug_enabled and not _suppress_debug:
         print(f"[REAKTIV DEBUG] {msg}")
 
 # --------------------------------------------------
@@ -130,7 +131,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         stack = _computation_stack.get()
         if self in stack:
             debug_log("ComputeSignal _compute() - Circular dependency detected!")
-            raise RuntimeError("Circular dependency detected")
+            raise RuntimeError("Circular dependency detected") from None
         
         token = _computation_stack.set(stack + [self])
         try:
@@ -167,6 +168,15 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 signal.subscribe(self)
                 debug_log(f"ComputeSignal subscribed to new dependency: {signal}")
 
+            # --- Circular Dependency Detection ---
+            global _suppress_debug
+            prev_suppress = _suppress_debug
+            _suppress_debug = True
+            try:
+                if self._detect_cycle():
+                    raise RuntimeError("Circular dependency detected") from None
+            finally:
+                _suppress_debug = prev_suppress
         finally:
             self._computing = False
             debug_log("ComputeSignal _compute() completed.")
@@ -196,6 +206,20 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
 
     def set(self, new_value: T) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")
+
+    def _detect_cycle(self, visited: Optional[Set['ComputeSignal']] = None) -> bool:
+        """Return True if a circular dependency (cycle) is detected in the dependency graph."""
+        if visited is None:
+            visited = set()
+        if self in visited:
+            return True
+        visited.add(self)
+        for dep in self._dependencies:
+            if isinstance(dep, ComputeSignal):
+                if dep._detect_cycle(visited):
+                    return True
+        visited.remove(self)
+        return False
 
 class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies.

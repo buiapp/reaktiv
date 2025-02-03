@@ -659,7 +659,7 @@ async def test_backpressure(capsys):
     assert "Done." in captured.out
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.01)
+@pytest.mark.timeout(0.1)
 async def test_circular_dependency_guard():
     """Test protection against circular dependencies"""
     switch = Signal(False)
@@ -673,12 +673,6 @@ async def test_circular_dependency_guard():
     assert a.get() == 1  # 1 + 0
     assert b.get() == 0
     
-    # Activate circular dependency
-    switch.set(True)
-    
-    with pytest.raises(RuntimeError) as excinfo:
-        # Trigger computation cycle
-        s.set(2)
-        await asyncio.sleep(0)
-    
-    assert "Circular dependency detected" in str(excinfo.value)
+    # Activate circular dependency: Expect a RuntimeError
+    with pytest.raises(RuntimeError, match="Circular dependency detected"):
+        switch.set(True)

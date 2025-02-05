@@ -120,11 +120,17 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         self._default = default
         self._dependencies: Set[Signal] = set()
         self._computing = False
+        self._initialized = False  # Track if initial computation has been done
 
         super().__init__(default)
         self._value: T = default  # type: ignore
         debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
-        self._compute()
+
+    def get(self) -> T:
+        if not self._initialized:
+            self._initialized = True
+            self._compute()
+        return super().get()
 
     def _compute(self) -> None:
         debug_log("ComputeSignal _compute() called.")
@@ -168,7 +174,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 signal.subscribe(self)
                 debug_log(f"ComputeSignal subscribed to new dependency: {signal}")
 
-            # --- Circular Dependency Detection ---
+            # Circular Dependency Detection
             global _suppress_debug
             prev_suppress = _suppress_debug
             _suppress_debug = True
@@ -222,11 +228,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         return False
 
 class Effect(DependencyTracker, Subscriber):
-    """Reactive effect that tracks signal dependencies.
-    
-    Asynchronous effects are scheduled using a pending-run flag so that if a run is already pending,
-    additional notifications in the same update are ignored.
-    """
+    """Reactive effect that tracks signal dependencies."""
     def __init__(self, func: Callable[[], Union[None, Coroutine[Any, Any, Any]]]):
         self._func = func
         self._dependencies: Set[Signal] = set()
@@ -235,7 +237,6 @@ class Effect(DependencyTracker, Subscriber):
         self._is_async = asyncio.iscoroutinefunction(func)
         self._executing_sync = False
         self._dirty = False
-        # For async effects: whether a run is pending (0 = no pending run, 1 = run pending)
         self._pending_runs: int = 0
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
 
@@ -269,7 +270,6 @@ class Effect(DependencyTracker, Subscriber):
             if self._pending_runs == 0:
                 self._pending_runs = 1
                 asyncio.create_task(self._async_runner())
-            # Otherwise, a run is already pending; ignore additional notifications.
         else:
             self._mark_dirty()
 

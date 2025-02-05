@@ -105,6 +105,10 @@ class Signal(Generic[T]):
             if _batch_depth == 0:
                 process_sync_effects()
 
+    def update(self, update_fn: Callable[[T], T]) -> None:
+        """Update the signal's value using a function that receives the current value."""
+        self.set(update_fn(self._value))
+
     def subscribe(self, subscriber: Subscriber) -> None:
         self._subscribers.add(subscriber)
         debug_log(f"Subscriber {subscriber} added to Signal.")

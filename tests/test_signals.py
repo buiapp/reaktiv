@@ -659,7 +659,58 @@ async def test_backpressure(capsys):
     assert "Done." in captured.out
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(0.1)
+async def test_signal_update_basic():
+    """Test basic signal update functionality"""
+    signal = Signal(5)
+    signal.update(lambda x: x * 2)
+    assert signal.get() == 10
+
+@pytest.mark.asyncio
+async def test_signal_update_effect():
+    """Test that updating a signal triggers effects"""
+    signal = Signal(0)
+    executions = 0
+    
+    async def effect():
+        nonlocal executions
+        signal.get()
+        executions += 1
+    
+    eff = Effect(effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    # Initial effect run
+    assert executions == 1
+    
+    signal.update(lambda x: x + 1)
+    await asyncio.sleep(0)
+    
+    # Should trigger effect again
+    assert executions == 2
+
+@pytest.mark.asyncio
+async def test_signal_update_no_change():
+    """Test no effect trigger when value doesn't change"""
+    signal = Signal(5)
+    executions = 0
+    
+    async def effect():
+        nonlocal executions
+        signal.get()
+        executions += 1
+    
+    eff = Effect(effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    signal.update(lambda x: x)  # Returns same value
+    await asyncio.sleep(0)
+    
+    assert executions == 1  # No additional execution
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(0.01)
 async def test_circular_dependency_guard():
     """Test protection against circular dependencies"""
     switch = Signal(False)

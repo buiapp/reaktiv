@@ -1,5 +1,5 @@
 import asyncio
-from reaktiv import Signal, ComputeSignal, Effect
+from reaktiv import Signal, ComputeSignal, Effect, batch
 
 async def main():
     # Real-time stock prices
@@ -30,8 +30,11 @@ async def main():
         # Simulate real-time updates
         while True:
             await asyncio.sleep(1)
-            apple_price.set(apple_price.get() * 1.01)  # +1%
-            google_price.set(google_price.get() * 0.995)  # -0.5%
+
+            with batch():
+                apple_price.update(lambda v: v * 1.01)  # +1%
+                google_price.update(lambda v: v * 0.995)  # -0.5%
+            
             print(f"🍏 AAPL: ${apple_price.get():,.2f}  🌐 GOOGL: ${google_price.get():,.2f}")
 
     # Track portfolio value
@@ -40,12 +43,13 @@ async def main():
 
     # Set up effects
     alerts_effect = Effect(check_alerts)
-    updates_effect = Effect(live_updates)
     portfolio_effect = Effect(monitor_portfolio)
 
     alerts_effect.schedule()
-    updates_effect.schedule()
     portfolio_effect.schedule()
+
+    # Start live updates
+    updates_task = asyncio.create_task(live_updates())
     
     # Run for 5 seconds
     await asyncio.sleep(5)

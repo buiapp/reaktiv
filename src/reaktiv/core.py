@@ -8,6 +8,7 @@ from typing import (
 )
 from weakref import WeakSet
 from collections import deque
+from contextlib import contextmanager
 
 # --------------------------------------------------
 # Debugging Helpers
@@ -39,20 +40,37 @@ _computation_stack: contextvars.ContextVar[List['ComputeSignal']] = contextvars.
 # Batch Management
 # --------------------------------------------------
 
+@contextmanager
+def batch():
+    """Batch multiple signal updates together, deferring computations and effects until completion."""
+    global _batch_depth
+    _batch_depth += 1
+    try:
+        yield
+    finally:
+        _batch_depth -= 1
+        if _batch_depth == 0:
+            process_deferred_computed()
+            process_sync_effects()
+
+def process_deferred_computed() -> None:
+    global _deferred_computed_queue
+    if _batch_depth > 0:
+        return
+    while _deferred_computed_queue:
+        computed = _deferred_computed_queue.popleft()
+        computed._notify_subscribers()
+
 def process_sync_effects() -> None:
     global _sync_effect_queue
+    if _batch_depth > 0:
+        return
     while _sync_effect_queue:
         effects = list(_sync_effect_queue)
         _sync_effect_queue.clear()
         for effect in effects:
             if not effect._disposed and effect._dirty:
                 effect._execute_sync()
-
-def process_deferred_computed() -> None:
-    global _deferred_computed_queue
-    while _deferred_computed_queue:
-        computed = _deferred_computed_queue.popleft()
-        computed._notify_subscribers()
 
 # --------------------------------------------------
 # Reactive Core
@@ -103,6 +121,7 @@ class Signal(Generic[T]):
         finally:
             _batch_depth -= 1
             if _batch_depth == 0:
+                process_deferred_computed()  # Process deferred computed signals after updates
                 process_sync_effects()
 
     def update(self, update_fn: Callable[[T], T]) -> None:

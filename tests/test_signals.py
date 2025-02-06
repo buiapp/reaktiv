@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from typing import List
-from reaktiv import Signal, Effect, ComputeSignal
+from reaktiv import Signal, Effect, ComputeSignal, batch
 import reaktiv.core as rc
 
 rc.set_debug(True) 
@@ -708,6 +708,84 @@ async def test_signal_update_no_change():
     await asyncio.sleep(0)
     
     assert executions == 1  # No additional execution
+
+@pytest.mark.asyncio
+async def test_batch_basic():
+    """Test basic batching functionality"""
+    a = Signal(1)
+    b = Signal(2)
+    c = ComputeSignal(lambda: a.get() + b.get())
+    executions = 0
+    
+    async def effect():
+        nonlocal executions
+        a.get()
+        b.get()
+        executions += 1
+    
+    eff = Effect(effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    # Initial execution
+    assert c.get() == 3
+    assert executions == 1
+    
+    with batch():
+        a.set(2)
+        b.set(3)
+    
+    await asyncio.sleep(0)
+    assert c.get() == 5
+    assert executions == 2  # Only one additional execution
+
+@pytest.mark.asyncio
+async def test_batch_nested():
+    """Test nested batch operations"""
+    a = Signal(1)
+    executions = 0
+    
+    async def effect():
+        nonlocal executions
+        a.get()
+        executions += 1
+    
+    eff = Effect(effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    with batch():
+        with batch():
+            a.set(2)
+            a.set(3)
+        a.set(4)
+    
+    await asyncio.sleep(0)
+    assert executions == 2  # Initial + one batch update
+
+@pytest.mark.asyncio
+async def test_batch_with_computed():
+    """Test batching with computed signals"""
+    a = Signal(1)
+    b = ComputeSignal(lambda: a.get() * 2)
+    executions = 0
+    
+    async def effect():
+        nonlocal executions
+        b.get()
+        executions += 1
+    
+    eff = Effect(effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    with batch():
+        a.set(2)
+        a.set(3)
+    
+    await asyncio.sleep(0)
+    assert executions == 2  # Initial + one update after batch
+    assert b.get() == 6
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(0.01)

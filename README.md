@@ -84,6 +84,24 @@ async def main():
 asyncio.run(main())
 ```
 
+### Using `update()`
+
+Instead of calling `set(new_value)`, `update()` lets you modify a signal based on its current value.
+
+```python
+from reaktiv import Signal
+
+counter = Signal(0)
+
+# Standard way
+counter.set(counter.get() + 1)
+
+# Using update() for cleaner syntax
+counter.update(lambda x: x + 1)
+
+print(counter.get())  # 2
+```
+
 ### Computed Values
 
 ```python
@@ -124,6 +142,81 @@ async def main():
 
 asyncio.run(main())
 ```
+
+---
+
+## Advanced Features
+
+### Using `untracked()`
+
+By default, when you access a signal inside a computed function or an effect, it will subscribe to that signal. However, sometimes you may want to access a signal **without tracking** it as a dependency.
+
+```python
+import asyncio
+from reaktiv import Signal, Effect, untracked
+
+async def main():
+    count = Signal(10)
+    message = Signal("Hello")
+
+    async def log_message():
+        tracked_count = count.get()
+        untracked_msg = untracked(lambda: message.get())  # Not tracked as a dependency
+        print(f"Count: {tracked_count}, Message: {untracked_msg}")
+
+    effect = Effect(log_message)
+    effect.schedule()
+
+    count.set(20)  # Effect runs (count is tracked)
+    await asyncio.sleep(1)
+    message.set("New Message")  # Effect does NOT run (message is untracked)
+
+    await asyncio.sleep(1)
+
+asyncio.run(main())
+```
+
+---
+
+### Using `on_cleanup()`
+
+Sometimes, you need to clean up resources (e.g., cancel timers, close files, reset state) when an effect re-runs or is disposed.
+
+```python
+import asyncio
+from reaktiv import Signal, Effect
+
+async def main():
+    active = Signal(False)
+
+    async def monitor_status(on_cleanup):
+        print("Monitoring started")
+        active.get()
+
+        def cleanup():
+            print("Cleaning up before next run or disposal")
+
+        on_cleanup(cleanup)
+
+    effect = Effect(monitor_status)
+    effect.schedule()
+
+    await asyncio.sleep(1)
+    active.set(True)  # Cleanup runs before the effect runs again
+
+    await asyncio.sleep(1)
+    effect.dispose()  # Cleanup runs before the effect is disposed
+
+asyncio.run(main())
+
+# Output:
+# Monitoring started
+# Cleaning up before next run or disposal
+# Monitoring started
+# Cleaning up before next run or disposal
+```
+
+---
 
 ## Real-Time Example: Polling System
 

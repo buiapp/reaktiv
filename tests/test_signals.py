@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from typing import List
-from reaktiv import Signal, Effect, ComputeSignal, batch
+from reaktiv import Signal, Effect, ComputeSignal, batch, untracked
 import reaktiv.core as rc
 
 rc.set_debug(True) 
@@ -786,6 +786,118 @@ async def test_batch_with_computed():
     await asyncio.sleep(0)
     assert executions == 2  # Initial + one update after batch
     assert b.get() == 6
+
+@pytest.mark.asyncio
+async def test_untracked(capsys):
+    tracked_signal = Signal(1)
+    untracked_signal = Signal(10)
+    effect_count = 0
+
+    async def effect_fn():
+        nonlocal effect_count
+        effect_count += 1
+        tracked = tracked_signal.get()
+        untracked_val = untracked(lambda: untracked_signal.get())
+        print(f"Effect ran: tracked={tracked}, untracked={untracked_val}")
+
+    effect = Effect(effect_fn)
+    effect.schedule()
+
+    # Let async effects process
+    await asyncio.sleep(0)
+
+    # Initial run
+    assert effect_count == 1
+    assert "tracked=1, untracked=10" in capsys.readouterr().out
+
+    # Update tracked signal
+    tracked_signal.set(2)
+    await asyncio.sleep(0)
+    assert effect_count == 2
+    assert "tracked=2, untracked=10" in capsys.readouterr().out
+
+    # Update untracked signal
+    untracked_signal.set(20)
+    await asyncio.sleep(0)
+    assert effect_count == 2  # Should remain unchanged
+
+@pytest.mark.asyncio
+async def test_effect_cleanup(capsys):
+    a = Signal(0)
+    cleanup_called = []
+    
+    async def effect_fn(on_cleanup):
+        a.get()
+        cleanup_called.append(False)
+        def cleanup():
+            cleanup_called[-1] = True
+            print(f"Cleanup executed: {a.get()}")
+        on_cleanup(cleanup)
+        print(f"Effect ran: {a.get()}")
+
+    effect = Effect(effect_fn)
+    effect.schedule()
+
+    await asyncio.sleep(0)
+
+    assert "Effect ran: 0" in capsys.readouterr().out
+    assert cleanup_called == [False]
+
+    # Second run
+    a.set(1)
+    await asyncio.sleep(0)
+    output = capsys.readouterr().out
+    assert "Cleanup executed: 1" in output
+    assert "Effect ran: 1" in output
+    assert cleanup_called == [True, False]
+
+    # Dispose
+    effect.dispose()
+    await asyncio.sleep(0)
+    assert cleanup_called == [True, True]
+
+@pytest.mark.asyncio
+async def test_cleanup_on_dispose():
+    cleanup_called = False
+    
+    def effect_fn(on_cleanup):
+        nonlocal cleanup_called
+        def cleanup():
+            nonlocal cleanup_called
+            cleanup_called = True
+        on_cleanup(cleanup)
+
+    effect = Effect(effect_fn)
+    effect.schedule()
+    await asyncio.sleep(0)
+    
+    assert not cleanup_called
+    effect.dispose()
+    assert cleanup_called
+
+@pytest.mark.asyncio
+async def test_multiple_cleanups():
+    cleanups = []
+    a = Signal(0)
+    
+    async def effect_fn(on_cleanup):
+        a.get()
+        on_cleanup(lambda: cleanups.append(1))
+        on_cleanup(lambda: cleanups.append(2))
+
+    effect = Effect(effect_fn)
+    effect.schedule()
+    await asyncio.sleep(0)
+    
+    assert cleanups == []
+    
+    a.set(1)
+    await asyncio.sleep(0)
+    assert cleanups == [1, 2]
+    
+    cleanups.clear()
+    effect.dispose()
+    assert cleanups == [1, 2]
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(0.01)

@@ -50,10 +50,10 @@ def batch():
     finally:
         _batch_depth -= 1
         if _batch_depth == 0:
-            process_deferred_computed()
-            process_sync_effects()
+            _process_deferred_computed()
+            _process_sync_effects()
 
-def process_deferred_computed() -> None:
+def _process_deferred_computed() -> None:
     global _deferred_computed_queue
     if _batch_depth > 0:
         return
@@ -61,7 +61,7 @@ def process_deferred_computed() -> None:
         computed = _deferred_computed_queue.popleft()
         computed._notify_subscribers()
 
-def process_sync_effects() -> None:
+def _process_sync_effects() -> None:
     global _sync_effect_queue
     if _batch_depth > 0:
         return
@@ -87,6 +87,14 @@ class Subscriber(Protocol):
 _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = contextvars.ContextVar(
     "_current_effect", default=None
 )
+
+def untracked(func: Callable[[], T]) -> T:
+    """Execute a function without creating dependencies on accessed signals."""
+    token = _current_effect.set(None)
+    try:
+        return func()
+    finally:
+        _current_effect.reset(token)
 
 class Signal(Generic[T]):
     """Reactive signal container that tracks dependent effects and computed signals."""
@@ -117,12 +125,12 @@ class Signal(Generic[T]):
             for subscriber in list(self._subscribers):
                 debug_log(f"Notifying direct subscriber: {subscriber}")
                 subscriber.notify()
-            process_deferred_computed()
+            _process_deferred_computed()
         finally:
             _batch_depth -= 1
             if _batch_depth == 0:
-                process_deferred_computed()  # Process deferred computed signals after updates
-                process_sync_effects()
+                _process_deferred_computed()  # Process deferred computed signals after updates
+                _process_sync_effects()
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         """Update the signal's value using a function that receives the current value."""
@@ -261,6 +269,7 @@ class Effect(DependencyTracker, Subscriber):
         self._executing_sync = False
         self._dirty = False
         self._pending_runs: int = 0
+        self._cleanups: Optional[List[Callable[[], None]]] = None
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
 
     def add_dependency(self, signal: Signal) -> None:
@@ -302,7 +311,7 @@ class Effect(DependencyTracker, Subscriber):
             _sync_effect_queue.add(self)
             debug_log("Effect marked as dirty and added to queue.")
             if _batch_depth == 0:
-                process_sync_effects()
+                _process_sync_effects()
 
     async def _async_runner(self) -> None:
         while self._pending_runs > 0:
@@ -311,10 +320,33 @@ class Effect(DependencyTracker, Subscriber):
             await asyncio.sleep(0)
 
     async def _run_effect_func_async(self) -> None:
+        # Run previous cleanups
+        if self._cleanups is not None:
+            debug_log("Running async cleanup functions")
+            for cleanup in self._cleanups:
+                try:
+                    cleanup()
+                except Exception:
+                    traceback.print_exc()
+            self._cleanups = None
+
         self._new_dependencies = set()
+        current_cleanups: List[Callable[[], None]] = []
+        
+        # Prepare on_cleanup argument if needed
+        sig = inspect.signature(self._func)
+        pass_on_cleanup = len(sig.parameters) >= 1
+        
+        def on_cleanup(fn: Callable[[], None]) -> None:
+            current_cleanups.append(fn)
+
         token = _current_effect.set(self)
         try:
-            result = self._func()
+            if pass_on_cleanup:
+                result = self._func(on_cleanup)
+            else:
+                result = self._func()
+            
             if inspect.isawaitable(result):
                 await result
         except Exception:
@@ -322,6 +354,9 @@ class Effect(DependencyTracker, Subscriber):
             debug_log("Effect function raised an exception during async execution.")
         finally:
             _current_effect.reset(token)
+        
+        self._cleanups = current_cleanups
+        
         if self._disposed:
             return
         new_deps = self._new_dependencies or set()
@@ -335,19 +370,45 @@ class Effect(DependencyTracker, Subscriber):
         if self._disposed or not self._dirty:
             debug_log("Effect _execute_sync() skipped, not dirty or disposed.")
             return
+        
+        # Run previous cleanups
+        if self._cleanups is not None:
+            debug_log("Running cleanup functions")
+            for cleanup in self._cleanups:
+                try:
+                    cleanup()
+                except Exception:
+                    traceback.print_exc()
+            self._cleanups = None
+
         self._dirty = False
         debug_log("Effect _execute_sync() beginning.")
         self._executing_sync = True
         try:
             self._new_dependencies = set()
+            current_cleanups: List[Callable[[], None]] = []
+            
+            # Prepare on_cleanup argument if needed
+            sig = inspect.signature(self._func)
+            pass_on_cleanup = len(sig.parameters) >= 1
+            
+            def on_cleanup(fn: Callable[[], None]) -> None:
+                current_cleanups.append(fn)
+
             token = _current_effect.set(self)
             try:
-                self._func()
+                if pass_on_cleanup:
+                    self._func(on_cleanup)
+                else:
+                    self._func()
             except Exception:
                 traceback.print_exc()
                 debug_log("Effect function raised an exception during sync execution.")
             finally:
                 _current_effect.reset(token)
+            
+            self._cleanups = current_cleanups
+            
             if self._disposed:
                 return
             new_deps = self._new_dependencies or set()
@@ -364,6 +425,17 @@ class Effect(DependencyTracker, Subscriber):
         debug_log("Effect dispose() called.")
         if self._disposed:
             return
+        
+        # Run final cleanups
+        if self._cleanups is not None:
+            debug_log("Running final cleanup functions")
+            for cleanup in self._cleanups:
+                try:
+                    cleanup()
+                except Exception:
+                    traceback.print_exc()
+            self._cleanups = None
+        
         self._disposed = True
         for signal in self._dependencies:
             signal.unsubscribe(self)

@@ -23,20 +23,20 @@ async def test_lazy_initialization():
     assert computed.get() == 42
     compute_fn.assert_called_once()  # Still only one call
 
-# def test_dependency_tracking():
-#     """Test dependencies are only tracked after first access"""
-#     source = Signal(10)
-#     compute_fn = Mock(side_effect=lambda: source.get() * 2)
-#     computed = ComputeSignal(compute_fn)
+def test_dependency_tracking():
+    """Test dependencies are only tracked after first access"""
+    source = Signal(10)
+    compute_fn = Mock(side_effect=lambda: source.get() * 2)
+    computed = ComputeSignal(compute_fn)
     
-#     # No dependencies before access
-#     assert len(computed._dependencies) == 0
+    # No dependencies before access
+    assert len(computed._dependencies) == 0
     
-#     # First access establishes dependencies
-#     assert computed.get() == 20
-#     compute_fn.assert_called_once()
-#     assert len(computed._dependencies) == 1
-#     assert source in computed._dependencies
+    # First access establishes dependencies
+    assert computed.get() == 20
+    compute_fn.assert_called_once()
+    assert len(computed._dependencies) == 1
+    assert source in computed._dependencies
 
 def test_recomputation_on_dependency_change():
     """Test value updates only when accessed after change"""
@@ -99,21 +99,24 @@ def test_nested_computations():
     c = ComputeSignal(compute_c_fn)
     
     # No computations yet
-    assert compute_b_fn.assert_not_called()
-    assert compute_c_fn.assert_not_called()
+    compute_b_fn.assert_not_called()
+    compute_c_fn.assert_not_called()
     
     # Access outer computed signal
     assert c.get() == 7
     
     # Both should be initialized now
-    assert compute_b_fn.assert_called_once()
-    assert compute_b_fn.assert_called_once()
+    compute_b_fn.assert_called_once()
+    compute_c_fn.assert_called_once()
     
     # Update source
     a.set(3)
     
     # No recomputations until access
-    assert compute_b_fn.assert_called_once()
-    assert compute_b_fn.assert_called_once()
-
+    assert compute_b_fn.call_count == 1
+    assert compute_c_fn.call_count == 1
+    
+    # Access should trigger recomputation
     assert c.get() == 11
+    assert compute_b_fn.call_count == 2
+    assert compute_c_fn.call_count == 2

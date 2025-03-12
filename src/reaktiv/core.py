@@ -151,16 +151,20 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         self._default = default
         self._dependencies: Set[Signal] = set()
         self._computing = False
+        self._dirty = True  # Mark as dirty initially
         self._initialized = False  # Track if initial computation has been done
+        self._notifying = False  # Flag to prevent notification loops
 
         super().__init__(default)
         self._value: T = default  # type: ignore
         debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
 
     def get(self) -> T:
-        if not self._initialized:
-            self._initialized = True
+        if self._dirty or not self._initialized:
+            debug_log("ComputeSignal get() - First access or dirty state, computing value.")
             self._compute()
+            self._initialized = True
+            self._dirty = False
         return super().get()
 
     def _compute(self) -> None:
@@ -193,7 +197,8 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             finally:
                 _current_effect.reset(tracker_token)
 
-            if new_value != self._value:
+            has_changed = new_value != self._value
+            if has_changed:
                 self._value = new_value
                 debug_log(f"ComputeSignal value updated to: {new_value}, queuing subscriber notifications.")
                 self._queue_notifications()
@@ -221,6 +226,10 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
 
     def _queue_notifications(self):
         """Queue notifications to be processed after batch completion"""
+        if self._notifying:
+            debug_log("ComputeSignal avoiding notification loop")
+            return
+            
         if _batch_depth > 0:
             debug_log("ComputeSignal deferring notifications until batch completion")
             _deferred_computed_queue.append(self)
@@ -230,16 +239,29 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
     def _notify_subscribers(self):
         """Immediately notify subscribers"""
         debug_log(f"ComputeSignal notifying {len(self._subscribers)} subscribers")
-        for subscriber in list(self._subscribers):
-            subscriber.notify()
+        self._notifying = True
+        try:
+            for subscriber in list(self._subscribers):
+                subscriber.notify()
+        finally:
+            self._notifying = False
 
     def add_dependency(self, signal: Signal) -> None:
         self._dependencies.add(signal)
         debug_log(f"ComputeSignal add_dependency() called with signal: {signal}")
 
     def notify(self) -> None:
-        debug_log("ComputeSignal notify() received. Triggering re-compute.")
-        self._compute()
+        debug_log("ComputeSignal notify() received. Marking as dirty.")
+        if self._computing:
+            debug_log("ComputeSignal notify() - Ignoring notification during computation.")
+            return
+            
+        was_dirty = self._dirty
+        self._dirty = True
+        
+        # Only queue notifications if we weren't already dirty
+        if not was_dirty:
+            self._queue_notifications()
 
     def set(self, new_value: T) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")
@@ -253,9 +275,8 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         visited.add(self)
         for dep in self._dependencies:
             if isinstance(dep, ComputeSignal):
-                if dep._detect_cycle(visited):
+                if dep._detect_cycle(visited.copy()):  # Use a copy to avoid modifying the original
                     return True
-        visited.remove(self)
         return False
 
 class Effect(DependencyTracker, Subscriber):
@@ -270,6 +291,7 @@ class Effect(DependencyTracker, Subscriber):
         self._dirty = False
         self._pending_runs: int = 0
         self._cleanups: Optional[List[Callable[[], None]]] = None
+        self._executing = False  # Flag to prevent recursive runs
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
 
     def add_dependency(self, signal: Signal) -> None:
@@ -288,6 +310,9 @@ class Effect(DependencyTracker, Subscriber):
         if self._disposed:
             debug_log("Effect is disposed, ignoring notify().")
             return
+        if self._executing:
+            debug_log("Effect is already executing, ignoring notify().")
+            return
         if self._is_async:
             self.schedule()
         else:
@@ -297,6 +322,9 @@ class Effect(DependencyTracker, Subscriber):
         debug_log("Effect schedule() called.")
         if self._disposed:
             debug_log("Effect is disposed, schedule() ignored.")
+            return
+        if self._executing:
+            debug_log("Effect is already executing, ignoring schedule().")
             return
         if self._is_async:
             if self._pending_runs == 0:
@@ -320,71 +348,22 @@ class Effect(DependencyTracker, Subscriber):
             await asyncio.sleep(0)
 
     async def _run_effect_func_async(self) -> None:
-        # Run previous cleanups
-        if self._cleanups is not None:
-            debug_log("Running async cleanup functions")
-            for cleanup in self._cleanups:
-                try:
-                    cleanup()
-                except Exception:
-                    traceback.print_exc()
-            self._cleanups = None
-
-        self._new_dependencies = set()
-        current_cleanups: List[Callable[[], None]] = []
-        
-        # Prepare on_cleanup argument if needed
-        sig = inspect.signature(self._func)
-        pass_on_cleanup = len(sig.parameters) >= 1
-        
-        def on_cleanup(fn: Callable[[], None]) -> None:
-            current_cleanups.append(fn)
-
-        token = _current_effect.set(self)
-        try:
-            if pass_on_cleanup:
-                result = self._func(on_cleanup)
-            else:
-                result = self._func()
-            
-            if inspect.isawaitable(result):
-                await result
-        except Exception:
-            traceback.print_exc()
-            debug_log("Effect function raised an exception during async execution.")
-        finally:
-            _current_effect.reset(token)
-        
-        self._cleanups = current_cleanups
-        
-        if self._disposed:
+        if self._executing:
+            debug_log("Effect is already executing async, skipping.")
             return
-        new_deps = self._new_dependencies or set()
-        self._new_dependencies = None
-        for signal in self._dependencies - new_deps:
-            signal.unsubscribe(self)
-            debug_log(f"Effect unsubscribed from old dependency: {signal}")
-        self._dependencies = new_deps
 
-    def _execute_sync(self) -> None:
-        if self._disposed or not self._dirty:
-            debug_log("Effect _execute_sync() skipped, not dirty or disposed.")
-            return
-        
-        # Run previous cleanups
-        if self._cleanups is not None:
-            debug_log("Running cleanup functions")
-            for cleanup in self._cleanups:
-                try:
-                    cleanup()
-                except Exception:
-                    traceback.print_exc()
-            self._cleanups = None
-
-        self._dirty = False
-        debug_log("Effect _execute_sync() beginning.")
-        self._executing_sync = True
+        self._executing = True
         try:
+            # Run previous cleanups
+            if self._cleanups is not None:
+                debug_log("Running async cleanup functions")
+                for cleanup in self._cleanups:
+                    try:
+                        cleanup()
+                    except Exception:
+                        traceback.print_exc()
+                self._cleanups = None
+    
             self._new_dependencies = set()
             current_cleanups: List[Callable[[], None]] = []
             
@@ -394,16 +373,19 @@ class Effect(DependencyTracker, Subscriber):
             
             def on_cleanup(fn: Callable[[], None]) -> None:
                 current_cleanups.append(fn)
-
+    
             token = _current_effect.set(self)
             try:
                 if pass_on_cleanup:
-                    self._func(on_cleanup)
+                    result = self._func(on_cleanup)
                 else:
-                    self._func()
+                    result = self._func()
+                
+                if inspect.isawaitable(result):
+                    await result
             except Exception:
                 traceback.print_exc()
-                debug_log("Effect function raised an exception during sync execution.")
+                debug_log("Effect function raised an exception during async execution.")
             finally:
                 _current_effect.reset(token)
             
@@ -413,13 +395,73 @@ class Effect(DependencyTracker, Subscriber):
                 return
             new_deps = self._new_dependencies or set()
             self._new_dependencies = None
-            for signal in self._dependencies - new_deps:
+            old_deps = set(self._dependencies)
+            for signal in old_deps - new_deps:
                 signal.unsubscribe(self)
                 debug_log(f"Effect unsubscribed from old dependency: {signal}")
             self._dependencies = new_deps
         finally:
-            self._executing_sync = False
-            debug_log("Effect _execute_sync() completed.")
+            self._executing = False
+
+    def _execute_sync(self) -> None:
+        if self._disposed or not self._dirty or self._executing:
+            debug_log("Effect _execute_sync() skipped, not dirty or disposed or already executing.")
+            return
+        
+        self._executing = True
+        try:
+            # Run previous cleanups
+            if self._cleanups is not None:
+                debug_log("Running cleanup functions")
+                for cleanup in self._cleanups:
+                    try:
+                        cleanup()
+                    except Exception:
+                        traceback.print_exc()
+                self._cleanups = None
+    
+            self._dirty = False
+            debug_log("Effect _execute_sync() beginning.")
+            self._executing_sync = True
+            try:
+                self._new_dependencies = set()
+                current_cleanups: List[Callable[[], None]] = []
+                
+                # Prepare on_cleanup argument if needed
+                sig = inspect.signature(self._func)
+                pass_on_cleanup = len(sig.parameters) >= 1
+                
+                def on_cleanup(fn: Callable[[], None]) -> None:
+                    current_cleanups.append(fn)
+    
+                token = _current_effect.set(self)
+                try:
+                    if pass_on_cleanup:
+                        self._func(on_cleanup)
+                    else:
+                        self._func()
+                except Exception:
+                    traceback.print_exc()
+                    debug_log("Effect function raised an exception during sync execution.")
+                finally:
+                    _current_effect.reset(token)
+                
+                self._cleanups = current_cleanups
+                
+                if self._disposed:
+                    return
+                new_deps = self._new_dependencies or set()
+                self._new_dependencies = None
+                old_deps = set(self._dependencies)
+                for signal in old_deps - new_deps:
+                    signal.unsubscribe(self)
+                    debug_log(f"Effect unsubscribed from old dependency: {signal}")
+                self._dependencies = new_deps
+            finally:
+                self._executing_sync = False
+                debug_log("Effect _execute_sync() completed.")
+        finally:
+            self._executing = False
 
     def dispose(self) -> None:
         debug_log("Effect dispose() called.")

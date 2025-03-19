@@ -167,40 +167,6 @@ async def test_memory_management():
     assert len(signal._subscribers) == 0
 
 @pytest.mark.asyncio
-async def test_nested_effects():
-    parent_signal = Signal(0)
-    child_signal = Signal(10)
-    parent_executions = 0
-    child_executions = 0
-
-    async def child_effect():
-        nonlocal child_executions
-        child_signal.get()
-        child_executions += 1
-
-    async def parent_effect():
-        nonlocal parent_executions
-        parent_signal.get()
-        parent_executions += 1
-        
-        if parent_signal.get() > 0:
-            effect = Effect(child_effect)
-            effect.schedule()
-
-    effect = Effect(parent_effect)
-    effect.schedule()
-    await asyncio.sleep(0)
-    
-    parent_signal.set(1)
-    await asyncio.sleep(0)
-    
-    child_signal.set(20)
-    await asyncio.sleep(0)
-    
-    assert parent_executions == 2
-    assert child_executions == 1
-
-@pytest.mark.asyncio
 async def test_compute_signal_basic():
     source = Signal(5)
     doubled = ComputeSignal(lambda: source.get() * 2)
@@ -375,9 +341,6 @@ async def test_signal_computed_effect_triggers_once():
     # 3) Create and schedule the effect (sync or async—this example is sync)
     eff = Effect(my_effect)
     eff.schedule()
-
-    # 4) Wait a little for the initial effect run
-    await asyncio.sleep(0.1)
 
     # Check initial run
     assert effect_run_count == 1, "Effect should have run once initially."

@@ -89,7 +89,7 @@ wheels = [
 
 [[package]]
 name = "reaktiv"
-version = "0.8.0"
+version = "0.10.0"
 source = { editable = "." }
 
 [package.optional-dependencies]

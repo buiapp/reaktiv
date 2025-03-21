@@ -23,7 +23,7 @@ uv pip install reaktiv
 To install the latest development version directly from the source repository:
 
 ```bash
-git clone https://github.com/username/reaktiv.git
+git clone https://github.com/buiapp/reaktiv.git
 cd reaktiv
 pip install -e .
 ```

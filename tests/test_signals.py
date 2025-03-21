@@ -872,6 +872,52 @@ async def test_multiple_cleanups():
     effect.dispose()
     assert cleanups == [1, 2]
 
+@pytest.mark.asyncio
+async def test_compute_signal_default():
+    """Test that ComputeSignal's default parameter works correctly"""
+    # Test with a compute signal that depends on another signal
+    source = Signal(0)
+    computed = ComputeSignal(lambda: 10 / source.get(), default=10)
+    
+    # Initially, since source is 0 and creates an exception, should return default
+    assert computed.get() == 10
+    
+    # After setting source to a value, should compute normally
+    source.set(2)
+    assert computed.get() == 5
+    
+    source.set(8)
+    assert computed.get() == 1.25
+    
+    # Setting source to None should return default again
+    source.set(None)
+    assert computed.get() == 10
+
+@pytest.mark.asyncio
+async def test_compute_signal_default_with_multiple_dependencies():
+    """Test ComputeSignal default behavior with multiple signal dependencies"""
+    a = Signal(None)
+    b = Signal(3)
+    computed = ComputeSignal(
+        lambda: a.get() + b.get(),
+        default=42
+    )
+    
+    # Initially, with a being None, should return default
+    assert computed.get() == 42
+    
+    # Setting a to a valid value should allow normal computation
+    a.set(5)
+    assert computed.get() == 8  # 5 + 3
+    
+    # Setting either signal to None should revert to default
+    a.set(None)
+    assert computed.get() == 42
+    
+    a.set(5)
+    b.set(None)
+    assert computed.get() == 42
+
 # @pytest.mark.asyncio
 # @pytest.mark.timeout(0.01)
 # async def test_circular_dependency_guard():

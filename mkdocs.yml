@@ -1,0 +1,36 @@
+site_name: reaktiv Documentation
+site_description: Documentation for the reaktiv library - Reactive signals for Python with first-class async support
+site_author: Tuan Anh Bui <mail@bui.app>
+repo_url: https://github.com/buiapp/reaktiv
+theme:
+  name: readthedocs
+  navigation_depth: 4
+  highlightjs: true
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - Core Concepts: core-concepts.md
+  - API Reference:
+    - Signal: api/signal.md
+    - ComputeSignal: api/compute-signal.md
+    - Effect: api/effect.md
+    - Utilities: api/utils.md
+  - Advanced Features: advanced-features.md
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - admonition
+  - toc:
+      permalink: true
+extra:
+  version: 0.10.0
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          selection:
+            docstring_style: google
+          rendering:
+            show_source: true

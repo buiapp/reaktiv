@@ -123,7 +123,7 @@ class Signal(Generic[T]):
                 debug_log("Signal set() - new_value considered equal by custom equality function; no update.")
                 return
         else:
-            # Use default == operator with identity semantics
+            # use identity check for equality
             if self._value is new_value:
                 debug_log("Signal set() - new_value is identical to old_value; no update.")
                 return
@@ -226,8 +226,9 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     debug_log(f"Custom equality function raised exception: {e}")
                     # If equality function fails, assume values are different
                     has_changed = True
-            elif new_value == old_value:
-                # Use default equality check if no custom equality provided
+            elif new_value is old_value:
+                # check identity for equality
+                debug_log("ComputeSignal values are identical, no change detected.")
                 has_changed = False
                 
             if has_changed:

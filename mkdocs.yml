@@ -18,7 +18,6 @@ nav:
     - Utilities: api/utils.md
   - Advanced Features: advanced-features.md
 markdown_extensions:
-  - pymdownx.highlight
   - pymdownx.superfences
   - admonition
   - toc:

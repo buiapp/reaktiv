@@ -11,12 +11,12 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - Core Concepts: core-concepts.md
+  - Advanced Features: advanced-features.md
   - API Reference:
     - Signal: api/signal.md
     - ComputeSignal: api/compute-signal.md
     - Effect: api/effect.md
     - Utilities: api/utils.md
-  - Advanced Features: advanced-features.md
 markdown_extensions:
   - admonition
   - toc:

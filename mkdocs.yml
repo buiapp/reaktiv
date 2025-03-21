@@ -25,10 +25,3 @@ extra:
   version: 0.10.0
 plugins:
   - search
-  - mkdocstrings:
-      handlers:
-        python:
-          selection:
-            docstring_style: google
-          rendering:
-            show_source: true

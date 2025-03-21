@@ -184,7 +184,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         if self in stack:
             debug_log("ComputeSignal _compute() - Circular dependency detected!")
             raise RuntimeError("Circular dependency detected") from None
-        
+
         token = _computation_stack.set(stack + [self])
         try:
             self._computing = True
@@ -195,42 +195,20 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             try:
                 new_value = self._compute_fn()
                 debug_log(f"ComputeSignal new computed value: {new_value}")
-            except RuntimeError as e:
-                if "Circular dependency detected" in str(e):
-                    raise
-                traceback.print_exc()
-                debug_log("ComputeSignal encountered an exception during computation.")
-                new_value = getattr(self, '_value', self._default)
             except Exception:
                 traceback.print_exc()
-                debug_log("ComputeSignal encountered an exception during computation.")
-                new_value = getattr(self, '_value', self._default)
+                debug_log("ComputeSignal encountered an exception during computation. Using default value.")
+                new_value = self._default
             finally:
                 _current_effect.reset(tracker_token)
 
-            # Handle value change with custom equality if provided
-            has_changed = True  # Default to assuming value has changed
-            
             # Always update the internal value with the new computed result
             old_value = self._value
             self._value = new_value
-            
-            # But only notify subscribers if the values are considered different
-            if self._equal is not None:
-                # Use custom equality if provided
-                try:
-                    if old_value is not None and new_value is not None:
-                        has_changed = not self._equal(new_value, old_value)
-                    # If either value is None, consider it a change
-                except Exception as e:
-                    debug_log(f"Custom equality function raised exception: {e}")
-                    # If equality function fails, assume values are different
-                    has_changed = True
-            elif new_value is old_value:
-                # check identity for equality
-                debug_log("ComputeSignal values are identical, no change detected.")
-                has_changed = False
-                
+
+            # Notify subscribers if the value has changed or if the default value is used
+            has_changed = old_value != new_value
+
             if has_changed:
                 debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")
                 self._queue_notifications()
@@ -256,6 +234,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 _suppress_debug = prev_suppress
         finally:
             self._computing = False
+            self._dirty = False  # Ensure dirty flag is reset after computation
             debug_log("ComputeSignal _compute() completed.")
             _computation_stack.reset(token)
 

@@ -1,4 +1,6 @@
-# reaktiv ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![License](https://img.shields.io/badge/license-MIT-green)
+# reaktiv
+
+![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![PyPI - Downloads](https://img.shields.io/pypi/dm/reaktiv) ![License](https://img.shields.io/badge/license-MIT-green)
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
 
@@ -214,6 +216,66 @@ asyncio.run(main())
 # Cleaning up before next run or disposal
 # Monitoring started
 # Cleaning up before next run or disposal
+```
+
+### Custom Equality
+
+When creating a Signal or ComputeSignal, you can provide a custom equality function to control when updates are triggered. This is useful for comparing objects by value rather than identity.
+
+```python
+from reaktiv import Signal
+
+# Simple example: compare numbers with tolerance
+num = Signal(10.0, equal=lambda a, b: abs(a - b) < 0.5)
+
+# This won't trigger updates since 10.0 and 10.3 are within 0.5 of each other
+num.set(10.3)  
+
+# This will trigger updates since 10.0 and 10.6 differ by more than 0.5
+num.set(10.6)  
+
+# Custom class comparison example
+class User:
+    def __init__(self, name, role):
+        self.name = name
+        self.role = role
+        
+# By default, different User instances are considered different even with same data
+# Let's create a signal with custom equality that only cares about the role
+user = Signal(User("Alice", "admin"), 
+              equal=lambda a, b: a.role == b.role)
+
+# This won't trigger updates because the role is still "admin"
+# even though it's a different User instance with a different name
+user.set(User("Bob", "admin"))
+
+# This will trigger updates because the role changed
+user.set(User("Charlie", "user"))
+
+# For deep equality with nested structures, a simple JSON-based approach works well:
+import json
+
+def json_equal(a, b):
+    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+# This signal will only update when the content actually changes, 
+# even for complex nested structures
+user_profile = Signal({
+    'name': 'Alice',
+    'preferences': {'theme': 'dark', 'notifications': True}
+}, equal=json_equal)
+
+# This won't trigger updates (same content in a new object)
+user_profile.set({
+    'name': 'Alice',
+    'preferences': {'theme': 'dark', 'notifications': True}
+})
+
+# This will trigger updates (content changed)
+user_profile.set({
+    'name': 'Alice',
+    'preferences': {'theme': 'light', 'notifications': True}
+})
 ```
 
 ---

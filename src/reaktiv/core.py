@@ -98,9 +98,10 @@ def untracked(func: Callable[[], T]) -> T:
 
 class Signal(Generic[T]):
     """Reactive signal container that tracks dependent effects and computed signals."""
-    def __init__(self, value: T):
+    def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
         self._value = value
         self._subscribers: WeakSet[Subscriber] = WeakSet()
+        self._equal = equal  # Store the custom equality function
         debug_log(f"Signal initialized with value: {value}")
 
     def get(self) -> T:
@@ -114,9 +115,19 @@ class Signal(Generic[T]):
     def set(self, new_value: T) -> None:
         global _batch_depth
         debug_log(f"Signal set() called with new_value: {new_value} (old_value: {self._value})")
-        if self._value == new_value:
-            debug_log("Signal set() - new_value is the same as old_value; no update.")
-            return
+        
+        # Use custom equality function if provided, otherwise use == operator
+        if self._equal is not None:
+            # Use custom equality function
+            if self._equal(self._value, new_value):
+                debug_log("Signal set() - new_value considered equal by custom equality function; no update.")
+                return
+        else:
+            # Use default == operator with identity semantics
+            if self._value is new_value:
+                debug_log("Signal set() - new_value is identical to old_value; no update.")
+                return
+            
         self._value = new_value
         debug_log(f"Signal value updated to: {new_value}, notifying subscribers.")
         
@@ -146,7 +157,7 @@ class Signal(Generic[T]):
 
 class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
     """Computed signal that derives value from other signals with error handling."""
-    def __init__(self, compute_fn: Callable[[], T], default: Optional[T] = None):
+    def __init__(self, compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None):
         self._compute_fn = compute_fn
         self._default = default
         self._dependencies: Set[Signal] = set()
@@ -154,9 +165,9 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         self._dirty = True  # Mark as dirty initially
         self._initialized = False  # Track if initial computation has been done
         self._notifying = False  # Flag to prevent notification loops
-
-        super().__init__(default)
-        self._value: T = default  # type: ignore
+        
+        super().__init__(default, equal=equal)
+        self._value = default  # type: ignore
         debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
 
     def get(self) -> T:
@@ -197,12 +208,35 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             finally:
                 _current_effect.reset(tracker_token)
 
-            has_changed = new_value != self._value
+            # Handle value change with custom equality if provided
+            has_changed = True  # Default to assuming value has changed
+            
+            # Always update the internal value with the new computed result
+            old_value = self._value
+            self._value = new_value
+            
+            # But only notify subscribers if the values are considered different
+            if self._equal is not None:
+                # Use custom equality if provided
+                try:
+                    if old_value is not None and new_value is not None:
+                        has_changed = not self._equal(new_value, old_value)
+                    # If either value is None, consider it a change
+                except Exception as e:
+                    debug_log(f"Custom equality function raised exception: {e}")
+                    # If equality function fails, assume values are different
+                    has_changed = True
+            elif new_value == old_value:
+                # Use default equality check if no custom equality provided
+                has_changed = False
+                
             if has_changed:
-                self._value = new_value
-                debug_log(f"ComputeSignal value updated to: {new_value}, queuing subscriber notifications.")
+                debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")
                 self._queue_notifications()
+            else:
+                debug_log(f"ComputeSignal value not considered changed, no subscriber notifications.")
 
+            # Update dependencies
             for signal in old_deps - self._dependencies:
                 signal.unsubscribe(self)
                 debug_log(f"ComputeSignal unsubscribed from old dependency: {signal}")
@@ -256,12 +290,56 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             debug_log("ComputeSignal notify() - Ignoring notification during computation.")
             return
             
+        # Mark as dirty so we recompute on next access
         was_dirty = self._dirty
         self._dirty = True
         
-        # Only queue notifications if we weren't already dirty
-        if not was_dirty:
-            self._queue_notifications()
+        # Only proceed if we weren't already dirty and we have subscribers
+        if not was_dirty and self._subscribers:
+            # If we have custom equality, we need to compute now to determine if we should notify
+            if self._equal is not None:
+                # Store old value before computing
+                old_value = self._value
+                
+                # Clear the internal dirty flag and compute the new value
+                # but don't allow it to queue additional notifications
+                self._dirty = False
+                self._computing = True
+                try:
+                    self._compute()  # Updates internal value, but won't queue notifications due to _computing=True
+                finally:
+                    self._computing = False
+                    
+                # Now manually check if we should notify based on custom equality
+                new_value = self._value  # Get the updated value after _compute
+                should_notify = True  # Default to notifying
+                
+                try:
+                    if old_value is not None and new_value is not None:
+                        # Only notify if values differ according to custom equality
+                        if self._equal(old_value, new_value):
+                            debug_log("ComputeSignal values equal according to custom equality, suppressing notification")
+                            should_notify = False
+                        else:
+                            debug_log("ComputeSignal values differ according to custom equality, will notify")
+                except Exception as e:
+                    debug_log(f"Error in custom equality check: {e}")
+                
+                # Only queue notification if the values differ according to custom equality
+                if should_notify:
+                    # Use standard notification procedure
+                    if _batch_depth > 0:
+                        debug_log("ComputeSignal deferring notifications until batch completion")
+                        _deferred_computed_queue.append(self)
+                    else:
+                        self._notify_subscribers()
+            else:
+                # No custom equality, use standard notification procedure
+                if _batch_depth > 0:
+                    debug_log("ComputeSignal deferring notifications until batch completion")
+                    _deferred_computed_queue.append(self)
+                else:
+                    self._notify_subscribers()
 
     def set(self, new_value: T) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")

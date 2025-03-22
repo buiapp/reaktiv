@@ -4,6 +4,10 @@
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
 
+## Documentation
+
+Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
+
 ## Why reaktiv?
 
 If you've worked with modern frontend frameworks like React, Vue, or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. This is the magic behind dynamic UIs and real-time systems.

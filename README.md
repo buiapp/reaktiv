@@ -334,6 +334,63 @@ Total: 350 | A: 220 (62.9%) | B: 130 (37.1%)
 Alert: Candidate A is dominating!
 ```
 
+## Real-Time WebSocket API Example
+
+This example demonstrates how `reaktiv` simplifies real-time data processing in web applications by automatically updating computed values and sending changes to clients:
+
+```python
+# app.py
+
+from fastapi import FastAPI, WebSocket
+from reaktiv import Signal, ComputeSignal, Effect
+import asyncio
+import uvicorn
+
+app = FastAPI()
+
+# Data source
+measurements = Signal([])
+
+# Computed analytics - automatically update when measurements change
+average = ComputeSignal(lambda: sum(measurements.get()) / len(measurements.get()) if measurements.get() else 0)
+above_threshold = ComputeSignal(lambda: [m for m in measurements.get() if m > average.get() * 1.1])
+
+# WebSocket connection
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    
+    # Effect runs whenever any dependency changes
+    async def send_updates():
+        await websocket.send_json({
+            "average": average.get(),
+            "above_threshold": above_threshold.get()
+        })
+    
+    # Register effect
+    update_client = Effect(send_updates)
+    update_client.schedule()
+    
+    # Add new data point (triggers automatic recalculation and update)
+    async def add_data():
+        while True:
+            await asyncio.sleep(1)
+            user_input = await websocket.receive_text()
+            new_data = measurements.get() + [float(user_input)]
+            measurements.set(new_data)
+    
+    await add_data()
+
+if __name__ == "__main__":
+    uvicorn.run("app:app", host="0.0.0.0", port=8000)
+```
+
+This example shows how:
+1. Signals store measurement data that can be updated in real-time
+2. Computed values automatically recalculate when measurements change
+3. Effects automatically send updates to connected clients whenever values change
+4. The entire reactive system operates with minimal boilerplate code
+
 ## Examples
 
 You can find example scripts in the `examples` folder to help you get started with using this project.

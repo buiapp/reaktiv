@@ -149,6 +149,30 @@ async def main():
 asyncio.run(main())
 ```
 
+### Synchronous Effects
+
+`Effect` works with both async and sync functions. If you don't need async functionality, you can use it without asyncio:
+
+```python
+from reaktiv import Signal, Effect
+
+# Create signals
+counter = Signal(0)
+
+# Define a synchronous effect function
+def log_counter():
+    print(f"Counter value: {counter.get()}")
+
+# Create and schedule the effect
+counter_effect = Effect(log_counter)
+counter_effect.schedule()  # Prints: "Counter value: 0"
+
+# Update the signal
+counter.set(1)  # Immediately prints: "Counter value: 1"
+
+# No asyncio needed for synchronous effects!
+```
+
 ---
 
 ## Advanced Features

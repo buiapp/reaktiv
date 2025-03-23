@@ -100,6 +100,27 @@ Effects:
 - Support both synchronous and asynchronous functions
 - Can handle cleanup via the optional `on_cleanup` parameter
 
+Effects work with both synchronous and asynchronous functions, giving you flexibility based on your needs:
+
+```python
+# Synchronous effect (no asyncio needed)
+counter = Signal(0)
+sync_effect = Effect(lambda: print(f"Counter: {counter.get()}"))
+sync_effect.schedule()  # Runs immediately
+counter.set(1)  # Effect runs synchronously
+
+# Asynchronous effect (requires asyncio)
+import asyncio
+
+async def async_logger():
+    print(f"Async counter: {counter.get()}")
+
+async_effect = Effect(async_logger)
+async_effect.schedule()  # Schedules the effect in the event loop
+```
+
+Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
+
 ## Dependency Tracking
 
 reaktiv automatically tracks dependencies between signals, computed signals, and effects:

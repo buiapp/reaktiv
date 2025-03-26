@@ -103,6 +103,10 @@ class Signal(Generic[T]):
         self._subscribers: WeakSet[Subscriber] = WeakSet()
         self._equal = equal  # Store the custom equality function
         debug_log(f"Signal initialized with value: {value}")
+    
+    def __call__(self) -> T:
+        """Allow signals to be called directly to get their value."""
+        return self.get()
 
     def get(self) -> T:
         tracker = _current_effect.get(None)
@@ -541,3 +545,41 @@ class Effect(DependencyTracker, Subscriber):
             signal.unsubscribe(self)
         self._dependencies.clear()
         debug_log("Effect dependencies cleared and effect disposed.")
+
+# --------------------------------------------------
+# Angular-like API shortcut functions
+# --------------------------------------------------
+
+def signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signal[T]:
+    """Create a writable signal with the given initial value.
+    
+    Usage:
+        counter = signal(0)
+        print(counter())  # Access value: 0
+        counter.set(5)    # Set value
+        counter.update(lambda x: x + 1)  # Update value
+    """
+    return Signal(value, equal=equal)
+
+def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputeSignal[T]:
+    """Create a computed signal that derives its value from other signals.
+    
+    Usage:
+        count = signal(0)
+        doubled = computed(lambda: count() * 2)
+        print(doubled())  # Access computed value
+    """
+    return ComputeSignal(compute_fn, equal=equal)
+
+def effect(func: Callable[[], Union[None, Coroutine[Any, Any, Any]]]) -> Effect:
+    """Create an effect that automatically runs when its dependencies change.
+    
+    The effect is automatically scheduled when created.
+    
+    Usage:
+        count = signal(0)
+        effect_instance = effect(lambda: print(f"Count changed: {count()}"))
+    """
+    effect_instance = Effect(func)
+    effect_instance.schedule()  # Auto-schedule the effect immediately
+    return effect_instance

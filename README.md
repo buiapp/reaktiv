@@ -71,18 +71,17 @@ uv pip install reaktiv
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
-    name = Signal("Alice")
+    name = signal("Alice")
 
     async def greet():
-        print(f"Hello, {name.get()}!")
+        print(f"Hello, {name()}!")
 
     # Create and schedule effect
-    # IMPORTANT: Assign the Effect to a variable to ensure it is not garbage collected.
-    greeter = Effect(greet)
-    greeter.schedule()
+    # IMPORTANT: Assign the effect to a variable to ensure it is not garbage collected.
+    greeter = effect(greet)
 
     name.set("Bob")  # Prints: "Hello, Bob!"
     await asyncio.sleep(0)  # Process effects
@@ -95,49 +94,48 @@ asyncio.run(main())
 Instead of calling `set(new_value)`, `update()` lets you modify a signal based on its current value.
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
-counter = Signal(0)
+counter = signal(0)
 
 # Standard way
-counter.set(counter.get() + 1)
+counter.set(counter() + 1)
 
 # Using update() for cleaner syntax
 counter.update(lambda x: x + 1)
 
-print(counter.get())  # 2
+print(counter())  # 2
 ```
 
 ### Computed Values
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
 # Synchronous context example
-price = Signal(100)
-tax_rate = Signal(0.2)
-total = ComputeSignal(lambda: price.get() * (1 + tax_rate.get()))
+price = signal(100)
+tax_rate = signal(0.2)
+total = computed(lambda: price() * (1 + tax_rate()))
 
-print(total.get())  # 120.0
+print(total())  # 120.0
 tax_rate.set(0.25)
-print(total.get())  # 125.0
+print(total())  # 125.0
 ```
 
 ### Async Effects
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
-    counter = Signal(0)
+    counter = signal(0)
 
     async def print_counter():
-        print(f"Counter value is: {counter.get()}")
+        print(f"Counter value is: {counter()}")
 
-    # IMPORTANT: Assign the Effect to a variable to prevent it from being garbage collected.
-    counter_effect = Effect(print_counter)
-    counter_effect.schedule()
+    # IMPORTANT: Assign the effect to a variable to prevent it from being garbage collected.
+    counter_effect = effect(print_counter)
 
     for i in range(1, 4):
         await asyncio.sleep(1)  # Simulate an asynchronous operation or delay.
@@ -151,21 +149,20 @@ asyncio.run(main())
 
 ### Synchronous Effects
 
-`Effect` works with both async and sync functions. If you don't need async functionality, you can use it without asyncio:
+`effect` works with both async and sync functions. If you don't need async functionality, you can use it without asyncio:
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 # Create signals
-counter = Signal(0)
+counter = signal(0)
 
 # Define a synchronous effect function
 def log_counter():
-    print(f"Counter value: {counter.get()}")
+    print(f"Counter value: {counter()}")
 
 # Create and schedule the effect
-counter_effect = Effect(log_counter)
-counter_effect.schedule()  # Prints: "Counter value: 0"
+counter_effect = effect(log_counter) # Prints: "Counter value: 0"
 
 # Update the signal
 counter.set(1)  # Immediately prints: "Counter value: 1"
@@ -183,19 +180,18 @@ By default, when you access a signal inside a computed function or an effect, it
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect, untracked
+from reaktiv import signal, effect, untracked
 
 async def main():
-    count = Signal(10)
-    message = Signal("Hello")
+    count = signal(10)
+    message = signal("Hello")
 
     async def log_message():
-        tracked_count = count.get()
-        untracked_msg = untracked(lambda: message.get())  # Not tracked as a dependency
+        tracked_count = count()
+        untracked_msg = untracked(lambda: message())  # Not tracked as a dependency
         print(f"Count: {tracked_count}, Message: {untracked_msg}")
 
-    effect = Effect(log_message)
-    effect.schedule()
+    log_effect = effect(log_message)
 
     count.set(20)  # Effect runs (count is tracked)
     await asyncio.sleep(1)
@@ -214,28 +210,27 @@ Sometimes, you need to clean up resources (e.g., cancel timers, close files, res
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
-    active = Signal(False)
+    active = signal(False)
 
     async def monitor_status(on_cleanup):
         print("Monitoring started")
-        active.get()
+        active()
 
         def cleanup():
             print("Cleaning up before next run or disposal")
 
         on_cleanup(cleanup)
 
-    effect = Effect(monitor_status)
-    effect.schedule()
+    monitor_effect = effect(monitor_status)
 
     await asyncio.sleep(1)
     active.set(True)  # Cleanup runs before the effect runs again
 
     await asyncio.sleep(1)
-    effect.dispose()  # Cleanup runs before the effect is disposed
+    monitor_effect.dispose()  # Cleanup runs before the effect is disposed
 
 asyncio.run(main())
 
@@ -251,10 +246,10 @@ asyncio.run(main())
 When creating a Signal or ComputeSignal, you can provide a custom equality function to control when updates are triggered. This is useful for comparing objects by value rather than identity.
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Simple example: compare numbers with tolerance
-num = Signal(10.0, equal=lambda a, b: abs(a - b) < 0.5)
+num = signal(10.0, equal=lambda a, b: abs(a - b) < 0.5)
 
 # This won't trigger updates since 10.0 and 10.3 are within 0.5 of each other
 num.set(10.3)  
@@ -270,7 +265,7 @@ class User:
         
 # By default, different User instances are considered different even with same data
 # Let's create a signal with custom equality that only cares about the role
-user = Signal(User("Alice", "admin"), 
+user = signal(User("Alice", "admin"), 
               equal=lambda a, b: a.role == b.role)
 
 # This won't trigger updates because the role is still "admin"
@@ -288,10 +283,12 @@ def json_equal(a, b):
 
 # This signal will only update when the content actually changes, 
 # even for complex nested structures
-user_profile = Signal({
+user_profile = signal({
     'name': 'Alice',
     'preferences': {'theme': 'dark', 'notifications': True}
 }, equal=json_equal)
+
+changed = effect(lambda: print("User profile updated:", user_profile.get()))
 
 # This won't trigger updates (same content in a new object)
 user_profile.set({
@@ -312,36 +309,32 @@ user_profile.set({
 
 ```python
 import asyncio
-from reaktiv import Signal, ComputeSignal, Effect
+from reaktiv import signal, computed, effect
 
 async def main():
-    candidate_a = Signal(100)
-    candidate_b = Signal(100)
+    candidate_a = signal(100)
+    candidate_b = signal(100)
     
-    total_votes = ComputeSignal(lambda: candidate_a.get() + candidate_b.get())
-    percent_a = ComputeSignal(lambda: (candidate_a.get() / total_votes.get()) * 100)
-    percent_b = ComputeSignal(lambda: (candidate_b.get() / total_votes.get()) * 100)
+    total_votes = computed(lambda: candidate_a() + candidate_b())
+    percent_a = computed(lambda: (candidate_a() / total_votes()) * 100)
+    percent_b = computed(lambda: (candidate_b() / total_votes()) * 100)
 
     async def display_results():
-        print(f"Total: {total_votes.get()} | A: {candidate_a.get()} ({percent_a.get():.1f}%) | B: {candidate_b.get()} ({percent_b.get():.1f}%)")
+        print(f"Total: {total_votes()} | A: {candidate_a()} ({percent_a():.1f}%) | B: {candidate_b()} ({percent_b():.1f}%)")
 
     async def check_dominance():
-        if percent_a.get() > 60:
+        if percent_a() > 60:
             print("Alert: Candidate A is dominating!")
-        elif percent_b.get() > 60:
+        elif percent_b() > 60:
             print("Alert: Candidate B is dominating!")
 
-    # Assign effects to variables to ensure they are retained
-    display_effect = Effect(display_results)
-    alert_effect = Effect(check_dominance)
-    
-    display_effect.schedule()
-    alert_effect.schedule()
+    display_effect = effect(display_results)
+    alert_effect = effect(check_dominance)
 
     for _ in range(3):
         await asyncio.sleep(1)
-        candidate_a.set(candidate_a.get() + 40)
-        candidate_b.set(candidate_b.get() + 10)
+        candidate_a.set(candidate_a() + 40)
+        candidate_b.set(candidate_b() + 10)
     
     await asyncio.sleep(1)
 
@@ -363,44 +356,34 @@ Alert: Candidate A is dominating!
 This example demonstrates how `reaktiv` simplifies real-time data processing in web applications by automatically updating computed values and sending changes to clients:
 
 ```python
-# app.py
-
 from fastapi import FastAPI, WebSocket
-from reaktiv import Signal, ComputeSignal, Effect
+from reaktiv import signal, computed, effect
 import asyncio
 import uvicorn
 
 app = FastAPI()
 
-# Data source
-measurements = Signal([])
+measurements = signal([])
+average = computed(lambda: sum(measurements()) / len(measurements()) if measurements() else 0)
+above_threshold = computed(lambda: [m for m in measurements() if m > average() * 1.1])
 
-# Computed analytics - automatically update when measurements change
-average = ComputeSignal(lambda: sum(measurements.get()) / len(measurements.get()) if measurements.get() else 0)
-above_threshold = ComputeSignal(lambda: [m for m in measurements.get() if m > average.get() * 1.1])
-
-# WebSocket connection
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
-    # Effect runs whenever any dependency changes
     async def send_updates():
         await websocket.send_json({
-            "average": average.get(),
-            "above_threshold": above_threshold.get()
+            "average": average(),
+            "above_threshold": above_threshold()
         })
     
-    # Register effect
-    update_client = Effect(send_updates)
-    update_client.schedule()
+    update_client = effect(send_updates)
     
-    # Add new data point (triggers automatic recalculation and update)
     async def add_data():
         while True:
             await asyncio.sleep(1)
             user_input = await websocket.receive_text()
-            new_data = measurements.get() + [float(user_input)]
+            new_data = measurements() + [float(user_input)]
             measurements.set(new_data)
     
     await add_data()

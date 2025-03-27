@@ -1,130 +1,130 @@
-# ComputeSignal API
+# Computed Signal API
 
-The `ComputeSignal` class extends `Signal` to provide values that are computed from other signals. It automatically tracks dependencies and updates when those dependencies change.
+The `computed()` function creates a signal that derives its value from other signals. It automatically tracks dependencies and updates when those dependencies change.
 
 ## Basic Usage
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
 # Base signals
-x = Signal(10)
-y = Signal(20)
+x = signal(10)
+y = signal(20)
 
 # Computed signal that depends on x and y
-sum_xy = ComputeSignal(lambda: x.get() + y.get())
+sum_xy = computed(lambda: x() + y())
 
-print(sum_xy.get())  # 30
+print(sum_xy())  # 30
 
 # When a dependency changes, the computed value updates automatically
 x.set(15)
-print(sum_xy.get())  # 35
+print(sum_xy())  # 35
 ```
 
-## Constructor
+## Creation
 
 ```python
-ComputeSignal(compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None)
+computed(compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputedSignal[T]
 ```
 
 Creates a new computed signal that derives its value from other signals.
 
 ### Parameters
 
-- `compute_fn`: A function that computes the signal's value. When this function calls `get()` on other signals, dependencies are automatically tracked.
+- `compute_fn`: A function that computes the signal's value. When this function accesses other signals by calling them, dependencies are automatically tracked.
 - `default`: An optional default value to use until the first computation and when computation fails due to an error.
 - `equal`: Optional custom equality function to determine if two computed values are considered equal.
 
+### Returns
+
+A computed signal object that can be called to get its value.
+
 ## Methods
 
-### get
+### Calling the computed signal
 
 ```python
-get() -> T
+sum_xy()  # equivalent to sum_xy.get()
 ```
 
 Returns the computed value, calculating it if necessary. When called within an active effect or another computed signal, it establishes a dependency relationship.
 
 **Returns**: The computed value.
 
-**Note**: Unlike a regular `Signal`, a `ComputeSignal` is lazy. It only computes its value when `get()` is called, and it caches the result until dependencies change.
+**Note**: A computed signal is lazy. It only computes its value when called, and it caches the result until dependencies change.
 
-## Inherited Methods
+## Advanced Methods
 
-`ComputeSignal` inherits from `Signal` but overrides some behaviors:
-
-### set
-
-The `set()` method is not available on computed signals. Their values are derived from their dependencies, so you cannot set them directly. Attempting to call `set()` will raise an `AttributeError`.
-
-### update
-
-The `update()` method is also not available for the same reasons as `set()`.
+The following methods are typically used internally by the library:
 
 ### subscribe / unsubscribe
 
-These methods work the same as in `Signal` and are usually used internally by the library.
+These methods work the same as in regular signals and are usually used internally by the library.
 
 ## Error Handling
 
-If the computation function raises an exception, `ComputeSignal` catches it and:
+If the computation function raises an exception, the computed signal catches it and:
 
 1. Logs the exception via `traceback.print_exc()`
 2. Returns the default value if one was provided, or the last successfully computed value
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
 # Base signal
-x = Signal(10)
+x = signal(10)
 
 # Computed signal with error handling
-safe_compute = ComputeSignal(
-    compute_fn=lambda: 100 / x.get(),  # Will throw ZeroDivisionError if x is 0
+safe_compute = computed(
+    lambda: 100 / x(),  # Will throw ZeroDivisionError if x is 0
     default=0  # Default value to use in case of error
 )
 
-print(safe_compute.get())  # 10 (100 / 10)
+print(safe_compute())  # 10 (100 / 10)
 
 # Set x to 0, which would cause a division by zero
 x.set(0)
 
 # Instead of crashing, it returns the default value
-print(safe_compute.get())  # 0 (the default value)
+print(safe_compute())  # 0 (the default value)
 ```
 
 ## Lazy Evaluation
 
-A key feature of `ComputeSignal` is lazy evaluation. The computation function only runs:
+A key feature of computed signals is lazy evaluation. The computation function only runs:
 
-1. The first time `get()` is called
+1. The first time the signal is called
 2. When dependencies have changed since the last computation
 
 This means expensive computations are only performed when necessary:
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
-x = Signal(10)
-y = Signal(20)
+x = signal(10)
+y = signal(20)
 
 def expensive_computation():
     print("Computing...")
-    return x.get() * y.get()
+    return x() * y()
 
-result = ComputeSignal(expensive_computation)
+result = computed(expensive_computation)
 
 # Nothing happens yet - computation is lazy
 
 # First access - computation runs
-print(result.get())  # Prints: "Computing..." then "200"
+print(result())  # Prints: "Computing..." then "200"
 
 # Second access - no computation needed because nothing changed
-print(result.get())  # Just prints "200" (no "Computing..." message)
+print(result())  # Just prints "200" (no "Computing..." message)
 
 # Change a dependency
 x.set(5)
 
 # Now accessing will recompute
-print(result.get())  # Prints: "Computing..." then "100"
+print(result())  # Prints: "Computing..." then "100"
 ```
+
+## Note on ComputeSignal vs computed()
+
+While reaktiv provides both the `ComputeSignal` class and `computed()` shortcut function, the recommended approach is to use the `computed()` shortcut function for a more concise and ergonomic API.

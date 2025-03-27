@@ -1,17 +1,17 @@
 # Signal API
 
-The `Signal` class is the core building block in reaktiv. It provides a container for values that can change over time and notify dependents of those changes.
+The `signal()` function is the core building block in reaktiv. It creates a container for values that can change over time and notify dependents of those changes.
 
 ## Basic Usage
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Create a signal with an initial value
-counter = Signal(0)
+counter = signal(0)
 
 # Get the current value
-value = counter.get()  # 0
+value = counter()  # 0
 
 # Set a new value
 counter.set(5)
@@ -20,10 +20,10 @@ counter.set(5)
 counter.update(lambda x: x + 1)  # Now 6
 ```
 
-## Constructor
+## Creation
 
 ```python
-Signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None)
+signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signal[T]
 ```
 
 Creates a new signal with an initial value.
@@ -33,12 +33,16 @@ Creates a new signal with an initial value.
 - `value`: The initial value of the signal.
 - `equal`: Optional custom equality function to determine if two values should be considered equal. By default, identity (`is`) is used.
 
+### Returns
+
+A signal object that can be called to get its value and has methods to set and update its value.
+
 ## Methods
 
-### get
+### Calling the signal
 
 ```python
-get() -> T
+counter()  # equivalent to counter.get()
 ```
 
 Returns the current value of the signal. When called within an active effect or computed signal, it establishes a dependency relationship.
@@ -69,6 +73,10 @@ Updates the signal's value by applying a function to its current value.
 **Parameters**:
 - `update_fn`: A function that takes the current value and returns the new value.
 
+## Advanced Methods
+
+The following methods are typically used internally by the library and are not needed for most applications:
+
 ### subscribe
 
 ```python
@@ -80,7 +88,7 @@ Adds a subscriber to be notified when the signal's value changes.
 **Parameters**:
 - `subscriber`: An object implementing the `Subscriber` protocol with a `notify()` method.
 
-**Note**: This is typically used internally by the library. Most applications should use `Effect` or `ComputeSignal` instead.
+**Note**: This is typically used internally by the library. Most applications should use `effect()` or `compute()` instead.
 
 ### unsubscribe
 
@@ -98,7 +106,7 @@ Removes a subscriber so it no longer receives notifications.
 ## Custom Equality Example
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Custom equality function for comparing dictionaries by value
 def dict_equal(a, b):
@@ -109,11 +117,15 @@ def dict_equal(a, b):
     return all(a[k] == b[k] for k in a)
 
 # Create a signal with custom equality
-user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
+user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
 
 # This won't trigger updates because the dictionaries have the same key-value pairs
 user.set({"name": "Alice", "age": 30})
 
 # This will trigger updates because the "age" value differs
 user.set({"name": "Alice", "age": 31})
-``` 
+```
+
+## Note on Signal vs signal()
+
+While reaktiv provides both the `Signal` class and `signal()` shortcut function, the recommended approach is to use the `signal()` shortcut function for a more concise and ergonomic API.

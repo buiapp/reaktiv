@@ -4,6 +4,8 @@
 
 **Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
 
+![reaktiv](assets/logo.png)
+
 ## Documentation
 
 Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).

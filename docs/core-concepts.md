@@ -15,13 +15,13 @@ reaktiv provides three main primitives for reactive programming:
 Signals are containers for values that can change over time. They notify interested parties (subscribers) when their values change.
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Create a signal with initial value
-counter = Signal(0)
+counter = signal(0)
 
 # Get the current value
-value = counter.get()  # 0
+value = counter()  # 0
 
 # Set a new value
 counter.set(1)
@@ -42,22 +42,22 @@ Signals are the fundamental building blocks in reaktiv. They:
 Computed signals derive their values from other signals. They automatically update when their dependencies change.
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
 # Base signals
-x = Signal(10)
-y = Signal(20)
+x = signal(10)
+y = signal(20)
 
 # Computed signal
-sum_xy = ComputeSignal(lambda: x.get() + y.get())
+sum_xy = computed(lambda: x() + y())
 
-print(sum_xy.get())  # 30
+print(sum_xy())  # 30
 
 # Change a dependency
 x.set(15)
 
 # Computed value updates automatically
-print(sum_xy.get())  # 35
+print(sum_xy())  # 35
 ```
 
 Key characteristics of computed signals:
@@ -74,16 +74,15 @@ Key characteristics of computed signals:
 Effects run side effects (like updating UI, logging, or network calls) when signals change.
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-name = Signal("Alice")
+name = signal("Alice")
 
 def log_name():
-    print(f"Name changed to: {name.get()}")
+    print(f"Name changed to: {name()}")
 
 # Create and schedule the effect
-logger = Effect(log_name)
-logger.schedule()  # Prints: "Name changed to: Alice"
+logger = effect(log_name)  # Prints: "Name changed to: Alice"
 
 # Change the signal
 name.set("Bob")  # Prints: "Name changed to: Bob"
@@ -104,19 +103,18 @@ Effects work with both synchronous and asynchronous functions, giving you flexib
 
 ```python
 # Synchronous effect (no asyncio needed)
-counter = Signal(0)
-sync_effect = Effect(lambda: print(f"Counter: {counter.get()}"))
-sync_effect.schedule()  # Runs immediately
+counter = signal(0)
+sync_effect = effect(lambda: print(f"Counter: {counter()}"))  # Runs immediately
+
 counter.set(1)  # Effect runs synchronously
 
 # Asynchronous effect (requires asyncio)
 import asyncio
 
 async def async_logger():
-    print(f"Async counter: {counter.get()}")
+    print(f"Async counter: {counter()}")
 
-async_effect = Effect(async_logger)
-async_effect.schedule()  # Schedules the effect in the event loop
+async_effect = effect(async_logger)  # Schedules the effect in the event loop
 ```
 
 Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
@@ -126,17 +124,16 @@ Choose synchronous effects when you don't need async functionality, and async ef
 reaktiv automatically tracks dependencies between signals, computed signals, and effects:
 
 ```python
-from reaktiv import Signal, ComputeSignal, Effect
+from reaktiv import signal, computed, effect
 
-first_name = Signal("John")
-last_name = Signal("Doe")
+first_name = signal("John")
+last_name = signal("Doe")
 
 # This computed signal depends on both first_name and last_name
-full_name = ComputeSignal(lambda: f"{first_name.get()} {last_name.get()}")
+full_name = computed(lambda: f"{first_name()} {last_name()}")
 
 # This effect depends on full_name (and indirectly on first_name and last_name)
-display = Effect(lambda: print(f"Full name: {full_name.get()}"))
-display.schedule()
+display = effect(lambda: print(f"Full name: {full_name()}"))
 
 # Changing either first_name or last_name will update full_name and trigger the effect
 first_name.set("Jane")  # Effect runs
@@ -144,7 +141,7 @@ first_name.set("Jane")  # Effect runs
 
 The dependency tracking works by:
 
-1. When a signal's `get()` method is called, it checks if there's a currently active effect or computation
+1. When a signal is accessed by calling it (e.g., `signal()`), it checks if there's a currently active effect or computation
 2. If found, the signal adds itself as a dependency of that effect or computation
 3. When the signal's value changes, it notifies all its dependents
 4. Dependents then update or re-execute as needed
@@ -154,17 +151,16 @@ The dependency tracking works by:
 When multiple signals change, reaktiv can batch the updates to avoid unnecessary recalculations:
 
 ```python
-from reaktiv import Signal, ComputeSignal, batch, Effect
+from reaktiv import signal, computed, batch, effect
 
-x = Signal(10)
-y = Signal(20)
-sum_xy = ComputeSignal(lambda: x.get() + y.get())
+x = signal(10)
+y = signal(20)
+sum_xy = computed(lambda: x() + y())
 
 def log_sum():
-    print(f"Sum: {sum_xy.get()}")
+    print(f"Sum: {sum_xy()}")
 
-logger = Effect(log_sum)
-logger.schedule()  # Prints: "Sum: 30"
+logger = effect(log_sum)  # Prints: "Sum: 30"
 
 # Without batching, each signal change would trigger recomputation
 # With batching, recomputation happens only once after all changes
@@ -187,7 +183,7 @@ reaktiv uses weak references for its internal subscriber tracking, which means:
 By default, reaktiv uses identity (`is`) to determine if a signal's value has changed. You can provide a custom equality function for more sophisticated behavior:
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Custom equality for comparing lists by value
 def list_equal(a, b):
@@ -196,7 +192,7 @@ def list_equal(a, b):
     return all(a_item == b_item for a_item, b_item in zip(a, b))
 
 # Create a signal with custom equality
-items = Signal([1, 2, 3], equal=list_equal)
+items = signal([1, 2, 3], equal=list_equal)
 
 # This won't trigger updates because the lists have the same values
 items.set([1, 2, 3])

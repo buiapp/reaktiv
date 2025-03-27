@@ -13,17 +13,16 @@ A context manager that batches multiple signal updates together, deferring compu
 ### Usage
 
 ```python
-from reaktiv import Signal, ComputeSignal, Effect, batch
+from reaktiv import signal, computed, effect, batch
 
-x = Signal(5)
-y = Signal(10)
-sum_xy = ComputeSignal(lambda: x.get() + y.get())
+x = signal(5)
+y = signal(10)
+sum_xy = computed(lambda: x() + y())
 
 def log_sum():
-    print(f"Sum: {sum_xy.get()}")
+    print(f"Sum: {sum_xy()}")
 
-logger = Effect(log_sum)
-logger.schedule()  # Prints: "Sum: 15"
+logger = effect(log_sum)  # Prints: "Sum: 15"
 
 # Without batching, this would trigger two separate updates:
 # x.set(10)  # Triggers recomputation & effect
@@ -62,22 +61,21 @@ Executes a function without creating dependencies on any signals accessed within
 ### Usage
 
 ```python
-from reaktiv import Signal, Effect, untracked
+from reaktiv import signal, effect, untracked
 
-name = Signal("Alice")
-greeting = Signal("Hello")
+name = signal("Alice")
+greeting = signal("Hello")
 
 def log_message():
     # This creates a dependency on the 'name' signal
-    person = name.get()
+    person = name()
     
     # This does NOT create a dependency on the 'greeting' signal
-    prefix = untracked(lambda: greeting.get())
+    prefix = untracked(lambda: greeting())
     
     print(f"{prefix}, {person}!")
 
-logger = Effect(log_message)
-logger.schedule()  # Prints: "Hello, Alice!"
+logger = effect(log_message)  # Prints: "Hello, Alice!"
 
 # This will trigger the effect because 'name' is a dependency
 name.set("Bob")  # Prints: "Hello, Bob!"
@@ -96,14 +94,14 @@ greeting.set("Hi")  # No effect execution
 ## to_async_iter
 
 ```python
-to_async_iter(signal: Signal[T]) -> AsyncIterator[T]
+to_async_iter(signal_instance) -> AsyncIterator[T]
 ```
 
 Converts a signal into an async iterator that yields values whenever the signal changes.
 
 ### Parameters
 
-- `signal`: The signal to convert to an async iterator.
+- `signal_instance`: The signal to convert to an async iterator.
 
 ### Returns
 
@@ -113,10 +111,10 @@ Converts a signal into an async iterator that yields values whenever the signal 
 
 ```python
 import asyncio
-from reaktiv import Signal, to_async_iter
+from reaktiv import signal, to_async_iter
 
 async def main():
-    counter = Signal(0)
+    counter = signal(0)
     
     # Create a task that increments the counter
     async def increment_counter():

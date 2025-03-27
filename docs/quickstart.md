@@ -16,19 +16,18 @@ Here's a simple example showing the core functionality:
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
     # Create a signal with initial value
-    name = Signal("Alice")
+    name = signal("Alice")
     
     # Create an effect that depends on the signal
     async def greet():
-        print(f"Hello, {name.get()}!")
+        print(f"Hello, {name()}!")
     
     # Create and schedule the effect (important: keep a reference to prevent garbage collection)
-    greeter = Effect(greet)
-    greeter.schedule()
+    greeter = effect(greet)
     
     # Prints: "Hello, Alice!"
     
@@ -46,22 +45,22 @@ asyncio.run(main())
 Computed signals let you derive values from other signals:
 
 ```python
-from reaktiv import Signal, ComputeSignal
+from reaktiv import signal, computed
 
 # Create base signals
-price = Signal(100)
-tax_rate = Signal(0.2)
+price = signal(100)
+tax_rate = signal(0.2)
 
 # Create a computed signal that depends on price and tax_rate
-total = ComputeSignal(lambda: price.get() * (1 + tax_rate.get()))
+total = computed(lambda: price() * (1 + tax_rate()))
 
-print(total.get())  # 120.0
+print(total())  # 120.0
 
 # Change a dependency
 tax_rate.set(0.25)
 
 # The computed value updates automatically
-print(total.get())  # 125.0
+print(total())  # 125.0
 ```
 
 ## Working with Updates
@@ -69,17 +68,17 @@ print(total.get())  # 125.0
 Instead of using `set(new_value)`, you can use `update()` to modify a signal based on its current value:
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
-counter = Signal(0)
+counter = signal(0)
 
 # Standard way
-counter.set(counter.get() + 1)
+counter.set(counter() + 1)
 
 # Using update() for cleaner syntax
 counter.update(lambda x: x + 1)
 
-print(counter.get())  # 2
+print(counter())  # 2
 ```
 
 ## Batching Updates
@@ -87,11 +86,11 @@ print(counter.get())  # 2
 When making multiple signal updates, you can batch them together to optimize performance:
 
 ```python
-from reaktiv import Signal, ComputeSignal, batch
+from reaktiv import signal, computed, batch
 
-x = Signal(10)
-y = Signal(20)
-sum_xy = ComputeSignal(lambda: x.get() + y.get())
+x = signal(10)
+y = signal(20)
+sum_xy = computed(lambda: x() + y())
 
 # Without batching, computed values are recalculated after each signal update
 x.set(5)  # Recalculates sum_xy
@@ -109,14 +108,14 @@ with batch():
 By default, signals use identity (`is`) for equality checking. You can provide a custom equality function:
 
 ```python
-from reaktiv import Signal
+from reaktiv import signal
 
 # Custom equality function for case-insensitive string comparison
 def case_insensitive_equal(a, b):
     return a.lower() == b.lower()
 
 # Create a signal with custom equality function
-name = Signal("Alice", equal=case_insensitive_equal)
+name = signal("Alice", equal=case_insensitive_equal)
 
 # This won't trigger updates because "alice" is considered equal to "Alice"
 name.set("alice")
@@ -131,17 +130,16 @@ reaktiv has first-class support for async functions:
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
-    counter = Signal(0)
+    counter = signal(0)
     
     async def print_counter():
-        print(f"Counter value is: {counter.get()}")
+        print(f"Counter value is: {counter()}")
     
     # Keep a reference to prevent garbage collection
-    counter_effect = Effect(print_counter)
-    counter_effect.schedule()
+    counter_effect = effect(print_counter)
     
     for i in range(1, 4):
         await asyncio.sleep(1)

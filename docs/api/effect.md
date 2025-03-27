@@ -1,22 +1,21 @@
 # Effect API
 
-The `Effect` class in reaktiv allows you to execute side effects when signals change. It's useful for updating UI elements, logging, making network requests, or any other operations that respond to state changes.
+The `effect()` function in reaktiv allows you to execute side effects when signals change. It's useful for updating UI elements, logging, making network requests, or any other operations that respond to state changes.
 
 ## Basic Usage
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 # Create a signal
-counter = Signal(0)
+counter = signal(0)
 
 # Define an effect that uses the signal
 def log_counter():
-    print(f"Counter value: {counter.get()}")
+    print(f"Counter value: {counter()}")
 
 # Create and schedule the effect
-logger = Effect(log_counter)
-logger.schedule()  # Prints: "Counter value: 0"
+logger = effect(log_counter)  # Prints: "Counter value: 0"
 
 # Update the signal
 counter.set(1)  # Prints: "Counter value: 1"
@@ -25,10 +24,10 @@ counter.set(1)  # Prints: "Counter value: 1"
 logger.dispose()
 ```
 
-## Constructor
+## Creation
 
 ```python
-Effect(func: Callable[[], Union[None, Coroutine[Any, Any, Any]]])
+effect(func: Callable[[], Union[None, Coroutine[Any, Any, Any]]]) -> Effect
 ```
 
 Creates a new effect that executes the provided function.
@@ -37,17 +36,11 @@ Creates a new effect that executes the provided function.
 
 - `func`: The function to execute when dependencies change. This can be either a synchronous function or an asynchronous coroutine function.
 
+### Returns
+
+An Effect object that automatically starts tracking dependencies and responding to changes.
+
 ## Methods
-
-### schedule
-
-```python
-schedule() -> None
-```
-
-Schedules the effect to run. This will execute the effect function once immediately and then again whenever dependencies change.
-
-**Note**: You must call `schedule()` after creating an effect for it to start tracking dependencies and responding to changes.
 
 ### dispose
 
@@ -65,17 +58,16 @@ reaktiv has first-class support for asynchronous effects:
 
 ```python
 import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 async def main():
-    counter = Signal(0)
+    counter = signal(0)
     
     async def log_counter():
-        print(f"Counter value: {counter.get()}")
+        print(f"Counter value: {counter()}")
     
     # Create and schedule the async effect
-    logger = Effect(log_counter)
-    logger.schedule()  # Prints: "Counter value: 0"
+    logger = effect(log_counter)  # Prints: "Counter value: 0"
     
     # Update the signal and wait for the effect to run
     counter.set(1)
@@ -93,12 +85,12 @@ asyncio.run(main())
 Effects can register cleanup functions that will be executed before the effect runs again or when it's disposed:
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-counter = Signal(0)
+counter = signal(0)
 
 def counter_effect(on_cleanup):
-    value = counter.get()
+    value = counter()
     print(f"Counter value: {value}")
     
     # Register a cleanup function
@@ -108,8 +100,7 @@ def counter_effect(on_cleanup):
     on_cleanup(cleanup)
 
 # Create and schedule the effect with cleanup
-logger = Effect(counter_effect)
-logger.schedule()
+logger = effect(counter_effect)
 # Prints: "Counter value: 0"
 
 # Update the signal
@@ -131,27 +122,25 @@ Effects are not automatically garbage collected as long as they're actively trac
 3. Avoid creating effects inside loops or frequently-called functions without disposing of them
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-def create_temporary_effect(signal):
+def create_temporary_effect(s):
     # This effect will only exist while the function runs
-    temp_effect = Effect(lambda: print(f"Value: {signal.get()}"))
-    temp_effect.schedule()
+    temp_effect = effect(lambda: print(f"Value: {s()}"))
     # ... do something ...
     temp_effect.dispose()  # Clean up properly
 
 # Better pattern for component lifecycle
 class MyComponent:
-    def __init__(self, signal):
-        self.signal = signal
-        self.effect = Effect(self._render)
-        self.effect.schedule()
+    def __init__(self, s):
+        self.s = s
+        self.effect_instance = effect(self._render)
     
     def _render(self):
-        print(f"Rendering: {self.signal.get()}")
+        print(f"Rendering: {self.s()}")
     
     def destroy(self):
-        self.effect.dispose()
+        self.effect_instance.dispose()
 ```
 
 ## Notification Batching
@@ -159,16 +148,15 @@ class MyComponent:
 When multiple signals change, their effects are batched to avoid unnecessary executions:
 
 ```python
-from reaktiv import Signal, Effect, batch
+from reaktiv import signal, effect, batch
 
-x = Signal(1)
-y = Signal(2)
+x = signal(1)
+y = signal(2)
 
 def log_values():
-    print(f"x: {x.get()}, y: {y.get()}")
+    print(f"x: {x()}, y: {y()}")
 
-logger = Effect(log_values)
-logger.schedule()  # Prints: "x: 1, y: 2"
+logger = effect(log_values)  # Prints: "x: 1, y: 2"
 
 # Without batching, the effect would run twice:
 # x.set(10)  # Effect runs
@@ -181,3 +169,7 @@ with batch():
 # After batch completes: Effect runs once with new values
 # Prints: "x: 10, y: 20"
 ```
+
+## Note on Effect vs effect()
+
+While reaktiv provides both the `Effect` class and `effect()` shortcut function, the recommended approach is to use the `effect()` shortcut function for a more concise and ergonomic API.

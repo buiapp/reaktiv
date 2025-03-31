@@ -210,8 +210,17 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             old_value = self._value
             self._value = new_value
 
-            # Notify subscribers if the value has changed or if the default value is used
-            has_changed = old_value != new_value
+            # Check if values have changed based on equality function or identity
+            has_changed = True  # Default to assume changed
+            if self._equal is not None:
+                # Use custom equality function if provided
+                try:
+                    has_changed = not self._equal(old_value, new_value)
+                except Exception as e:
+                    debug_log(f"Error in custom equality check: {e}")
+            else:
+                # Default to identity comparison
+                has_changed = old_value is not new_value
 
             if has_changed:
                 debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")

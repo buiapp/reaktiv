@@ -172,38 +172,6 @@ counter.set(1)  # Immediately prints: "Counter value: 1"
 # No asyncio needed for synchronous effects!
 ```
 
-### Using Decorator Syntax
-
-Python lambdas are limited to single expressions, which can be restrictive for complex logic. 
-Reaktiv functions also support decorator syntax for multi-line implementations:
-
-```python
-from reaktiv import signal, computed, effect
-
-# Using as a decorator (no parentheses needed)
-@signal
-def counter():
-    # Initialize with complex logic if needed
-    return 0
-
-# Using as a decorator with options
-@computed(equal=lambda a, b: abs(a - b) < 0.01)
-def double_counter():
-    # Multi-line computation
-    value = counter()
-    result = value * 2
-    return result
-
-@effect
-def log_values():
-    # Multi-line effect
-    print(f"Counter: {counter()}")
-    print(f"Double: {double_counter()}")
-    
-# Modify the signal
-counter.set(5)  # Automatically triggers the effect
-```
-
 ---
 
 ## Advanced Features

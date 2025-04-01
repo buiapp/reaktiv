@@ -4,7 +4,7 @@ import traceback
 import inspect
 from typing import (
     Generic, TypeVar, Optional, Callable,
-    Coroutine, Set, Protocol, Union, Deque, List, overload
+    Coroutine, Set, Protocol, Union, Deque, List
 )
 from weakref import WeakSet
 from collections import deque
@@ -170,10 +170,9 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         self._initialized = False  # Track if initial computation has been done
         self._notifying = False  # Flag to prevent notification loops
         
-        super().__init__(default, equal=equal)
-        self._value = default  # type: ignore
+        super().__init__(None, equal=equal) # type: ignore
         debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
-
+    
     def get(self) -> T:
         if self._dirty or not self._initialized:
             debug_log("ComputeSignal get() - First access or dirty state, computing value.")
@@ -215,7 +214,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             if self._equal is not None:
                 # Use custom equality function if provided
                 try:
-                    has_changed = not self._equal(old_value, new_value)
+                    has_changed = not self._equal(old_value, new_value) if old_value is not None and new_value is not None else True
                 except Exception as e:
                     debug_log(f"Error in custom equality check: {e}")
             else:
@@ -308,7 +307,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 should_notify = True  # Default to notifying
                 
                 try:
-                    if self._equal(old_value, new_value):
+                    if old_value is not None and new_value is not None and self._equal(old_value, new_value):
                         debug_log("ComputeSignal values equal according to custom equality, suppressing notification")
                         should_notify = False
                     else:
@@ -350,7 +349,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
 
 class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies."""
-    def __init__(self, func: Callable[[], Union[None, Coroutine[None, None, None]]]):
+    def __init__(self, func: Callable[..., Union[None, Coroutine[None, None, None]]]):
         self._func = func
         self._dependencies: Set[Signal] = set()
         self._disposed = False
@@ -554,165 +553,39 @@ class Effect(DependencyTracker, Subscriber):
         debug_log("Effect dependencies cleared and effect disposed.")
 
 # --------------------------------------------------
-# Angular-like API functions with decorator support
+# Angular-like API shortcut functions
 # --------------------------------------------------
 
-@overload
 def signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signal[T]:
-    """Standard usage: Create a signal with an initial value and optional equality function."""
-    ...
-
-@overload
-def signal(value_or_func: Callable[[], T]) -> Signal[T]:
-    """Decorator usage: Create a signal from a function that returns the initial value."""
-    ...
-
-@overload
-def signal(*, equal: Optional[Callable[[T, T], bool]] = None) -> Callable[[Callable[[], T]], Signal[T]]:
-    """Decorator usage with parameters: Create a signal with a custom equality function."""
-    ...
-
-def signal(value_or_func: Optional[Union[T, Callable[[], T]]] = None, *, 
-           equal: Optional[Callable[[T, T], bool]] = None) -> Union[Signal[T], Callable[[Callable[[], T]], Signal[T]]]:
     """Create a writable signal with the given initial value.
     
-    Can be used in three ways:
-    
-    1. With a direct value:
-    ```python
-    counter = signal(0)
-    print(counter())  # Access value: 0
-    counter.set(5)    # Set value
-    counter.update(lambda x: x + 1)  # Update value
-    ```
-    
-    2. As a simple decorator:
-    ```python
-    @signal
-    def counter():
-        # Complex initialization logic
-        return 0
-    ```
-    
-    3. As a decorator with parameters:
-    ```python
-    @signal(equal=lambda a, b: a["id"] == b["id"])
-    def user():
-        return {"id": 1, "name": "Alice"}
-    ```
+    Usage:
+        counter = signal(0)
+        print(counter())  # Access value: 0
+        counter.set(5)    # Set value
+        counter.update(lambda x: x + 1)  # Update value
     """
-    # If called with only keyword args, return a decorator
-    if value_or_func is None:
-        def decorator(func: Callable[[], T]) -> Signal[T]:
-            value = func()
-            return Signal(value, equal=equal)
-        return decorator
-    
-    # Check if used as decorator (passed a function)
-    if callable(value_or_func) and not isinstance(value_or_func, Signal):
-        func = value_or_func
-        value = func()
-        return Signal(value, equal=equal)
-    else:
-        # Used normally with a direct value
-        return Signal(value_or_func, equal=equal)  # type: ignore
+    return Signal(value, equal=equal)
 
-@overload
-def computed(compute_fn: Callable[[], T], default: Optional[T] = None, *, 
-             equal: Optional[Callable[[T, T], bool]] = None) -> ComputeSignal[T]:
-    """Standard usage: Create a computed signal with a function and optional equality function."""
-    ...
-
-@overload
-def computed(default: Optional[T] = None, *, 
-             equal: Optional[Callable[[T, T], bool]] = None) -> Callable[[Callable[[], T]], ComputeSignal[T]]:
-    """Decorator usage without parameters: Create a decorator that transforms a function into a computed signal."""
-    ...
-
-def computed(compute_fn_or_none: Optional[Callable[[], T]] = None, default: Optional[T] = None, *, 
-           equal: Optional[Callable[[T, T], bool]] = None) -> Union[Callable[[Callable[[], T]], ComputeSignal[T]], ComputeSignal[T]]:
+def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputeSignal[T]:
     """Create a computed signal that derives its value from other signals.
     
-    Can be used in two ways:
-    
-    1. With a lambda/function:
-    ```python
-    count = signal(0)
-    doubled = computed(lambda: count() * 2)
-    print(doubled())  # Access computed value
-    ```
-    
-    2. As a decorator (for multi-line computation logic):
-    ```python
-    @computed
-    def doubled():
-        value = count()
-        return value * 2
-    ```
-    
-    3. As a decorator with custom equality:
-    ```python
-    @computed(equal=lambda a, b: abs(a - b) < 0.01)
-    def rounded():
-        return count() * 3.33333
-    ```
+    Usage:
+        count = signal(0)
+        doubled = computed(lambda: count() * 2)
+        print(doubled())  # Access computed value
     """
-    # If used as @computed without parentheses
-    if compute_fn_or_none is not None:
-        return ComputeSignal(compute_fn_or_none, default=default, equal=equal)
-        
-    # If used as @computed() with parentheses
-    def decorator(func: Callable[[], T]) -> ComputeSignal[T]:
-        return ComputeSignal(func, default=default, equal=equal)
-    
-    return decorator
+    return ComputeSignal(compute_fn, None, equal=equal)
 
-@overload
-def effect(func: Callable[[], None]) -> Effect:
-    """Standard usage with synchronous function: Create an effect that runs when dependencies change."""
-    ...
-
-@overload
-def effect(func: Callable[[], Coroutine[None, None, None]]) -> Effect:
-    """Standard usage with async function: Create an effect that runs asynchronously when dependencies change."""
-    ...
-
-@overload
-def effect() -> Callable[[Callable[[], Union[None, Coroutine[None, None, None]]]], Effect]:
-    """Decorator usage: Transform a function into an effect that runs when dependencies change."""
-    ...
-
-def effect(func: Optional[Callable[[], Union[None, Coroutine[None, None, None]]]] = None
-         ) -> Union[Effect, Callable[[Callable[[], Union[None, Coroutine[None, None, None]]]], Effect]]:
+def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Effect:
     """Create an effect that automatically runs when its dependencies change.
     
     The effect is automatically scheduled when created.
     
-    Can be used in two ways:
-    
-    1. With a lambda/function:
-    ```python
-    count = signal(0)
-    effect_instance = effect(lambda: print(f"Count changed: {count()}"))
-    ```
-    
-    2. As a decorator (for multi-line effect logic):
-    ```python
-    @effect
-    def log_counter():
-        print(f"Counter value: {counter()}")
-    ```
+    Usage:
+        count = signal(0)
+        effect_instance = effect(lambda: print(f"Count changed: {count()}"))
     """
-    # Handle case where effect is used as a decorator without parentheses
-    if func is not None:
-        effect_instance = Effect(func)
-        effect_instance.schedule()
-        return effect_instance
-        
-    # Handle case where effect is used as a decorator with parentheses
-    def decorator(func_inner: Callable[[], Union[None, Coroutine[None, None, None]]]) -> Effect:
-        effect_instance = Effect(func_inner)
-        effect_instance.schedule()
-        return effect_instance
-        
-    return decorator
+    effect_instance = Effect(func)
+    effect_instance.schedule()  # Auto-schedule the effect immediately
+    return effect_instance

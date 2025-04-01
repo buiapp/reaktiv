@@ -918,21 +918,137 @@ async def test_compute_signal_default_with_multiple_dependencies():
     b.set(None)
     assert computed.get() == 42
 
-# @pytest.mark.asyncio
-# @pytest.mark.timeout(0.01)
-# async def test_circular_dependency_guard():
-#     """Test protection against circular dependencies"""
-#     switch = Signal(False)
-#     s = Signal(1)
+@pytest.mark.asyncio
+async def test_compute_signal_equality_function():
+    """Test that ComputeSignal respects custom equality functions"""
+    # Create a source signal and a computed signal with a custom equality function
+    # that considers numbers equal if they're within 0.5 of each other
+    source = Signal(1)
+    computed_with_tolerance = ComputeSignal(
+        lambda: source.get() * 3.333,
+        equal=lambda a, b: abs(a - b) < 0.5
+    )
     
-#     # Create signals that will form a circular dependency when switch is True
-#     a = ComputeSignal(lambda: s.get() + (b.get() if switch.get() else 0))
-#     b = ComputeSignal(lambda: a.get() if switch.get() else 0)
+    # Create a tracking mechanism for effect triggers
+    effect_executions = 0
     
-#     # Initial state (no circular dependency)
-#     assert a.get() == 1  # 1 + 0
-#     assert b.get() == 0
+    async def track_effect():
+        nonlocal effect_executions
+        computed_with_tolerance.get()
+        effect_executions += 1
     
-#     # Activate circular dependency: Expect a RuntimeError
-#     with pytest.raises(RuntimeError, match="Circular dependency detected"):
-#         switch.set(True)
+    # Create and schedule the effect
+    eff = Effect(track_effect)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    # Initial execution
+    assert effect_executions == 1
+    initial_value = computed_with_tolerance.get()
+    
+    # Test a small change that should be considered "equal" by our custom function
+    source.set(1.1)  # 1.1 * 3.333 ≈ 3.67, which is within 0.5 of the original value
+    await asyncio.sleep(0)
+    # Effect should NOT have executed again
+    assert effect_executions == 1
+    
+    # Test a larger change that should NOT be considered equal
+    source.set(1.5)  # 1.5 * 3.333 = 5.0, which is NOT within 0.5 of the original value
+    await asyncio.sleep(0)
+    # Effect should have executed again
+    assert effect_executions == 2
+
+@pytest.mark.asyncio
+async def test_compute_signal_custom_equality():
+    """Test ComputeSignal with a more complex custom equality function"""
+    # Create a signal with object values
+    class Item:
+        def __init__(self, category, value):
+            self.category = category
+            self.value = value
+    
+    source = Signal(Item("A", 100))
+    
+    # Computed signal that extracts relevant data but uses an equality function
+    # that only considers the category for equality
+    computed_category_aware = ComputeSignal(
+        lambda: {"category": source.get().category, "value": source.get().value},
+        equal=lambda a, b: a and b and a.get("category") == b.get("category")
+    )
+    
+    # Track the computed value changes
+    computed_updates = []
+    
+    def track_computed_changes():
+        value = computed_category_aware.get()
+        computed_updates.append(dict(value))  # Make a copy
+    
+    # Set up an effect to track changes
+    track_effect = Effect(track_computed_changes)
+    track_effect.schedule()
+    await asyncio.sleep(0)
+    
+    # Initial update recorded
+    assert len(computed_updates) == 1
+    assert computed_updates[0] == {"category": "A", "value": 100}
+    
+    # Update the value but keep the category the same
+    source.set(Item("A", 200))
+    await asyncio.sleep(0)
+    # No new update should be recorded since the category is the same
+    assert len(computed_updates) == 1
+    
+    # Update the category
+    source.set(Item("B", 200))
+    await asyncio.sleep(0)
+    # New update should be recorded
+    assert len(computed_updates) == 2
+    assert computed_updates[1] == {"category": "B", "value": 200}
+
+@pytest.mark.asyncio
+async def test_compute_signal_none_handling():
+    """Test ComputeSignal equality handling with None values"""
+    source = Signal(None)
+    
+    # Computed signal with a custom equality function that handles None
+    def safe_equal(a, b):
+        if a is None and b is None:
+            return True
+        if a is None or b is None:
+            return False
+        # For non-None values, consider them equal if they have the same string representation
+        return str(a) == str(b)
+    
+    computed_with_safe_equality = ComputeSignal(
+        lambda: source.get(),
+        equal=safe_equal
+    )
+    
+    # Track updates
+    updates = []
+    
+    def track():
+        updates.append(computed_with_safe_equality.get())
+    
+    eff = Effect(track)
+    eff.schedule()
+    await asyncio.sleep(0)
+    
+    # Initial update
+    assert updates == [None]
+    
+    # Setting to None again shouldn't trigger an update
+    source.set(None)
+    await asyncio.sleep(0)
+    assert len(updates) == 1
+    
+    # Setting to a value should trigger an update
+    source.set("test")
+    await asyncio.sleep(0)
+    assert len(updates) == 2
+    assert updates[-1] == "test"
+    
+    # Setting to a number that converts to the same string shouldn't trigger
+    source.set("test")  # Same string, no update
+    await asyncio.sleep(0)
+    assert len(updates) == 2

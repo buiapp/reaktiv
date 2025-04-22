@@ -31,6 +31,10 @@ jobs:
       - name: Run Pyright
         run: |
           uv run pyright src/
+      
+      - name: Run tests
+        run: |
+          uv run pytest tests/
 
       - name: Build package
         run: |

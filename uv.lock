@@ -111,11 +111,11 @@ wheels = [
 
 [[package]]
 name = "reaktiv"
-version = "0.13.0"
+version = "0.13.1"
 source = { editable = "." }
 
-[package.optional-dependencies]
-test = [
+[package.dev-dependencies]
+dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -123,11 +123,13 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pyright", marker = "extra == 'test'", specifier = ">=1.1.398" },
-    { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
-    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.20" },
-    { name = "pytest-timeout", marker = "extra == 'test'", specifier = ">=2.3.1" },
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pyright", specifier = ">=1.1.398" },
+    { name = "pytest", specifier = ">=7.0" },
+    { name = "pytest-asyncio", specifier = ">=0.20" },
+    { name = "pytest-timeout", specifier = ">=2.3.1" },
 ]
 
 [[package]]

@@ -30,7 +30,7 @@ jobs:
         
       - name: Run Pyright
         run: |
-          pyright src/
+          uv run pyright src/
 
       - name: Build package
         run: |

@@ -2,6 +2,7 @@ site_name: reaktiv Documentation
 site_description: Documentation for the reaktiv library - Reactive signals for Python with first-class async support
 site_author: Tuan Anh Bui <mail@bui.app>
 repo_url: https://github.com/buiapp/reaktiv
+edit_uri: edit/main/docs/
 theme:
   name: readthedocs
   navigation_depth: 4
@@ -11,6 +12,7 @@ nav:
   - Installation: installation.md
   - Quick Start: quickstart.md
   - Core Concepts: core-concepts.md
+  - Operators: operators.md
   - Advanced Features: advanced-features.md
   - API Reference:
     - Signal: api/signal.md

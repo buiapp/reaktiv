@@ -307,6 +307,73 @@ user_profile.set({
 
 ---
 
+## Operators
+
+Reaktiv provides operators to create new signals based on transformations of existing ones:
+
+*   `filter_signal(source, predicate)`: Creates a signal that only emits values from the `source` when the `predicate` function returns `True`.
+*   `debounce_signal(source, delay_seconds)`: Creates a signal that emits a value only after a specified `delay_seconds` has passed without the `source` emitting a new value.
+*   `throttle_signal(source, interval_seconds, leading=True, trailing=False)`: Creates a signal that emits a value from the `source`, then ignores subsequent values for `interval_seconds`. `leading` and `trailing` flags control emission timing.
+
+```python
+import asyncio
+from reaktiv import signal, filter_signal, debounce_signal, throttle_signal, effect
+
+async def main():
+    source = signal(0) # Use shortcut
+
+    # Filter: Only even numbers
+    evens = filter_signal(source, lambda x: x % 2 == 0)
+    # Keep a reference to the effect
+    even_effect = effect(lambda: print(f"Even: {evens()}"))
+
+    # Debounce: Wait 50ms after last change
+    debounced = debounce_signal(source, 0.05)
+    # Keep a reference to the effect
+    debounce_effect = effect(lambda: print(f"Debounced: {debounced()}"))
+
+    # Throttle: Emit immediately, then wait 100ms
+    throttled = throttle_signal(source, 0.1, leading=True, trailing=False)
+    # Keep a reference to the effect
+    throttle_effect = effect(lambda: print(f"Throttled: {throttled()}"))
+
+    print("--- Setting 1, 2, 3 quickly ---")
+    source.set(1)
+    await asyncio.sleep(0.01)
+    source.set(2)
+    await asyncio.sleep(0.01)
+    source.set(3) # Debounce will only get 3, Throttle got 1
+
+    await asyncio.sleep(0.1) # Wait for debounce/throttle timers
+
+    print("--- Setting 4 ---")
+    source.set(4) # All operators will update
+
+    await asyncio.sleep(0.1) # Wait again
+
+    # Effects are kept alive by their references (even_effect, etc.)
+    # No explicit dispose needed here as they go out of scope when main finishes
+
+# Initial output:
+# Even: 0
+# Debounced: 0
+# Throttled: 0
+# --- Setting 1, 2, 3 quickly ---
+# Throttled: 1 (leading)
+# Even: 2
+# --- (after 0.05s delay) ---
+# Debounced: 3
+# --- Setting 4 ---
+# Even: 4
+# Throttled: 4 (leading, interval passed)
+# --- (after 0.05s delay) ---
+# Debounced: 4
+
+asyncio.run(main())
+```
+
+---
+
 ## Real-Time Example: Polling System
 
 ```python

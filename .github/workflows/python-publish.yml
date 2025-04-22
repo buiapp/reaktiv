@@ -28,6 +28,10 @@ jobs:
         with:
           python-version: 3.9
         
+      - name: Run Pyright
+        run: |
+          pyright src/
+
       - name: Build package
         run: |
           uv build

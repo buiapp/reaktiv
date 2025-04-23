@@ -1,6 +1,7 @@
 import asyncio
 import time
-from typing import TypeVar, Callable, Generic, Optional, Union, Set, List
+# Add Any to the import
+from typing import TypeVar, Callable, Generic, Optional, Union, Set, List, Tuple, Any 
 from weakref import WeakSet
 from .core import Signal, ComputeSignal, Effect, _current_effect, Subscriber, debug_log
 
@@ -126,15 +127,21 @@ def filter_signal(
 ) -> _OperatorSignal[T]:
     """
     Creates a read-only signal that only emits values from the source signal
-    that satisfy the predicate function. Uses non-shortcut API.
+    that satisfy the predicate function.
+
+    The initial value will be the source's initial value if it passes the predicate.
+    If the initial value doesn't pass the predicate, it will still be used as the
+    initial state of the returned signal, but no notifications will be triggered
+    for this initial value.
 
     This operator is synchronous and does not require an asyncio event loop.
     """
     # Get initial value without tracking dependency here
     initial_source_value = source.get()
-    # Create the operator signal instance
-    # Use source's equality by default if available, else standard equality
+    # Create the operator signal instance 
     source_equal = getattr(source, '_equal', None)
+    
+    # Initialize with the source's initial value regardless of predicate
     filtered_sig = _OperatorSignal(initial_source_value, equal=source_equal)
 
     # Define the effect function
@@ -320,3 +327,102 @@ def throttle_signal(
     internal_effect.schedule() # Manually schedule the initial run
 
     return throttled_sig
+
+# Sentinel object for pairwise
+_NO_VALUE = object()
+
+def pairwise_signal(
+    source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]],
+    emit_on_first: bool = False
+) -> _OperatorSignal[Optional[Tuple[Optional[T], T]]]:
+    """
+    Creates a read-only signal that emits a tuple containing the previous
+    and current values from the source signal.
+
+    Args:
+        source: The input signal.
+        emit_on_first: If True, emits `(None, first_value)` when the source
+                       emits its first value. If False (default), the first
+                       emission from the source does not produce an output,
+                       and the second emission produces `(first_value, second_value)`.
+
+    Returns:
+        An operator signal emitting tuples of `(previous, current)` values.
+        The type of `previous` is `Optional[T]`. The initial value of the
+        signal before any valid pair is emitted is `None`.
+    """
+    # Use a unique object to signify that no previous value has been seen yet
+    previous_value: Any = _NO_VALUE
+
+    # Initialize the signal with None. The first actual value will be emitted by the effect.
+    # Equality for the operator signal itself compares the tuples.
+    pairwise_sig: _OperatorSignal[Optional[Tuple[Optional[T], T]]] = _OperatorSignal(None)
+    debug_log(f"Pairwise: Initialized signal with None. emit_on_first={emit_on_first}")
+
+
+    def _run_pairwise():
+        nonlocal previous_value
+        # Get current value and track source dependency
+        current_value = source.get()
+
+        # Get the source's equality function safely
+        source_equal: Callable[[Any, Any], bool]
+        if hasattr(source, '_equal') and callable(source._equal):
+            source_equal = source._equal
+        else:
+            source_equal = lambda a, b: a is b # Default to identity
+
+        # Check if the current value is the same as the previous one.
+        # This check is primarily relevant if the source signal itself might emit
+        # the same value consecutively. Pairwise usually emits regardless, but
+        # reaktiv's core Signal/ComputeSignal might optimize away updates if
+        # the value is considered equal by its own check *before* notifying.
+        # We add an explicit check here for robustness, although it might be
+        # redundant depending on the source's behavior.
+        is_same_as_previous = (previous_value is not _NO_VALUE) and source_equal(previous_value, current_value)
+
+        if is_same_as_previous:
+             debug_log(f"Pairwise: current value {current_value} is same as previous {previous_value}, skipping update.")
+             # No need to update previous_value here as it's already the same.
+             return # Skip emission
+
+        # If we are here, the value is different from the previous one (or it's the first run)
+
+        output_value: Optional[Tuple[Optional[T], T]] = None
+        should_emit = False
+
+        if previous_value is _NO_VALUE:
+            # This is the first time the effect is running with a value from the source.
+            if emit_on_first:
+                # Emit (None, current_value) as the first emission.
+                debug_log(f"Pairwise (emit_on_first=True): First run, preparing (None, {current_value})")
+                output_value = (None, current_value)
+                should_emit = True
+            else:
+                # emit_on_first is False. Don't emit, just store the value as previous.
+                debug_log(f"Pairwise (emit_on_first=False): First run, storing previous={current_value}, no emission.")
+                pass # No emission needed yet
+        else:
+            # This is a subsequent run. Prepare the pair.
+            debug_log(f"Pairwise: Preparing ({previous_value}, {current_value})")
+            output_value = (previous_value, current_value)
+            should_emit = True
+
+        # Update previous value for the next run, regardless of whether we emitted this time.
+        previous_value = current_value
+
+        # Emit the value if needed
+        if should_emit:
+            debug_log(f"Pairwise: Emitting {output_value}")
+            pairwise_sig._update_value(output_value)
+
+        # No cleanup needed for pairwise
+
+    # Create and schedule the internal effect
+    internal_effect = Effect(_run_pairwise)
+    pairwise_sig._internal_effect = internal_effect
+    # Schedule the initial run. This run will establish the dependency and
+    # potentially perform the first emission if emit_on_first is True.
+    internal_effect.schedule()
+
+    return pairwise_sig

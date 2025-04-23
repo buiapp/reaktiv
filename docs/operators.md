@@ -130,7 +130,7 @@ throttle_signal(
 
 ```python
 import asyncio
-from reaktiv import signal, throttle_signal, effect # Use shortcut APIs
+from reaktiv import signal, throttle_signal, effect
 
 async def main():
     clicks = signal(0)
@@ -165,7 +165,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from reaktiv import signal, throttle_signal, effect # Use shortcut APIs
+from reaktiv import signal, throttle_signal, effect
 
 async def main():
     sensor = signal(0.0)
@@ -192,3 +192,111 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## `pairwise_signal`
+
+Creates a signal that emits tuples containing the previous and current values from a source signal. This is useful for tracking how values change over time and comparing current values with previous ones.
+
+**Asyncio Requirement:** No
+
+**Signature:**
+
+```python
+pairwise_signal(
+    source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]],
+    emit_on_first: bool = False
+) -> _OperatorSignal[Optional[Tuple[Optional[T], T]]]
+```
+
+**Parameters:**
+
+*   `source`: The input signal.
+*   `emit_on_first`: If `True`, emits `(None, first_value)` when the source emits its first value. If `False` (default), the first emission from the source does not produce an output, and the second emission produces `(first_value, second_value)`.
+
+**Example (Default behavior - skip first):**
+
+```python
+import asyncio
+from reaktiv import signal, pairwise_signal, effect # Use shortcut APIs
+
+async def main():
+    counter = signal(0)
+    # Create a signal that emits (previous, current) tuples
+    changes = pairwise_signal(counter)
+    
+    # Keep a reference to the effect
+    change_effect = effect(lambda: print(f"Counter changed from {changes()[0]} to {changes()[1]}"))
+    
+    # Initial value doesn't emit with default settings (emit_on_first=False)
+    print("Initial state - no effect output yet")
+    
+    # First change
+    counter.set(1)
+    # Output: Counter changed from 0 to 1
+    
+    # Second change  
+    counter.set(5)
+    # Output: Counter changed from 1 to 5
+    
+    # When value doesn't change, no emission occurs
+    counter.set(5) # No output
+    
+    # Third change
+    counter.set(10)
+    # Output: Counter changed from 5 to 10
+    
+    await asyncio.sleep(0.1)
+    # change_effect remains active
+
+asyncio.run(main())
+```
+
+**Example (Emit on first value):**
+
+```python
+import asyncio
+from reaktiv import signal, pairwise_signal, effect # Use shortcut APIs
+
+async def main():
+    price = signal(100.0)
+    # Create a signal that emits (previous, current) tuples, including on first value
+    price_changes = pairwise_signal(price, emit_on_first=True)
+    
+    # Keep a reference to the effect
+    # Handle the initial case where previous might be None
+    price_effect = effect(lambda: process_price_change(price_changes()))
+    
+    def process_price_change(change_tuple):
+        prev, curr = change_tuple
+        if prev is None:
+            print(f"Initial price: ${curr:.2f}")
+        else:
+            diff = curr - prev
+            percent = (diff / prev) * 100 if prev != 0 else 0
+            direction = "up" if diff > 0 else "down" if diff < 0 else "unchanged"
+            print(f"Price {direction}: ${curr:.2f} (${diff:+.2f}, {percent:+.1f}%)")
+    
+    # With emit_on_first=True, this produces output for the initial value
+    # Output: Initial price: $100.00
+    
+    # First change
+    price.set(105.0)
+    # Output: Price up: $105.00 (+$5.00, +5.0%)
+    
+    # Second change
+    price.set(95.5)
+    # Output: Price down: $95.50 (-$9.50, -9.0%)
+    
+    await asyncio.sleep(0.1)
+    # price_effect remains active
+
+asyncio.run(main())
+```
+
+**Use Cases:**
+
+* Calculating the difference between consecutive values
+* Detecting direction of change (increasing/decreasing)
+* Tracking value transitions for state machines
+* Computing derivatives or rates of change
+* Building charts and visualizations with transition animations

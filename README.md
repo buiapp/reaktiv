@@ -10,55 +10,6 @@
 
 Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
 
-## Why reaktiv?
-
-If you've worked with modern frontend frameworks like React, Vue, or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. This is the magic behind dynamic UIs and real-time systems.
-
-But why should Python miss out on the benefits of reactivity? `reaktiv` brings these **reactive programming** advantages to your Python projects:
-
-- **Automatic state propagation:** Change a value once, and all dependent computations update automatically.
-- **Efficient updates:** Only the necessary parts are recomputed.
-- **Async-friendly:** Seamlessly integrates with Python's `asyncio` for managing real-time data flows.
-- **Zero external dependencies:** Lightweight and easy to incorporate into any project.
-- **Type-safe:** Fully annotated for clarity and maintainability.
-
-### Real-World Use Cases
-
-Reactive programming isn't just a frontend paradigm. In Python, it can simplify complex backend scenarios such as:
-
-- **Real-time data streams:** Stock prices, sensor readings, or live updates.
-- **User session management:** Keep track of state changes without heavy manual subscription management.
-- **Complex API workflows:** Automatically cascade changes across related computations.
-
-By combining these features, `reaktiv` provides a robust foundation for building **reactive, real-time systems** - whether for data streaming, live monitoring, or even Python-powered UI frameworks.
-
-## How it Works
-
-`reaktiv` provides three core primitives:
-
-1. **Signals**: Store a value and notify dependents when it changes.
-2. **Computed Signals**: Derive values that automatically update when dependencies change.
-3. **Effects**: Run side effects when signals or computed signals change.
-
-## Core Concepts
-
-```mermaid
-graph LR
-    A[Signal] -->|Value| B[Computed Signal]
-    A -->|Change| C[Effect]
-    B -->|Value| C
-    B -->|Change| C
-    C -->|Update| D[External System]
-    
-    classDef signal fill:#4CAF50,color:white;
-    classDef computed fill:#2196F3,color:white;
-    classDef effect fill:#FF9800,color:white;
-    
-    class A,B signal;
-    class B computed;
-    class C effect;
-```
-
 ## Installation
 
 ```bash
@@ -124,369 +75,544 @@ tax_rate.set(0.25)
 print(total())  # 125.0
 ```
 
-### Async Effects
+## Core Concepts
+
+```mermaid
+graph LR
+    A[Signal] -->|Value| B[Computed Signal]
+    A -->|Change| C[Effect]
+    B -->|Value| C
+    B -->|Change| C
+    C -->|Update| D[External System]
+    
+    classDef signal fill:#4CAF50,color:white;
+    classDef computed fill:#2196F3,color:white;
+    classDef effect fill:#FF9800,color:white;
+    
+    class A,B signal;
+    class B computed;
+    class C effect;
+```
+
+## How it Works
+
+`reaktiv` provides three core primitives:
+
+1. **Signals**: Store a value and notify dependents when it changes
+2. **Computed Signals**: Derive values that automatically update when dependencies change
+3. **Effects**: Run side effects when signals or computed signals change
+
+## Why reaktiv?
+
+If you've worked with modern frontend frameworks like React, Vue, or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. 
+
+While this pattern revolutionized frontend development, **its benefits are equally powerful in backend systems** where complex state management is often overlooked or implemented with brittle, ad-hoc solutions.
+
+`reaktiv` brings these **reactive programming** advantages to your Python backend projects:
+
+- **Automatic state dependency tracking:** No more manually tracing which components need updating when data changes
+- **Declarative state relationships:** Define how data is transformed once, not every time it changes
+- **Efficient fine-grained updates:** Only recompute what actually needs to change
+- **Async-first design:** Seamlessly integrates with Python's `asyncio` for managing real-time data flows
+- **Zero external dependencies:** Lightweight with minimal overhead
+- **Type-safe:** Fully annotated for clarity and maintainability
+
+## Benefits for Backend Development
+
+`reaktiv` addresses key challenges in backend state management:
+
+1. **Eliminates manual dependency tracking**: No more forgotten update logic when state changes
+2. **Prevents state synchronization bugs**: Updates happen automatically and consistently
+3. **Improves performance**: Only affected computations are recalculated
+4. **Reduces cognitive load**: Declare relationships once, not throughout your codebase
+5. **Simplifies testing**: Clean separation of state, derivation, and effects
+
+Even in "stateless" architectures, ephemeral state still exists during request processing. `reaktiv` helps manage this complexity without the boilerplate of observers, callbacks, or event dispatchers.
+
+## Beyond Pub/Sub: State Management in Backend Systems
+
+Many backend developers view reactive libraries as just another pub/sub system and question their value in "stateless" architectures. However, `reaktiv` addresses fundamentally different problems:
+
+### Traditional Pub/Sub vs. Reaktiv
+
+| Pub/Sub Systems | Reaktiv |
+|----------------|---------|
+| Message delivery between components | Automatic state dependency tracking |
+| Point-to-point or broadcast messaging | Fine-grained computation graphs |
+| Manual subscription management | Automatic dependency detection |
+| Focus on message transport | Focus on state derivation |
+| Stateless by design | Intentional state management |
+
+### State in "Stateless" Systems
+
+Even in "stateless" microservices and serverless functions, state exists during request processing:
+
+- Configuration management
+- Request context propagation
+- In-memory caching
+- Rate limiting and circuit breaking
+- Feature flag evaluation
+- Connection pooling
+- Runtime metrics collection
+
+`reaktiv` helps manage this ephemeral state with less code, fewer bugs, and better maintainability.
+
+## Basic Examples
+
+### Feature Flag System with Dynamic Rules
 
 ```python
+from reaktiv import signal, computed, effect
+import time
+
+# Core state
+user_segments = signal({"user1": ["premium", "beta_tester"]})
+feature_flags = signal({
+    "new_dashboard": {"enabled": True, "segments": ["premium"]},
+    "dark_mode": {"enabled": True, "segments": []},
+    "beta_feature": {"enabled": True, "segments": ["beta_tester"]}
+})
+
+# Computed user permissions that update automatically
+user_features = computed(lambda: {
+    user_id: [
+        flag_name 
+        for flag_name, flag in feature_flags().items()
+        if flag["enabled"] and (
+            not flag["segments"] or 
+            any(segment in user_segments().get(user_id, []) for segment in flag["segments"])
+        )
+    ]
+    for user_id in user_segments()
+})
+
+# Add real-time monitoring
+def monitor_features():
+    features = user_features()
+    for user_id, enabled_features in features.items():
+        if "beta_feature" in enabled_features:
+            print(f"User {user_id} has access to beta features")
+
+feature_monitor = effect(monitor_features)
+
+# When segments change, permissions automatically update
+user_segments.update(lambda segments: {**segments, "user2": ["premium"]})
+```
+
+## Real-World Backend Use Cases
+
+### 1. Intelligent Cache Management
+
+```python
+from reaktiv import signal, computed, effect
+
+# Database-derived state (imagine this comes from your database)
+user_data = signal({})
+permissions = signal({})
+content_items = signal({})
+
+# Computed caches that automatically update when source data changes
+user_permissions = computed(lambda: {
+    user_id: [perm for perm_id, perm in permissions().items() 
+              if perm['user_id'] == user_id]
+    for user_id in user_data()
+})
+
+authorized_content = computed(lambda: {
+    user_id: [item for item_id, item in content_items().items()
+              if any(p['level'] >= item['required_level'] for p in user_permissions().get(user_id, []))]
+    for user_id in user_data()
+})
+
+# Demonstration of automatic cache updates
+def demo_reactive_cache():
+    # Initial data setup
+    user_data.set({"user1": {"name": "Alice"}, "user2": {"name": "Bob"}})
+    permissions.set({
+        "p1": {"user_id": "user1", "level": 5},  # Admin
+        "p2": {"user_id": "user2", "level": 2}   # Editor
+    })
+    content_items.set({
+        "c1": {"title": "Public Content", "required_level": 1},
+        "c2": {"title": "Admin Content", "required_level": 5}
+    })
+    
+    # Access permissions and content (cache is computed on first access)
+    print("Bob can access:", [item["title"] for item in authorized_content().get("user2", [])])
+    # Output: Bob can access: ['Public Content']
+    
+    # Update Bob's permission level - cache automatically updates!
+    permissions.update(lambda p: {**p, "p2": {"user_id": "user2", "level": 5}})
+    
+    # Cache is automatically recalculated only for Bob
+    print("Bob can now access:", [item["title"] for item in authorized_content().get("user2", [])])
+    # Output: Bob can now access: ['Public Content', 'Admin Content']
+    
+    # No manual cache invalidation needed anywhere!
+
+demo_reactive_cache()
+```
+
+### 2. Adaptive Rate Limiting & Circuit Breaking
+
+```python
+from reaktiv import signal, computed, effect
+import time
 import asyncio
-from reaktiv import signal, effect
 
-async def main():
-    counter = signal(0)
+# Track API calls and failures
+endpoint_calls = signal({})  # endpoint: [timestamp, timestamp...]
+endpoint_failures = signal({})  # endpoint: [timestamp, timestamp...]
 
-    async def print_counter():
-        print(f"Counter value is: {counter()}")
+# Computed circuit breakers that automatically update
+circuit_status = computed(lambda: {
+    endpoint: "open" if len(failures) >= 5 and (time.time() - failures[-1]) < 30 else "closed"
+    for endpoint, failures in endpoint_failures().items()
+})
 
-    # IMPORTANT: Assign the effect to a variable to prevent it from being garbage collected.
-    counter_effect = effect(print_counter)
+# Dynamic rate limiting based on traffic patterns
+rate_limits = computed(lambda: {
+    endpoint: max(10, min(1000, len(calls) // 10)) 
+    for endpoint, calls in endpoint_calls().items() 
+    if calls and time.time() - calls[0] < 60
+})
 
-    for i in range(1, 4):
-        await asyncio.sleep(1)  # Simulate an asynchronous operation or delay.
-        counter.set(i)
+# Add monitoring effect to see changes in real-time
+def monitor_circuit_status():
+    status = circuit_status()
+    if status:
+        print(f"Circuit Status: {status}")
 
-    # Wait a bit to allow the last effect to process.
-    await asyncio.sleep(1)
+circuit_monitor = effect(monitor_circuit_status)
 
-asyncio.run(main())
+# Simulate API calls and failures
+async def simulate_traffic():
+    print("\n=== Simulating API Traffic and Failures ===")
+    
+    # Record some successful calls
+    endpoint_calls.update(lambda calls: {
+        **calls, 
+        "api/users": [time.time() - i for i in range(20)]
+    })
+    print(f"Rate limit for api/users: {rate_limits()['api/users']} requests/min")
+    
+    # Simulate failures for api/orders
+    endpoint_failures.update(lambda failures: {
+        **failures,
+        "api/orders": [time.time() - i for i in range(3)]
+    })
+    print(f"Circuit status for api/orders: {circuit_status()['api/orders']}")
+    
+    # Simulate more failures to trigger circuit breaker
+    print("Adding more failures to api/orders...")
+    endpoint_failures.update(lambda failures: {
+        **failures,
+        "api/orders": failures["api/orders"] + [time.time() for _ in range(3)]
+    })
+    print(f"Circuit status for api/orders: {circuit_status()['api/orders']}")
+
+# Run this example with: asyncio.run(simulate_traffic())
 ```
 
-### Synchronous Effects
-
-`effect` works with both async and sync functions. If you don't need async functionality, you can use it without asyncio:
+### 3. Multi-Layer Configuration Management
 
 ```python
-from reaktiv import signal, effect
-
-# Create signals
-counter = signal(0)
-
-# Define a synchronous effect function
-def log_counter():
-    print(f"Counter value: {counter()}")
-
-# Create and schedule the effect
-counter_effect = effect(log_counter) # Prints: "Counter value: 0"
-
-# Update the signal
-counter.set(1)  # Immediately prints: "Counter value: 1"
-
-# No asyncio needed for synchronous effects!
-```
-
----
-
-## Advanced Features
-
-### Using `untracked()`
-
-By default, when you access a signal inside a computed function or an effect, it will subscribe to that signal. However, sometimes you may want to access a signal **without tracking** it as a dependency.
-
-```python
+from reaktiv import signal, computed, effect
 import asyncio
-from reaktiv import signal, effect, untracked
 
-async def main():
-    count = signal(10)
-    message = signal("Hello")
+# Configuration at different levels
+global_config = signal({"log_level": "INFO", "timeout": 30})
+service_config = signal({"auth": {"timeout": 10}})
+instance_config = signal({"log_level": "DEBUG"})
 
-    async def log_message():
-        tracked_count = count()
-        untracked_msg = untracked(lambda: message())  # Not tracked as a dependency
-        print(f"Count: {tracked_count}, Message: {untracked_msg}")
+# Computed effective configuration with correct precedence
+effective_config = computed(lambda: {
+    **global_config(),
+    **{k: v for k, v in service_config().items() if not isinstance(v, dict)},
+    **instance_config()
+})
 
-    log_effect = effect(log_message)
+# Nested configs are merged properly
+auth_config = computed(lambda: {
+    **global_config(),
+    **(service_config().get("auth", {}))
+})
 
-    count.set(20)  # Effect runs (count is tracked)
-    await asyncio.sleep(1)
-    message.set("New Message")  # Effect does NOT run (message is untracked)
+# When any config source changes, all systems update automatically
+def log_config_changes():
+    print(f"Current effective config: {effective_config()}")
+    print(f"Auth specific config: {auth_config()}")
 
-    await asyncio.sleep(1)
+logger_config = effect(log_config_changes)
 
-asyncio.run(main())
+async def demo_configuration():
+    print("\n=== Configuration Management Demo ===")
+    
+    # Initial configuration state
+    print(f"Initial effective config: {effective_config()}")
+    print(f"Initial auth config: {auth_config()}")
+    
+    # Change global config
+    print("\nUpdating global timeout to 60 seconds...")
+    global_config.update(lambda cfg: {**cfg, "timeout": 60})
+    await asyncio.sleep(0.1)  # Allow effects to process
+    
+    # Override at service level
+    print("\nAdding database configuration at service level...")
+    service_config.update(lambda cfg: {
+        **cfg, 
+        "database": {"host": "localhost", "port": 5432}
+    })
+    await asyncio.sleep(0.1)  # Allow effects to process
+    
+    # Change instance config
+    print("\nChanging instance log_level to TRACE...")
+    instance_config.update(lambda cfg: {**cfg, "log_level": "TRACE"})
+    await asyncio.sleep(0.1)  # Allow effects to process
+
+# Run this example with: asyncio.run(demo_configuration())
 ```
 
----
+## Advanced Examples
 
-### Using `on_cleanup()`
-
-Sometimes, you need to clean up resources (e.g., cancel timers, close files, reset state) when an effect re-runs or is disposed.
+### 1. Resource Pool Management
 
 ```python
-import asyncio
-from reaktiv import signal, effect
+from reaktiv import signal, computed, effect
+import time
 
-async def main():
-    active = signal(False)
+# Connection pool state
+db_connections = signal({})  # id: {created_at, last_used, state}
+connection_requests = signal(0)
 
-    async def monitor_status(on_cleanup):
-        print("Monitoring started")
-        active()
+# Auto-scaling connection pool
+idle_connections = computed(lambda: [
+    conn_id for conn_id, conn in db_connections().items() 
+    if conn['state'] == 'idle' and time.time() - conn['last_used'] < 60
+])
 
-        def cleanup():
-            print("Cleaning up before next run or disposal")
+connections_needed = computed(lambda: max(0, connection_requests() - len(idle_connections())))
 
-        on_cleanup(cleanup)
+# Effect that manages pool size based on demand
+def manage_pool():
+    current_needed = connections_needed()
+    if current_needed > 0:
+        create_new_connections(current_needed)
+    elif len(idle_connections()) > 10 and connection_requests() < 5:
+        close_excess_connections()
 
-    monitor_effect = effect(monitor_status)
-
-    await asyncio.sleep(1)
-    active.set(True)  # Cleanup runs before the effect runs again
-
-    await asyncio.sleep(1)
-    monitor_effect.dispose()  # Cleanup runs before the effect is disposed
-
-asyncio.run(main())
-
-# Output:
-# Monitoring started
-# Cleaning up before next run or disposal
-# Monitoring started
-# Cleaning up before next run or disposal
+pool_manager = effect(manage_pool)
 ```
 
-### Custom Equality
-
-When creating a Signal or ComputeSignal, you can provide a custom equality function to control when updates are triggered. This is useful for comparing objects by value rather than identity.
+### 2. Multi-Stage Data Processing Pipeline
 
 ```python
-from reaktiv import signal
-
-# Simple example: compare numbers with tolerance
-num = signal(10.0, equal=lambda a, b: abs(a - b) < 0.5)
-
-# This won't trigger updates since 10.0 and 10.3 are within 0.5 of each other
-num.set(10.3)  
-
-# This will trigger updates since 10.0 and 10.6 differ by more than 0.5
-num.set(10.6)  
-
-# Custom class comparison example
-class User:
-    def __init__(self, name, role):
-        self.name = name
-        self.role = role
-        
-# By default, different User instances are considered different even with same data
-# Let's create a signal with custom equality that only cares about the role
-user = signal(User("Alice", "admin"), 
-              equal=lambda a, b: a.role == b.role)
-
-# This won't trigger updates because the role is still "admin"
-# even though it's a different User instance with a different name
-user.set(User("Bob", "admin"))
-
-# This will trigger updates because the role changed
-user.set(User("Charlie", "user"))
-
-# For deep equality with nested structures, a simple JSON-based approach works well:
+from reaktiv import signal, computed, effect, batch
 import json
 
-def json_equal(a, b):
-    return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+# Raw event stream
+raw_events = signal([])
 
-# This signal will only update when the content actually changes, 
-# even for complex nested structures
-user_profile = signal({
-    'name': 'Alice',
-    'preferences': {'theme': 'dark', 'notifications': True}
-}, equal=json_equal)
+# Normalized data
+normalized_events = computed(lambda: [
+    {**event, "timestamp": parse_timestamp(event.get("ts", 0))}
+    for event in raw_events()
+])
 
-changed = effect(lambda: print("User profile updated:", user_profile.get()))
+# Filtered data
+error_events = computed(lambda: [
+    event for event in normalized_events()
+    if event.get("level") == "ERROR"
+])
 
-# This won't trigger updates (same content in a new object)
-user_profile.set({
-    'name': 'Alice',
-    'preferences': {'theme': 'dark', 'notifications': True}
+# Aggregated metrics
+error_count_by_service = computed(lambda: {
+    service: len([e for e in error_events() if e.get("service") == service])
+    for service in set(e.get("service", "unknown") for e in error_events())
 })
 
-# This will trigger updates (content changed)
-user_profile.set({
-    'name': 'Alice',
-    'preferences': {'theme': 'light', 'notifications': True}
-})
+# Effect to trigger alerts
+def check_alerts():
+    counts = error_count_by_service()
+    for service, count in counts.items():
+        if count > 5:
+            print(f"ALERT: {service} has {count} errors")
+
+alert_system = effect(check_alerts)
+
+# Adding data triggers the entire pipeline automatically
+def ingest_batch(new_events):
+    raw_events.update(lambda events: events + new_events)
+
+# Multiple updates in a batch to prevent intermediate recalculations
+with batch():
+    raw_events.update(lambda events: events + [
+        {"service": "auth", "level": "ERROR", "ts": 1619712000},
+        {"service": "auth", "level": "ERROR", "ts": 1619712060}
+    ])
 ```
 
----
-
-## Operators
-
-Reaktiv provides operators to create new signals based on transformations of existing ones:
-
-*   `filter_signal(source, predicate)`: Creates a signal that only emits values from the `source` when the `predicate` function returns `True`.
-*   `debounce_signal(source, delay_seconds)`: Creates a signal that emits a value only after a specified `delay_seconds` has passed without the `source` emitting a new value.
-*   `throttle_signal(source, interval_seconds, leading=True, trailing=False)`: Creates a signal that emits a value from the `source`, then ignores subsequent values for `interval_seconds`. `leading` and `trailing` flags control emission timing.
-*   `pairwise_signal(source, emit_on_first=False)`: Creates a signal that emits tuples of `(previous_value, current_value)` from the `source`. If `emit_on_first` is `True`, it emits `(None, first_value)` on the first source emission. Otherwise (default), the first source emission is skipped.
+### 3. Real-Time System Monitoring
 
 ```python
-import asyncio
-from reaktiv import signal, filter_signal, debounce_signal, throttle_signal, pairwise_signal, effect
-
-async def main():
-    source = signal(0) # Use shortcut
-
-    # Filter: Only even numbers
-    evens = filter_signal(source, lambda x: x % 2 == 0)
-    even_effect = effect(lambda: print(f"Even: {evens()}"))
-
-    # Debounce: Wait 50ms after last change
-    debounced = debounce_signal(source, 0.05)
-    debounce_effect = effect(lambda: print(f"Debounced: {debounced()}"))
-
-    # Throttle: Emit immediately, then wait 100ms
-    throttled = throttle_signal(source, 0.1, leading=True, trailing=False)
-    throttle_effect = effect(lambda: print(f"Throttled: {throttled()}"))
-
-    # Pairwise: Emit previous and current value (default: skip first)
-    pairs_skip_first = pairwise_signal(source) # emit_on_first=False
-    pair_effect_skip = effect(lambda: print(f"Pairwise (skip first): {pairs_skip_first()}"))
-
-    # Pairwise: Emit previous and current value (emit on first)
-    pairs_emit_first = pairwise_signal(source, emit_on_first=True)
-    pair_effect_emit = effect(lambda: print(f"Pairwise (emit first): {pairs_emit_first()}"))
-
-    print("--- Setting 1, 2, 3 quickly ---")
-    source.set(1) # pairs_skip_first: (0, 1), pairs_emit_first: (0, 1)
-    await asyncio.sleep(0.01)
-    source.set(2) # pairs_skip_first: (1, 2), pairs_emit_first: (1, 2)
-    await asyncio.sleep(0.01)
-    source.set(3) # pairs_skip_first: (2, 3), pairs_emit_first: (2, 3)
-                  # Debounce will only get 3, Throttle got 1
-
-    await asyncio.sleep(0.1) # Wait for debounce/throttle timers
-
-    print("--- Setting 4 ---")
-    source.set(4) # pairs_skip_first: (3, 4), pairs_emit_first: (3, 4)
-                  # All operators will update
-
-    await asyncio.sleep(0.1) # Wait again
-
-    # Effects are kept alive by their references (even_effect, etc.)
-
-# Initial output (order might vary slightly due to scheduling):
-# Even: 0
-# Debounced: 0
-# Throttled: 0
-# Pairwise (skip first): None
-# Pairwise (emit first): (None, 0)  <-- Emits immediately due to emit_on_first=True
-# --- Setting 1, 2, 3 quickly ---
-# Throttled: 1 (leading)
-# Pairwise (skip first): (0, 1)
-# Pairwise (emit first): (0, 1)
-# Even: 2
-# Pairwise (skip first): (1, 2)
-# Pairwise (emit first): (1, 2)
-# Pairwise (skip first): (2, 3)
-# Pairwise (emit first): (2, 3)
-# --- (after 0.05s delay) ---
-# Debounced: 3
-# --- Setting 4 ---
-# Even: 4
-# Throttled: 4 (leading, interval passed)
-# Pairwise (skip first): (3, 4)
-# Pairwise (emit first): (3, 4)
-# --- (after 0.05s delay) ---
-# Debounced: 4
-
-asyncio.run(main())
-```
-
----
-
-## Real-Time Example: Polling System
-
-```python
-import asyncio
 from reaktiv import signal, computed, effect
+import asyncio
+
+# System metrics
+cpu_usage = signal([])
+memory_usage = signal([])
+disk_io = signal([])
+
+# Derived analytics
+avg_cpu = computed(lambda: sum(cpu_usage()[-5:]) / 5 if len(cpu_usage()) >= 5 else 0)
+avg_memory = computed(lambda: sum(memory_usage()[-5:]) / 5 if len(memory_usage()) >= 5 else 0)
+
+# System status derived from multiple metrics
+system_status = computed(lambda: 
+    "critical" if avg_cpu() > 90 or avg_memory() > 90 else
+    "warning" if avg_cpu() > 70 or avg_memory() > 70 else
+    "normal"
+)
+
+# Single monitoring effect that updates based on derived status
+def update_monitoring_dashboard():
+    status = system_status()
+    print(f"System status: {status}")
+    print(f"CPU: {avg_cpu():.1f}%, Memory: {avg_memory():.1f}%")
+    
+    if status == "critical":
+        print("⚠️ ALERT: System resources critical!")
+
+dashboard = effect(update_monitoring_dashboard)
+
+# When new metrics arrive, all derived values and the dashboard update automatically
+async def simulate_metrics():
+    for i in range(10):
+        cpu_usage.update(lambda readings: readings + [50 + i * 5])
+        memory_usage.update(lambda readings: readings + [60 + i * 4])
+        await asyncio.sleep(1)
+
+# No need to manually update the dashboard - it reacts to changes automatically
+```
+
+### 4. API Gateway Rate Limiting Example
+
+```python
+from reaktiv import signal, computed, effect
+import time
+
+# Per-client request tracking
+client_requests = signal({})  # client_id: [(timestamp, endpoint), ...]
+
+# Computed rate limits that automatically update
+requests_per_minute = computed(lambda: {
+    client_id: len([req for timestamp, _ in requests 
+                   if time.time() - timestamp < 60])
+    for client_id, requests in client_requests().items()
+})
+
+endpoint_requests = computed(lambda: {
+    endpoint: sum(1 for client_reqs in client_requests().values() 
+                 for _, ep in client_reqs if ep == endpoint)
+    for endpoint in set(ep for reqs in client_requests().values() 
+                       for _, ep in reqs)
+})
+
+# Rate limit decision making
+should_rate_limit = computed(lambda: {
+    client_id: requests_per_minute().get(client_id, 0) > 100
+    for client_id in client_requests()
+})
+
+# Real-time monitoring
+def monitor_rate_limits():
+    limits = should_rate_limit()
+    throttled = [client for client, limited in limits.items() if limited]
+    if throttled:
+        print(f"Rate limiting clients: {throttled}")
+
+rate_limit_monitor = effect(monitor_rate_limits)
+
+# When new requests come in, all rate limits automatically recalculate
+def track_request(client_id, endpoint):
+    client_requests.update(lambda reqs: {
+        **reqs,
+        client_id: reqs.get(client_id, []) + [(time.time(), endpoint)]
+    })
+```
+
+## Example Application: Health Monitoring System
+
+This example shows how `reaktiv` simplifies building a real-time health monitoring system that ingests metrics, computes derived health indicators, and triggers alerts.
+
+```python
+from reaktiv import signal, computed, effect
+import asyncio
+import time
+
+# Core state signals
+server_metrics = signal({})  # server_id -> {cpu, memory, disk, last_seen}
+alert_thresholds = signal({"cpu": 80, "memory": 90, "disk": 95})
+maintenance_mode = signal({})  # server_id -> bool
+
+# Derived state
+servers_online = computed(lambda: {
+    server_id: time.time() - metrics["last_seen"] < 60
+    for server_id, metrics in server_metrics().items()
+})
+
+health_status = computed(lambda: {
+    server_id: (
+        "maintenance" if maintenance_mode().get(server_id, False) else
+        "offline" if not servers_online().get(server_id, False) else
+        "alert" if (
+            metrics["cpu"] > alert_thresholds()["cpu"] or
+            metrics["memory"] > alert_thresholds()["memory"] or
+            metrics["disk"] > alert_thresholds()["disk"]
+        ) else 
+        "healthy"
+    )
+    for server_id, metrics in server_metrics().items()
+})
+
+servers_by_status = computed(lambda: {
+    status: [server_id for server_id, s in health_status().items() if s == status]
+    for status in ["healthy", "alert", "offline", "maintenance"]
+})
+
+# Effects for monitoring and alerting
+def update_dashboard():
+    statuses = servers_by_status()
+    print(f"Dashboard: {len(statuses['healthy'])} healthy, {len(statuses['alert'])} in alert")
+    
+    if statuses["alert"]:
+        print(f"⚠️ ALERT: Servers in alert state: {statuses['alert']}")
+
+dashboard_effect = effect(update_dashboard)
 
 async def main():
-    candidate_a = signal(100)
-    candidate_b = signal(100)
-    
-    total_votes = computed(lambda: candidate_a() + candidate_b())
-    percent_a = computed(lambda: (candidate_a() / total_votes()) * 100)
-    percent_b = computed(lambda: (candidate_b() / total_votes()) * 100)
-
-    async def display_results():
-        print(f"Total: {total_votes()} | A: {candidate_a()} ({percent_a():.1f}%) | B: {candidate_b()} ({percent_b():.1f}%)")
-
-    async def check_dominance():
-        if percent_a() > 60:
-            print("Alert: Candidate A is dominating!")
-        elif percent_b() > 60:
-            print("Alert: Candidate B is dominating!")
-
-    display_effect = effect(display_results)
-    alert_effect = effect(check_dominance)
-
-    for _ in range(3):
-        await asyncio.sleep(1)
-        candidate_a.set(candidate_a() + 40)
-        candidate_b.set(candidate_b() + 10)
+    # Update metrics - all derived values and effects update automatically
+    server_metrics.set({
+        "server1": {"cpu": 70, "memory": 65, "disk": 80, "last_seen": time.time()},
+        "server2": {"cpu": 85, "memory": 50, "disk": 70, "last_seen": time.time()}
+    })
     
     await asyncio.sleep(1)
+    
+    # Put a server in maintenance - dashboard updates automatically
+    maintenance_mode.set({"server2": True})
+    
+    await asyncio.sleep(1)
+    
+    # Adjust thresholds - alerts recalculate automatically
+    alert_thresholds.set({"cpu": 75, "memory": 90, "disk": 95})
 
 asyncio.run(main())
 ```
 
-**Sample Output:**
+## More Examples
 
-```
-Total: 200 | A: 100 (50.0%) | B: 100 (50.0%)
-Total: 250 | A: 140 (56.0%) | B: 110 (44.0%)
-Total: 300 | A: 180 (60.0%) | B: 120 (40.0%)
-Total: 350 | A: 220 (62.9%) | B: 130 (37.1%)
-Alert: Candidate A is dominating!
-```
-
-## Real-Time WebSocket API Example
-
-This example demonstrates how `reaktiv` simplifies real-time data processing in web applications by automatically updating computed values and sending changes to clients:
-
-```python
-from fastapi import FastAPI, WebSocket
-from reaktiv import signal, computed, effect
-import asyncio
-import uvicorn
-
-app = FastAPI()
-
-measurements = signal([])
-average = computed(lambda: sum(measurements()) / len(measurements()) if measurements() else 0)
-above_threshold = computed(lambda: [m for m in measurements() if m > average() * 1.1])
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    
-    async def send_updates():
-        await websocket.send_json({
-            "average": average(),
-            "above_threshold": above_threshold()
-        })
-    
-    update_client = effect(send_updates)
-    
-    async def add_data():
-        while True:
-            await asyncio.sleep(1)
-            user_input = await websocket.receive_text()
-            new_data = measurements() + [float(user_input)]
-            measurements.set(new_data)
-    
-    await add_data()
-
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000)
-```
-
-This example shows how:
-1. Signals store measurement data that can be updated in real-time
-2. Computed values automatically recalculate when measurements change
-3. Effects automatically send updates to connected clients whenever values change
-4. The entire reactive system operates with minimal boilerplate code
-
-## Examples
-
-You can find example scripts in the `examples` folder to help you get started with using this project.
+You can find more example scripts in the examples folder to help you get started with using this project.
 
 ---
 

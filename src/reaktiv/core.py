@@ -36,6 +36,9 @@ _computation_stack: contextvars.ContextVar[List['ComputeSignal']] = contextvars.
     'computation_stack', default=[]
 )
 
+# Track the current update cycle to prevent duplicate effect triggers
+_current_update_cycle = 0
+
 # --------------------------------------------------
 # Batch Management
 # --------------------------------------------------
@@ -43,13 +46,15 @@ _computation_stack: contextvars.ContextVar[List['ComputeSignal']] = contextvars.
 @contextmanager
 def batch():
     """Batch multiple signal updates together, deferring computations and effects until completion."""
-    global _batch_depth
+    global _batch_depth, _current_update_cycle
     _batch_depth += 1
     try:
         yield
     finally:
         _batch_depth -= 1
         if _batch_depth == 0:
+            # Increment the update cycle counter when a batch completes
+            _current_update_cycle += 1
             _process_deferred_computed()
             _process_sync_effects()
 
@@ -117,7 +122,7 @@ class Signal(Generic[T]):
         return self._value
 
     def set(self, new_value: T) -> None:
-        global _batch_depth
+        global _batch_depth, _current_update_cycle
         debug_log(f"Signal set() called with new_value: {new_value} (old_value: {self._value})")
         
         # Use custom equality function if provided, otherwise use == operator
@@ -134,6 +139,9 @@ class Signal(Generic[T]):
             
         self._value = new_value
         debug_log(f"Signal value updated to: {new_value}, notifying subscribers.")
+        
+        # Increment update cycle to track this change
+        _current_update_cycle += 1
         
         _batch_depth += 1
         try:
@@ -360,6 +368,7 @@ class Effect(DependencyTracker, Subscriber):
         self._pending_runs: int = 0
         self._cleanups: Optional[List[Callable[[], None]]] = None
         self._executing = False  # Flag to prevent recursive runs
+        self._last_update_cycle = -1  # Track the last update cycle when this effect was triggered
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
 
     def add_dependency(self, signal: Signal) -> None:
@@ -374,13 +383,24 @@ class Effect(DependencyTracker, Subscriber):
         debug_log(f"Effect add_dependency() called, signal: {signal}")
 
     def notify(self) -> None:
-        debug_log("Effect notify() called.")
+        global _current_update_cycle
+        debug_log(f"Effect notify() called during update cycle {_current_update_cycle}.")
+        
         if self._disposed:
             debug_log("Effect is disposed, ignoring notify().")
             return
         if self._executing:
             debug_log("Effect is already executing, ignoring notify().")
             return
+            
+        # Check if this effect was already scheduled in the current update cycle
+        if self._last_update_cycle == _current_update_cycle:
+            debug_log(f"Effect already scheduled in current update cycle {_current_update_cycle}, skipping duplicate notification.")
+            return
+            
+        # Mark that this effect was scheduled in the current update cycle
+        self._last_update_cycle = _current_update_cycle
+        
         if self._is_async:
             self.schedule()
         else:

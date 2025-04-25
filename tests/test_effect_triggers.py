@@ -1,7 +1,7 @@
 import pytest
 from typing import List
 from reaktiv import signal, computed, effect, batch
-from reaktiv.core import set_debug  # Import from correct location
+from reaktiv.core import set_debug
 
 
 def test_effect_trigger_count():

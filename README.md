@@ -2,13 +2,9 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![PyPI - Downloads](https://img.shields.io/pypi/dm/reaktiv) ![Documentation Status](https://readthedocs.org/projects/reaktiv/badge/) ![License](https://img.shields.io/badge/license-MIT-green) [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
-**Reactive Signals for Python** with first-class async support, inspired by Angular's reactivity model.
+**Reactive Computation Graphs for Python** with first-class async support, inspired by Angular's reactivity model.
 
 ![reaktiv](assets/logo.png)
-
-## Documentation
-
-Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
 
 ## Installation
 
@@ -18,28 +14,58 @@ pip install reaktiv
 uv pip install reaktiv
 ```
 
+`reaktiv` creates efficient reactive computation graphs that only recalculate values when their dependencies change. The system automatically tracks dependencies between signals, computed values, and effects, eliminating the need for manual subscription management.
+
+**Key features:**
+- 🔄 **Efficient computation graph**: Only recomputes values affected by a change
+- 🔍 **Automatic dependency tracking**: Dependencies are discovered at runtime
+- 🧠 **Intelligent memoization**: Computed values are cached until dependencies change
+- 🔌 **Side effects via subscriptions**: Changes propagate to effects for integration with external systems
+- ⚡ **Async-first design**: Built for Python's asyncio ecosystem
+
+## Documentation
+
+Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
+
 ## Quick Start
 
 ### Basic Reactivity
 
 ```python
-import asyncio
-from reaktiv import signal, effect
+from reaktiv import signal, computed, effect
 
-async def main():
-    name = signal("Alice")
+# Create some signals
+name = signal("Alice")
+age = signal(30)
+city = signal("New York")
 
-    async def greet():
-        print(f"Hello, {name()}!")
+# Computed value with automatically tracked dependencies
+# The system detects that this depends on name and age
+greeting = computed(lambda: f"{name()} is {age()} years old")
 
-    # Create and schedule effect
-    # IMPORTANT: Assign the effect to a variable to ensure it is not garbage collected.
-    greeter = effect(greet)
+# Another computed value with different dependencies
+# The system detects this depends only on name and city
+location = computed(lambda: f"{name()} lives in {city()}")
 
-    name.set("Bob")  # Prints: "Hello, Bob!"
-    await asyncio.sleep(0)  # Process effects
+# Create effects to demonstrate updates
+print("Initial Setup:")
+greeting_effect = effect(lambda: print(f"Greeting: {greeting()}"))
+location_effect = effect(lambda: print(f"Location: {location()}"))
 
-asyncio.run(main())
+# Changing age only triggers recomputation of greeting
+print("\nChanging age to 31:")
+age.set(31)
+# Only greeting recomputed (location unaffected)
+
+# Changing city only triggers recomputation of location
+print("\nChanging city to Boston:")
+city.set("Boston")
+# Only location recomputed (greeting unaffected)
+
+# Changing name triggers recomputation of both derived values
+print("\nChanging name to Bob:")
+name.set("Bob")
+# Both greeting and location recomputed
 ```
 
 ### Using `update()`

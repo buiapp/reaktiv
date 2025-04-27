@@ -185,455 +185,289 @@ Even in "stateless" microservices and serverless functions, state exists during 
 
 ## Basic Examples
 
-### Feature Flag System with Dynamic Rules
+Here are some simple examples to help you understand reaktiv's benefits:
 
-```python
-from reaktiv import signal, computed, effect
-import time
-
-# Core state
-user_segments = signal({"user1": ["premium", "beta_tester"]})
-feature_flags = signal({
-    "new_dashboard": {"enabled": True, "segments": ["premium"]},
-    "dark_mode": {"enabled": True, "segments": []},
-    "beta_feature": {"enabled": True, "segments": ["beta_tester"]}
-})
-
-# Computed user permissions that update automatically
-user_features = computed(lambda: {
-    user_id: [
-        flag_name 
-        for flag_name, flag in feature_flags().items()
-        if flag["enabled"] and (
-            not flag["segments"] or 
-            any(segment in user_segments().get(user_id, []) for segment in flag["segments"])
-        )
-    ]
-    for user_id in user_segments()
-})
-
-# Add real-time monitoring
-def monitor_features():
-    features = user_features()
-    for user_id, enabled_features in features.items():
-        if "beta_feature" in enabled_features:
-            print(f"User {user_id} has access to beta features")
-
-feature_monitor = effect(monitor_features)
-
-# When segments change, permissions automatically update
-user_segments.update(lambda segments: {**segments, "user2": ["premium"]})
-```
-
-## Real-World Backend Use Cases
-
-### 1. Intelligent Cache Management
+### Example 1: A Price Calculator
 
 ```python
 from reaktiv import signal, computed, effect
 
-# Database-derived state (imagine this comes from your database)
-user_data = signal({})
-permissions = signal({})
-content_items = signal({})
+# Create base values (signals)
+price = signal(10.0)
+quantity = signal(2)
+tax_rate = signal(0.1)  # 10% tax
 
-# Computed caches that automatically update when source data changes
-user_permissions = computed(lambda: {
-    user_id: [perm for perm_id, perm in permissions().items() 
-              if perm['user_id'] == user_id]
-    for user_id in user_data()
-})
+# Create derived values (computed)
+subtotal = computed(lambda: price() * quantity())
+tax = computed(lambda: subtotal() * tax_rate())
+total = computed(lambda: subtotal() + tax())
 
-authorized_content = computed(lambda: {
-    user_id: [item for item_id, item in content_items().items()
-              if any(p['level'] >= item['required_level'] for p in user_permissions().get(user_id, []))]
-    for user_id in user_data()
-})
+# Create a side effect for logging
+logger = effect(lambda: print(f"Order Total: ${total():.2f}"))
 
-# Demonstration of automatic cache updates
-def demo_reactive_cache():
-    # Initial data setup
-    user_data.set({"user1": {"name": "Alice"}, "user2": {"name": "Bob"}})
-    permissions.set({
-        "p1": {"user_id": "user1", "level": 5},  # Admin
-        "p2": {"user_id": "user2", "level": 2}   # Editor
-    })
-    content_items.set({
-        "c1": {"title": "Public Content", "required_level": 1},
-        "c2": {"title": "Admin Content", "required_level": 5}
-    })
-    
-    # Access permissions and content (cache is computed on first access)
-    print("Bob can access:", [item["title"] for item in authorized_content().get("user2", [])])
-    # Output: Bob can access: ['Public Content']
-    
-    # Update Bob's permission level - cache automatically updates!
-    permissions.update(lambda p: {**p, "p2": {"user_id": "user2", "level": 5}})
-    
-    # Cache is automatically recalculated only for Bob
-    print("Bob can now access:", [item["title"] for item in authorized_content().get("user2", [])])
-    # Output: Bob can now access: ['Public Content', 'Admin Content']
-    
-    # No manual cache invalidation needed anywhere!
+# Initial output: "Order Total: $22.00"
 
-demo_reactive_cache()
+# Change the quantity
+quantity.set(3)
+# Automatically logs: "Order Total: $33.00"
+
+# Change the price
+price.set(12.0) 
+# Automatically logs: "Order Total: $39.60"
+
+# Change tax rate
+tax_rate.set(0.15)
+# Automatically logs: "Order Total: $41.40"
 ```
 
-### 2. Adaptive Rate Limiting & Circuit Breaking
+### Example 2: Simple Status Monitoring
 
 ```python
 from reaktiv import signal, computed, effect
-import time
-import asyncio
 
-# Track API calls and failures
-endpoint_calls = signal({})  # endpoint: [timestamp, timestamp...]
-endpoint_failures = signal({})  # endpoint: [timestamp, timestamp...]
+# Base signals: system metrics
+memory_usage = signal(75)  # percent
+cpu_usage = signal(50)     # percent
 
-# Computed circuit breakers that automatically update
-circuit_status = computed(lambda: {
-    endpoint: "open" if len(failures) >= 5 and (time.time() - failures[-1]) < 30 else "closed"
-    for endpoint, failures in endpoint_failures().items()
-})
-
-# Dynamic rate limiting based on traffic patterns
-rate_limits = computed(lambda: {
-    endpoint: max(10, min(1000, len(calls) // 10)) 
-    for endpoint, calls in endpoint_calls().items() 
-    if calls and time.time() - calls[0] < 60
-})
-
-# Add monitoring effect to see changes in real-time
-def monitor_circuit_status():
-    status = circuit_status()
-    if status:
-        print(f"Circuit Status: {status}")
-
-circuit_monitor = effect(monitor_circuit_status)
-
-# Simulate API calls and failures
-async def simulate_traffic():
-    print("\n=== Simulating API Traffic and Failures ===")
-    
-    # Record some successful calls
-    endpoint_calls.update(lambda calls: {
-        **calls, 
-        "api/users": [time.time() - i for i in range(20)]
-    })
-    print(f"Rate limit for api/users: {rate_limits()['api/users']} requests/min")
-    
-    # Simulate failures for api/orders
-    endpoint_failures.update(lambda failures: {
-        **failures,
-        "api/orders": [time.time() - i for i in range(3)]
-    })
-    print(f"Circuit status for api/orders: {circuit_status()['api/orders']}")
-    
-    # Simulate more failures to trigger circuit breaker
-    print("Adding more failures to api/orders...")
-    endpoint_failures.update(lambda failures: {
-        **failures,
-        "api/orders": failures["api/orders"] + [time.time() for _ in range(3)]
-    })
-    print(f"Circuit status for api/orders: {circuit_status()['api/orders']}")
-
-# Run this example with: asyncio.run(simulate_traffic())
-```
-
-### 3. Multi-Layer Configuration Management
-
-```python
-from reaktiv import signal, computed, effect
-import asyncio
-
-# Configuration at different levels
-global_config = signal({"log_level": "INFO", "timeout": 30})
-service_config = signal({"auth": {"timeout": 10}})
-instance_config = signal({"log_level": "DEBUG"})
-
-# Computed effective configuration with correct precedence
-effective_config = computed(lambda: {
-    **global_config(),
-    **{k: v for k, v in service_config().items() if not isinstance(v, dict)},
-    **instance_config()
-})
-
-# Nested configs are merged properly
-auth_config = computed(lambda: {
-    **global_config(),
-    **(service_config().get("auth", {}))
-})
-
-# When any config source changes, all systems update automatically
-def log_config_changes():
-    print(f"Current effective config: {effective_config()}")
-    print(f"Auth specific config: {auth_config()}")
-
-logger_config = effect(log_config_changes)
-
-async def demo_configuration():
-    print("\n=== Configuration Management Demo ===")
-    
-    # Initial configuration state
-    print(f"Initial effective config: {effective_config()}")
-    print(f"Initial auth config: {auth_config()}")
-    
-    # Change global config
-    print("\nUpdating global timeout to 60 seconds...")
-    global_config.update(lambda cfg: {**cfg, "timeout": 60})
-    await asyncio.sleep(0.1)  # Allow effects to process
-    
-    # Override at service level
-    print("\nAdding database configuration at service level...")
-    service_config.update(lambda cfg: {
-        **cfg, 
-        "database": {"host": "localhost", "port": 5432}
-    })
-    await asyncio.sleep(0.1)  # Allow effects to process
-    
-    # Change instance config
-    print("\nChanging instance log_level to TRACE...")
-    instance_config.update(lambda cfg: {**cfg, "log_level": "TRACE"})
-    await asyncio.sleep(0.1)  # Allow effects to process
-
-# Run this example with: asyncio.run(demo_configuration())
-```
-
-## Advanced Examples
-
-### 1. Resource Pool Management
-
-```python
-from reaktiv import signal, computed, effect
-import time
-
-# Connection pool state
-db_connections = signal({})  # id: {created_at, last_used, state}
-connection_requests = signal(0)
-
-# Auto-scaling connection pool
-idle_connections = computed(lambda: [
-    conn_id for conn_id, conn in db_connections().items() 
-    if conn['state'] == 'idle' and time.time() - conn['last_used'] < 60
-])
-
-connections_needed = computed(lambda: max(0, connection_requests() - len(idle_connections())))
-
-# Effect that manages pool size based on demand
-def manage_pool():
-    current_needed = connections_needed()
-    if current_needed > 0:
-        create_new_connections(current_needed)
-    elif len(idle_connections()) > 10 and connection_requests() < 5:
-        close_excess_connections()
-
-pool_manager = effect(manage_pool)
-```
-
-### 2. Multi-Stage Data Processing Pipeline
-
-```python
-from reaktiv import signal, computed, effect, batch
-import json
-
-# Raw event stream
-raw_events = signal([])
-
-# Normalized data
-normalized_events = computed(lambda: [
-    {**event, "timestamp": parse_timestamp(event.get("ts", 0))}
-    for event in raw_events()
-])
-
-# Filtered data
-error_events = computed(lambda: [
-    event for event in normalized_events()
-    if event.get("level") == "ERROR"
-])
-
-# Aggregated metrics
-error_count_by_service = computed(lambda: {
-    service: len([e for e in error_events() if e.get("service") == service])
-    for service in set(e.get("service", "unknown") for e in error_events())
-})
-
-# Effect to trigger alerts
-def check_alerts():
-    counts = error_count_by_service()
-    for service, count in counts.items():
-        if count > 5:
-            print(f"ALERT: {service} has {count} errors")
-
-alert_system = effect(check_alerts)
-
-# Adding data triggers the entire pipeline automatically
-def ingest_batch(new_events):
-    raw_events.update(lambda events: events + new_events)
-
-# Multiple updates in a batch to prevent intermediate recalculations
-with batch():
-    raw_events.update(lambda events: events + [
-        {"service": "auth", "level": "ERROR", "ts": 1619712000},
-        {"service": "auth", "level": "ERROR", "ts": 1619712060}
-    ])
-```
-
-### 3. Real-Time System Monitoring
-
-```python
-from reaktiv import signal, computed, effect
-import asyncio
-
-# System metrics
-cpu_usage = signal([])
-memory_usage = signal([])
-disk_io = signal([])
-
-# Derived analytics
-avg_cpu = computed(lambda: sum(cpu_usage()[-5:]) / 5 if len(cpu_usage()) >= 5 else 0)
-avg_memory = computed(lambda: sum(memory_usage()[-5:]) / 5 if len(memory_usage()) >= 5 else 0)
-
-# System status derived from multiple metrics
+# Computed value: system status based on thresholds
 system_status = computed(lambda: 
-    "critical" if avg_cpu() > 90 or avg_memory() > 90 else
-    "warning" if avg_cpu() > 70 or avg_memory() > 70 else
+    "critical" if memory_usage() > 90 or cpu_usage() > 90 else
+    "warning" if memory_usage() > 70 or cpu_usage() > 70 else
     "normal"
 )
 
-# Single monitoring effect that updates based on derived status
-def update_monitoring_dashboard():
+# Effect: alert when system status changes
+def alert_on_status():
     status = system_status()
     print(f"System status: {status}")
-    print(f"CPU: {avg_cpu():.1f}%, Memory: {avg_memory():.1f}%")
-    
-    if status == "critical":
-        print("⚠️ ALERT: System resources critical!")
+    if status != "normal":
+        print(f"  Memory: {memory_usage()}%, CPU: {cpu_usage()}%")
 
-dashboard = effect(update_monitoring_dashboard)
+status_monitor = effect(alert_on_status)
+# Initial output: "System status: warning"
+#                "  Memory: 75%, CPU: 50%"
 
-# When new metrics arrive, all derived values and the dashboard update automatically
-async def simulate_metrics():
-    for i in range(10):
-        cpu_usage.update(lambda readings: readings + [50 + i * 5])
-        memory_usage.update(lambda readings: readings + [60 + i * 4])
-        await asyncio.sleep(1)
+# Simulate memory dropping
+memory_usage.set(60)
+# Output: "System status: normal"
 
-# No need to manually update the dashboard - it reacts to changes automatically
+# Simulate CPU spiking
+cpu_usage.set(95)
+# Output: "System status: critical"
+#         "  Memory: 60%, CPU: 95%" 
 ```
 
-### 4. API Gateway Rate Limiting Example
+### Example 2b: Async Status Monitoring
+
+```python
+from reaktiv import signal, computed, effect
+import asyncio
+
+async def demo_async_monitoring():
+    # Base signals: system metrics
+    memory_usage = signal(75)  # percent
+    cpu_usage = signal(50)     # percent
+
+    # Computed value: system status
+    system_status = computed(lambda: 
+        "critical" if memory_usage() > 90 or cpu_usage() > 90 else
+        "warning" if memory_usage() > 70 or cpu_usage() > 70 else
+        "normal"
+    )
+
+    # Async effect: alert and take action when status changes
+    async def async_alert_handler():
+        status = system_status()
+        print(f"System status: {status}")
+        
+        if status == "critical":
+            print(f"  Memory: {memory_usage()}%, CPU: {cpu_usage()}%")
+            # Simulate sending notification
+            await asyncio.sleep(0.1)  # non-blocking wait
+            print("  ✉️ Alert notification sent")
+            
+            # Simulate recovery action
+            if cpu_usage() > 90:
+                await asyncio.sleep(0.2)  # simulating some async operation
+                print("  🔄 Triggered automatic scaling")
+
+    # Register the async effect
+    status_monitor = effect(async_alert_handler)
+    print("Starting monitoring...")
+    
+    # Give effect time to run initially
+    await asyncio.sleep(0.2)
+    
+    # Simulate CPU spike
+    print("\nSimulating CPU spike:")
+    cpu_usage.set(95)
+    await asyncio.sleep(0.5)  # Allow effect to complete
+    
+    # Simulate recovery
+    print("\nSimulating recovery:")
+    cpu_usage.set(50)
+    memory_usage.set(60)
+    await asyncio.sleep(0.2)
+
+asyncio.run(demo_async_monitoring())
+```
+
+### Example 3: Configuration Management
+
+```python
+from reaktiv import signal, computed, effect
+
+# Different configuration sources
+default_config = signal({"timeout": 30, "retries": 3, "log_level": "INFO"})
+user_config = signal({})
+
+# Effective config combines both sources, with user settings taking precedence
+effective_config = computed(lambda: {**default_config(), **user_config()})
+
+# Log when config changes
+config_logger = effect(lambda: print(f"Active config: {effective_config()}"))
+# Initial output: "Active config: {'timeout': 30, 'retries': 3, 'log_level': 'INFO'}"
+
+# When user updates their preferences
+user_config.set({"timeout": 60, "log_level": "DEBUG"})
+# Automatically logs: "Active config: {'timeout': 60, 'retries': 3, 'log_level': 'DEBUG'}"
+
+# When defaults are updated (e.g., from a config file)
+default_config.update(lambda cfg: {**cfg, "retries": 5, "max_connections": 100})
+# Automatically logs: "Active config: {'timeout': 60, 'retries': 5, 'log_level': 'DEBUG', 'max_connections': 100}"
+```
+
+### Example 4: Simple Caching
+
+```python
+from reaktiv import signal, computed
+
+# Database simulation
+database = {"user1": "Alice", "user2": "Bob"}
+
+# Cache invalidation signal
+last_update = signal(0)  # timestamp or version number
+
+# User data with automatic cache refresh
+def fetch_user(user_id):
+    # In a real app, this would actually query a database
+    return database.get(user_id)
+
+active_user_id = signal("user1")
+
+# This computed value automatically refreshes when active_user_id changes
+# or when the cache is invalidated via last_update
+user_data = computed(lambda: {
+    "id": active_user_id(),
+    "name": fetch_user(active_user_id()),
+    "cache_version": last_update()
+})
+
+print(user_data())  # {'id': 'user1', 'name': 'Alice', 'cache_version': 0}
+
+# Switch to another user - cache updates automatically
+active_user_id.set("user2")
+print(user_data())  # {'id': 'user2', 'name': 'Bob', 'cache_version': 0}
+
+# Backend data changes - we update the database and invalidate cache
+database["user2"] = "Robert"
+last_update.set(1)  # increment version number
+print(user_data())  # {'id': 'user2', 'name': 'Robert', 'cache_version': 1}
+```
+
+### Example 5: Processing a Stream of Events
 
 ```python
 from reaktiv import signal, computed, effect
 import time
 
-# Per-client request tracking
-client_requests = signal({})  # client_id: [(timestamp, endpoint), ...]
+# Event stream (simulating incoming data)
+events = signal([])
 
-# Computed rate limits that automatically update
-requests_per_minute = computed(lambda: {
-    client_id: len([req for timestamp, _ in requests 
-                   if time.time() - timestamp < 60])
-    for client_id, requests in client_requests().items()
-})
+# Compute statistics from the events
+event_count = computed(lambda: len(events()))
+recent_events = computed(lambda: [e for e in events() if time.time() - e["timestamp"] < 60])
+error_count = computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
 
-endpoint_requests = computed(lambda: {
-    endpoint: sum(1 for client_reqs in client_requests().values() 
-                 for _, ep in client_reqs if ep == endpoint)
-    for endpoint in set(ep for reqs in client_requests().values() 
-                       for _, ep in reqs)
-})
+# Monitor for problems
+def check_errors():
+    if error_count() >= 3:
+        print(f"ALERT: {error_count()} errors detected in the event stream!")
+    
+error_monitor = effect(check_errors)
 
-# Rate limit decision making
-should_rate_limit = computed(lambda: {
-    client_id: requests_per_minute().get(client_id, 0) > 100
-    for client_id in client_requests()
-})
+# Process new events
+def add_event(level, message):
+    new_event = {"timestamp": time.time(), "level": level, "message": message}
+    events.update(lambda current: current + [new_event])
 
-# Real-time monitoring
-def monitor_rate_limits():
-    limits = should_rate_limit()
-    throttled = [client for client, limited in limits.items() if limited]
-    if throttled:
-        print(f"Rate limiting clients: {throttled}")
-
-rate_limit_monitor = effect(monitor_rate_limits)
-
-# When new requests come in, all rate limits automatically recalculate
-def track_request(client_id, endpoint):
-    client_requests.update(lambda reqs: {
-        **reqs,
-        client_id: reqs.get(client_id, []) + [(time.time(), endpoint)]
-    })
+# Simulate incoming events
+add_event("INFO", "Application started")
+add_event("INFO", "Processing request")
+add_event("ERROR", "Database connection failed")
+add_event("ERROR", "Retry failed")
+add_event("ERROR", "Giving up after 3 attempts")
+# Automatically triggers: "ALERT: 3 errors detected in the event stream!"
 ```
 
-## Example Application: Health Monitoring System
-
-This example shows how `reaktiv` simplifies building a real-time health monitoring system that ingests metrics, computes derived health indicators, and triggers alerts.
+### Example 5b: Async Event Processing Pipeline
 
 ```python
 from reaktiv import signal, computed, effect
 import asyncio
 import time
 
-# Core state signals
-server_metrics = signal({})  # server_id -> {cpu, memory, disk, last_seen}
-alert_thresholds = signal({"cpu": 80, "memory": 90, "disk": 95})
-maintenance_mode = signal({})  # server_id -> bool
+# Demo async event processing
+async def demo_async_events():
+    # Event stream
+    events = signal([])
 
-# Derived state
-servers_online = computed(lambda: {
-    server_id: time.time() - metrics["last_seen"] < 60
-    for server_id, metrics in server_metrics().items()
-})
+    # Derived statistics
+    error_count = computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
+    warning_count = computed(lambda: len([e for e in events() if e["level"] == "WARNING"]))
 
-health_status = computed(lambda: {
-    server_id: (
-        "maintenance" if maintenance_mode().get(server_id, False) else
-        "offline" if not servers_online().get(server_id, False) else
-        "alert" if (
-            metrics["cpu"] > alert_thresholds()["cpu"] or
-            metrics["memory"] > alert_thresholds()["memory"] or
-            metrics["disk"] > alert_thresholds()["disk"]
-        ) else 
-        "healthy"
-    )
-    for server_id, metrics in server_metrics().items()
-})
+    # Async effect for error handling
+    async def handle_errors():
+        errors = error_count()
+        if errors > 0:
+            print(f"Found {errors} errors")
+            
+            # Simulate error processing that takes time
+            await asyncio.sleep(0.2)
+            
+            if errors >= 3:
+                print("🚨 Critical error threshold reached")
+                await asyncio.sleep(0.1)  # Simulate sending alert
+                print("✉️ Error notification dispatched to on-call team")
 
-servers_by_status = computed(lambda: {
-    status: [server_id for server_id, s in health_status().items() if s == status]
-    for status in ["healthy", "alert", "offline", "maintenance"]
-})
+    # Register async effect
+    error_handler = effect(handle_errors)
 
-# Effects for monitoring and alerting
-def update_dashboard():
-    statuses = servers_by_status()
-    print(f"Dashboard: {len(statuses['healthy'])} healthy, {len(statuses['alert'])} in alert")
+    # Function to add events
+    async def add_event_async(level, message):
+        new_event = {"timestamp": time.time(), "level": level, "message": message}
+        events.update(lambda current: current + [new_event])
+        # Simulate some processing time
+        await asyncio.sleep(0.1)
+    print("Starting event monitoring...")
     
-    if statuses["alert"]:
-        print(f"⚠️ ALERT: Servers in alert state: {statuses['alert']}")
+    # Add some events
+    await add_event_async("INFO", "Application started")
+    await add_event_async("INFO", "User logged in")
+    await add_event_async("WARNING", "Slow database query detected")
+    
+    # Add error events that will trigger our effect
+    print("\nSimulating error condition:")
+    await add_event_async("ERROR", "Database connection timeout")
+    await add_event_async("ERROR", "Retry failed")
+    await add_event_async("ERROR", "Service unavailable")
+    
+    # Give effect time to complete
+    await asyncio.sleep(0.5)
+    
+    print(f"\nFinal status: {error_count()} errors, {warning_count()} warnings")
 
-dashboard_effect = effect(update_dashboard)
-
-async def main():
-    # Update metrics - all derived values and effects update automatically
-    server_metrics.set({
-        "server1": {"cpu": 70, "memory": 65, "disk": 80, "last_seen": time.time()},
-        "server2": {"cpu": 85, "memory": 50, "disk": 70, "last_seen": time.time()}
-    })
-    
-    await asyncio.sleep(1)
-    
-    # Put a server in maintenance - dashboard updates automatically
-    maintenance_mode.set({"server2": True})
-    
-    await asyncio.sleep(1)
-    
-    # Adjust thresholds - alerts recalculate automatically
-    alert_thresholds.set({"cpu": 75, "memory": 90, "disk": 95})
-
-asyncio.run(main())
+asyncio.run(demo_async_events())
 ```
 
 ## More Examples

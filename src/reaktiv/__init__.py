@@ -5,7 +5,7 @@ from .core import Signal, ComputeSignal, Effect, batch, untracked, signal, compu
 from .utils import to_async_iter
 from .operators import filter_signal, debounce_signal, throttle_signal, pairwise_signal
 
-__version__ = "0.14.2"
+__version__ = "0.14.3"
 __all__ = [
     "Signal",
     "ComputeSignal",

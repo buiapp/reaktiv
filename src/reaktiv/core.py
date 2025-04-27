@@ -48,13 +48,15 @@ def batch():
     """Batch multiple signal updates together, deferring computations and effects until completion."""
     global _batch_depth, _current_update_cycle
     _batch_depth += 1
+    # is_outermost_batch = _batch_depth == 1 # Check if this is the start of the outermost batch (useful for debugging)
     try:
         yield
     finally:
         _batch_depth -= 1
         if _batch_depth == 0:
-            # Increment the update cycle counter when a batch completes
+            # Increment the update cycle counter ONLY when the outermost batch completes
             _current_update_cycle += 1
+            debug_log(f"Batch finished, incremented update cycle to: {_current_update_cycle}")
             _process_deferred_computed()
             _process_sync_effects()
 
@@ -122,38 +124,55 @@ class Signal(Generic[T]):
         return self._value
 
     def set(self, new_value: T) -> None:
-        global _batch_depth, _current_update_cycle
+        global _current_update_cycle
         debug_log(f"Signal set() called with new_value: {new_value} (old_value: {self._value})")
-        
-        # Use custom equality function if provided, otherwise use == operator
+
+        # Use custom equality function if provided, otherwise use identity check
+        should_update = True
         if self._equal is not None:
-            # Use custom equality function
-            if self._equal(self._value, new_value):
-                debug_log("Signal set() - new_value considered equal by custom equality function; no update.")
-                return
-        else:
-            # use identity check for equality
-            if self._value is new_value:
-                debug_log("Signal set() - new_value is identical to old_value; no update.")
-                return
-            
+            try:
+                if self._equal(self._value, new_value):
+                    debug_log("Signal set() - new_value considered equal by custom equality function; no update.")
+                    should_update = False
+            except Exception as e:
+                 debug_log(f"Error in custom equality check during set: {e}")
+                 # Defaulting to update on error
+        elif self._value is new_value: # Use 'is' for default identity check
+            debug_log("Signal set() - new_value is identical to old_value; no update.")
+            should_update = False
+
+        if not should_update:
+            return
+
         self._value = new_value
         debug_log(f"Signal value updated to: {new_value}, notifying subscribers.")
-        
-        # Increment update cycle to track this change
-        _current_update_cycle += 1
-        
-        _batch_depth += 1
-        try:
-            for subscriber in list(self._subscribers):
-                debug_log(f"Notifying direct subscriber: {subscriber}")
-                subscriber.notify()
-            _process_deferred_computed()
-        finally:
-            _batch_depth -= 1
-            if _batch_depth == 0:
-                _process_deferred_computed()  # Process deferred computed signals after updates
-                _process_sync_effects()
+
+        # Increment update cycle ONLY if this 'set' is the top-level trigger (not inside a batch)
+        is_top_level_trigger = _batch_depth == 0
+        if is_top_level_trigger:
+             _current_update_cycle += 1
+             debug_log(f"Signal set() incremented update cycle to: {_current_update_cycle}")
+
+
+        # Notify subscribers directly
+        # Use list() to avoid issues if subscribers change during iteration
+        subscribers_to_notify = list(self._subscribers)
+        for subscriber in subscribers_to_notify:
+            # Check if subscriber is still valid (WeakSet might have removed it)
+            # This check might not be strictly necessary with WeakSet but adds safety
+            if subscriber in self._subscribers:
+                 debug_log(f"Notifying direct subscriber: {subscriber}")
+                 subscriber.notify()
+
+        # If this set() call is the outermost operation (not within a batch),
+        # process effects immediately after notifying direct subscribers and their consequences.
+        if is_top_level_trigger:
+            debug_log("Signal set() is top-level trigger, processing deferred computed and sync effects.")
+            _process_deferred_computed() # Process any computed signals dirtied by this set
+            _process_sync_effects()      # Process any effects dirtied by this set or computed signals
+        else:
+            debug_log("Signal set() is inside a batch, deferring effect processing.")
+
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         """Update the signal's value using a function that receives the current value."""
@@ -363,12 +382,11 @@ class Effect(DependencyTracker, Subscriber):
         self._disposed = False
         self._new_dependencies: Optional[Set[Signal]] = None
         self._is_async = asyncio.iscoroutinefunction(func)
-        self._executing_sync = False
         self._dirty = False
-        self._pending_runs: int = 0
         self._cleanups: Optional[List[Callable[[], None]]] = None
-        self._executing = False  # Flag to prevent recursive runs
+        self._executing = False  # Flag to prevent recursive/concurrent runs
         self._last_update_cycle = -1  # Track the last update cycle when this effect was triggered
+        self._async_task: Optional[asyncio.Task] = None # To manage the async task if needed
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
 
     def add_dependency(self, signal: Signal) -> None:
@@ -385,62 +403,70 @@ class Effect(DependencyTracker, Subscriber):
     def notify(self) -> None:
         global _current_update_cycle
         debug_log(f"Effect notify() called during update cycle {_current_update_cycle}.")
-        
+
         if self._disposed:
             debug_log("Effect is disposed, ignoring notify().")
             return
-        if self._executing:
-            debug_log("Effect is already executing, ignoring notify().")
-            return
-            
+        # Removed _executing check here, let the execution methods handle it
+
         # Check if this effect was already scheduled in the current update cycle
         if self._last_update_cycle == _current_update_cycle:
             debug_log(f"Effect already scheduled in current update cycle {_current_update_cycle}, skipping duplicate notification.")
             return
-            
+
         # Mark that this effect was scheduled in the current update cycle
         self._last_update_cycle = _current_update_cycle
-        
+
         if self._is_async:
-            self.schedule()
+            # Schedule the async task to run if not already executing
+            if not self._executing:
+                debug_log("Scheduling async effect execution via notify.")
+                self._async_task = asyncio.create_task(self._run_effect_func_async())
+            else:
+                debug_log("Async effect already running, notify() skipped task creation.")
         else:
+            # Mark sync effect as dirty for processing later
             self._mark_dirty()
 
     def schedule(self) -> None:
-        debug_log("Effect schedule() called.")
+        """Schedules the initial execution of the effect."""
+        debug_log("Effect schedule() called for initial run.")
         if self._disposed:
-            debug_log("Effect is disposed, schedule() ignored.")
+            debug_log("Effect schedule() called on disposed effect, ignoring.")
             return
-        if self._executing:
-            debug_log("Effect is already executing, ignoring schedule().")
-            return
+
         if self._is_async:
-            if self._pending_runs == 0:
-                self._pending_runs = 1
-                asyncio.create_task(self._async_runner())
+            # Schedule the initial async run if not already executing
+            if not self._executing:
+                debug_log("Scheduling initial async effect execution.")
+                self._async_task = asyncio.create_task(self._run_effect_func_async())
+            else:
+                debug_log("Initial async effect schedule skipped, already running.")
         else:
+            # Mark sync effect as dirty and process immediately if not in batch
             self._mark_dirty()
+            if _batch_depth == 0:
+                debug_log("Processing sync effects immediately after initial schedule.")
+                _process_sync_effects()
 
     def _mark_dirty(self):
+        # This should only be called for SYNC effects now
+        if self._is_async:
+             debug_log("ERROR: _mark_dirty called on async effect.") # Should not happen
+             return
         if not self._dirty:
             self._dirty = True
             _sync_effect_queue.add(self)
-            debug_log("Effect marked as dirty and added to queue.")
-            if _batch_depth == 0:
-                _process_sync_effects()
-
-    async def _async_runner(self) -> None:
-        while self._pending_runs > 0:
-            self._pending_runs = 0
-            await self._run_effect_func_async()
-            await asyncio.sleep(0)
+            debug_log("Sync effect marked as dirty and added to queue.")
 
     async def _run_effect_func_async(self) -> None:
-        if self._executing:
-            debug_log("Effect is already executing async, skipping.")
+        # Combined checks for disposed and executing
+        if self._disposed or self._executing:
+            debug_log(f"Async effect execution skipped: disposed={self._disposed}, executing={self._executing}")
             return
 
         self._executing = True
+        debug_log("Async effect execution starting.")
         try:
             # Run previous cleanups
             if self._cleanups is not None:
@@ -451,111 +477,170 @@ class Effect(DependencyTracker, Subscriber):
                     except Exception:
                         traceback.print_exc()
                 self._cleanups = None
-    
+
             self._new_dependencies = set()
             current_cleanups: List[Callable[[], None]] = []
-            
+
             # Prepare on_cleanup argument if needed
             sig = inspect.signature(self._func)
             pass_on_cleanup = len(sig.parameters) >= 1
-            
+
             def on_cleanup(fn: Callable[[], None]) -> None:
                 current_cleanups.append(fn)
-    
+
             token = _current_effect.set(self)
             try:
+                # Directly await the coroutine function
                 if pass_on_cleanup:
-                    result = self._func(on_cleanup)
+                    await self._func(on_cleanup) # type: ignore
                 else:
-                    result = self._func()
-                
-                if inspect.isawaitable(result):
-                    await result
+                    await self._func() # type: ignore
+            except asyncio.CancelledError:
+                 debug_log("Async effect task cancelled.")
+                 # Run new cleanups immediately if cancelled
+                 for cleanup in current_cleanups:
+                     try: cleanup()
+                     except Exception: traceback.print_exc()
+                 raise # Re-raise CancelledError
             except Exception:
                 traceback.print_exc()
                 debug_log("Effect function raised an exception during async execution.")
             finally:
                 _current_effect.reset(token)
-            
-            self._cleanups = current_cleanups
-            
+
+            # Check disposed again *after* await, as effect might be disposed during await
             if self._disposed:
-                return
-            new_deps = self._new_dependencies or set()
-            self._new_dependencies = None
+                 debug_log("Effect disposed during async execution, skipping dependency update.")
+                 # Run new cleanups immediately if disposed during execution
+                 for cleanup in current_cleanups:
+                     try: cleanup()
+                     except Exception: traceback.print_exc()
+                 return # Skip dependency management and storing cleanups
+
+            self._cleanups = current_cleanups
+
+            # Update dependencies
+            new_deps = self._new_dependencies if self._new_dependencies is not None else set()
+            self._new_dependencies = None # Clear for next run
             old_deps = set(self._dependencies)
+
+            # Unsubscribe from signals that are no longer dependencies
             for signal in old_deps - new_deps:
                 signal.unsubscribe(self)
                 debug_log(f"Effect unsubscribed from old dependency: {signal}")
+
+            # Subscribe to new signals
+            # No need to re-subscribe if already subscribed
+            for signal in new_deps - old_deps:
+                 signal.subscribe(self)
+                 debug_log(f"Effect subscribed to new dependency: {signal}")
+
             self._dependencies = new_deps
+            debug_log("Async effect dependency update complete.")
+
         finally:
             self._executing = False
+            debug_log("Async effect execution finished.")
+            # Clear the task reference once done
+            if self._async_task and self._async_task.done():
+                 self._async_task = None
 
     def _execute_sync(self) -> None:
+        # This should only be called for SYNC effects
+        if self._is_async:
+             debug_log("ERROR: _execute_sync called on async effect.") # Should not happen
+             return
+
+        # Combined checks
         if self._disposed or not self._dirty or self._executing:
-            debug_log("Effect _execute_sync() skipped, not dirty or disposed or already executing.")
+            debug_log(f"Sync effect execution skipped: disposed={self._disposed}, dirty={self._dirty}, executing={self._executing}")
             return
-        
+
         self._executing = True
+        self._dirty = False # Mark as not dirty since we are running it now
+        debug_log("Sync effect execution starting.")
         try:
             # Run previous cleanups
             if self._cleanups is not None:
-                debug_log("Running cleanup functions")
+                debug_log("Running sync cleanup functions")
                 for cleanup in self._cleanups:
                     try:
                         cleanup()
                     except Exception:
                         traceback.print_exc()
                 self._cleanups = None
-    
-            self._dirty = False
-            debug_log("Effect _execute_sync() beginning.")
-            self._executing_sync = True
+
+            self._new_dependencies = set()
+            current_cleanups: List[Callable[[], None]] = []
+
+            # Prepare on_cleanup argument if needed
+            sig = inspect.signature(self._func)
+            pass_on_cleanup = len(sig.parameters) >= 1
+
+            def on_cleanup(fn: Callable[[], None]) -> None:
+                current_cleanups.append(fn)
+
+            token = _current_effect.set(self)
             try:
-                self._new_dependencies = set()
-                current_cleanups: List[Callable[[], None]] = []
-                
-                # Prepare on_cleanup argument if needed
-                sig = inspect.signature(self._func)
-                pass_on_cleanup = len(sig.parameters) >= 1
-                
-                def on_cleanup(fn: Callable[[], None]) -> None:
-                    current_cleanups.append(fn)
-    
-                token = _current_effect.set(self)
-                try:
-                    if pass_on_cleanup:
-                        self._func(on_cleanup)
-                    else:
-                        self._func()
-                except Exception:
-                    traceback.print_exc()
-                    debug_log("Effect function raised an exception during sync execution.")
-                finally:
-                    _current_effect.reset(token)
-                
-                self._cleanups = current_cleanups
-                
-                if self._disposed:
-                    return
-                new_deps = self._new_dependencies or set()
-                self._new_dependencies = None
-                old_deps = set(self._dependencies)
-                for signal in old_deps - new_deps:
-                    signal.unsubscribe(self)
-                    debug_log(f"Effect unsubscribed from old dependency: {signal}")
-                self._dependencies = new_deps
+                # Call the sync function directly
+                if pass_on_cleanup:
+                    self._func(on_cleanup)
+                else:
+                    self._func()
+            except Exception:
+                traceback.print_exc()
+                debug_log("Effect function raised an exception during sync execution.")
             finally:
-                self._executing_sync = False
-                debug_log("Effect _execute_sync() completed.")
+                _current_effect.reset(token)
+
+            # Check disposed state after execution
+            if self._disposed:
+                 debug_log("Effect disposed during sync execution, skipping dependency update.")
+                 # Run new cleanups immediately if disposed during execution
+                 for cleanup in current_cleanups:
+                     try: cleanup()
+                     except Exception: traceback.print_exc()
+                 return # Skip dependency management and storing cleanups
+
+            self._cleanups = current_cleanups
+
+            # Update dependencies
+            new_deps = self._new_dependencies if self._new_dependencies is not None else set()
+            self._new_dependencies = None # Clear for next run
+            old_deps = set(self._dependencies)
+
+            # Unsubscribe from signals that are no longer dependencies
+            for signal in old_deps - new_deps:
+                signal.unsubscribe(self)
+                debug_log(f"Effect unsubscribed from old dependency: {signal}")
+
+            # Subscribe to new signals
+            # No need to re-subscribe if already subscribed
+            for signal in new_deps - old_deps:
+                 signal.subscribe(self)
+                 debug_log(f"Effect subscribed to new dependency: {signal}")
+
+            self._dependencies = new_deps
+            debug_log("Sync effect dependency update complete.")
+
         finally:
             self._executing = False
+            debug_log("Sync effect execution finished.")
 
     def dispose(self) -> None:
         debug_log("Effect dispose() called.")
         if self._disposed:
             return
-        
+
+        self._disposed = True # Set disposed flag early
+
+        # Cancel pending async task if any
+        if self._async_task and not self._async_task.done():
+            debug_log("Cancelling pending async effect task.")
+            self._async_task.cancel()
+            # We might want to await the cancellation or handle CancelledError,
+            # but for simplicity, we just cancel. Cleanup should handle resource release.
+
         # Run final cleanups
         if self._cleanups is not None:
             debug_log("Running final cleanup functions")
@@ -565,8 +650,8 @@ class Effect(DependencyTracker, Subscriber):
                 except Exception:
                     traceback.print_exc()
             self._cleanups = None
-        
-        self._disposed = True
+
+        # Unsubscribe from all dependencies
         for signal in self._dependencies:
             signal.unsubscribe(self)
         self._dependencies.clear()

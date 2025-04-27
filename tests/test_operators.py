@@ -85,10 +85,8 @@ async def test_filter_signal_initial_value_fails():
         await asyncio.sleep(0.01)
 
     results = await collect_values(f, actions, collect_delay=0.05)
-
-    # Initial effect runs with 1 (even though filtered, it's the initial state)
-    # Then updates to 2. Stays 2 when 3 is set.
-    assert results == [1, 2]
+    
+    assert results == [None, 2]
 
 # === Test debounce_signal ===
 

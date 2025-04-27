@@ -1,9 +1,11 @@
 import asyncio
 import time
-# Add Any to the import
-from typing import TypeVar, Callable, Generic, Optional, Union, Set, List, Tuple, Any 
+from typing import TypeVar, Callable, Generic, Optional, Union, Set, List, Tuple, Any
 from weakref import WeakSet
-from .core import Signal, ComputeSignal, Effect, _current_effect, Subscriber, debug_log
+from .core import (
+    Signal, ComputeSignal, Effect, _current_effect, Subscriber, debug_log,
+    _process_sync_effects, _batch_depth
+)
 
 T = TypeVar("T")
 
@@ -52,16 +54,27 @@ class _OperatorSignal(Generic[T]):
 
         self._value = new_value
         debug_log(f"OperatorSignal value updated to: {new_value}, notifying subscribers.")
+        
+        # Determine if this update is happening outside a batch
+        is_top_level_trigger = _batch_depth == 0
+        # No need to increment update cycle here, handled by source/batch
+
         # Notify own subscribers
-        for subscriber in list(self._subscribers):
+        subscribers_to_notify = list(self._subscribers)
+        for subscriber in subscribers_to_notify:
              debug_log(f"OperatorSignal notifying subscriber: {subscriber}")
-             # Check if subscriber is valid and has notify method before calling
              if hasattr(subscriber, 'notify') and callable(subscriber.notify):
                  subscriber.notify()
              else:
-                 # Subscriber might have been garbage collected or is invalid
                  debug_log(f"OperatorSignal found invalid subscriber: {subscriber}, removing.")
                  self._subscribers.discard(subscriber)
+
+        # Process sync effects immediately if this update is not part of a batch
+        if is_top_level_trigger:
+            debug_log("OperatorSignal update is top-level, processing sync effects.")
+            _process_sync_effects()
+        else:
+            debug_log("OperatorSignal update is inside a batch, deferring effect processing.")
 
     # --- Methods for Duck Typing as a Dependency Source --- 
 
@@ -124,7 +137,7 @@ class _OperatorSignal(Generic[T]):
 def filter_signal(
     source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]],
     predicate: Callable[[T], bool]
-) -> _OperatorSignal[T]:
+) -> _OperatorSignal[Optional[T]]:
     """
     Creates a read-only signal that only emits values from the source signal
     that satisfy the predicate function.
@@ -138,11 +151,21 @@ def filter_signal(
     """
     # Get initial value without tracking dependency here
     initial_source_value = source.get()
-    # Create the operator signal instance 
+    initial_value_passes = False
+    try:
+        initial_value_passes = predicate(initial_source_value)
+    except Exception as e:
+        debug_log(f"Filter predicate failed on initial value: {e}")
+
+    # Determine the correct initial value for the filtered signal
+    # If the initial source value passes, use it. Otherwise, use None.
+    # We might need a more sophisticated way to handle non-None types later.
+    initial_filtered_value = initial_source_value if initial_value_passes else None
+
+    # Create the operator signal instance
     source_equal = getattr(source, '_equal', None)
-    
-    # Initialize with the source's initial value regardless of predicate
-    filtered_sig = _OperatorSignal(initial_source_value, equal=source_equal)
+    # The type checker needs help here as initial_filtered_value can be None
+    filtered_sig: _OperatorSignal[Optional[T]] = _OperatorSignal(initial_filtered_value, equal=source_equal)
 
     # Define the effect function
     def _run_filter():
@@ -150,7 +173,9 @@ def filter_signal(
         value = source.get() # Track source as dependency inside effect
         if predicate(value):
             filtered_sig._update_value(value)
-        # No cleanup needed for filter
+        # If predicate is false, we don't update. The signal retains its last valid value.
+        # Consider if we should update to None when predicate becomes false?
+        # Current behavior: keeps last valid value.
 
     # Create and schedule the internal effect
     internal_effect = Effect(_run_filter)
@@ -351,14 +376,23 @@ def pairwise_signal(
         The type of `previous` is `Optional[T]`. The initial value of the
         signal before any valid pair is emitted is `None`.
     """
-    # Use a unique object to signify that no previous value has been seen yet
     previous_value: Any = _NO_VALUE
+    # Get initial value without tracking dependency here
+    initial_source_value = source.get()
 
-    # Initialize the signal with None. The first actual value will be emitted by the effect.
-    # Equality for the operator signal itself compares the tuples.
-    pairwise_sig: _OperatorSignal[Optional[Tuple[Optional[T], T]]] = _OperatorSignal(None)
-    debug_log(f"Pairwise: Initialized signal with None. emit_on_first={emit_on_first}")
+    # Determine the correct initial value for the pairwise signal
+    initial_pairwise_value: Optional[Tuple[Optional[T], T]] = None
+    if emit_on_first:
+        # If emit_on_first, the initial state reflects the first pair.
+        initial_pairwise_value = (None, initial_source_value)
+        # Store the initial source value as the "previous" for the *next* run
+        previous_value = initial_source_value
+    # else: initial_pairwise_value remains None, previous_value remains _NO_VALUE
 
+    # Initialize the signal with the calculated initial value.
+    # Add explicit type hint here to match the return signature
+    pairwise_sig: _OperatorSignal[Optional[Tuple[Optional[T], T]]] = _OperatorSignal(initial_pairwise_value)
+    debug_log(f"Pairwise: Initialized signal with {initial_pairwise_value}. emit_on_first={emit_on_first}")
 
     def _run_pairwise():
         nonlocal previous_value
@@ -366,42 +400,23 @@ def pairwise_signal(
         current_value = source.get()
 
         # Get the source's equality function safely
-        source_equal: Callable[[Any, Any], bool]
-        if hasattr(source, '_equal') and callable(source._equal):
-            source_equal = source._equal
-        else:
-            source_equal = lambda a, b: a is b # Default to identity
+        source_equal = getattr(source, '_equal', lambda a, b: a is b)
 
         # Check if the current value is the same as the previous one.
-        # This check is primarily relevant if the source signal itself might emit
-        # the same value consecutively. Pairwise usually emits regardless, but
-        # reaktiv's core Signal/ComputeSignal might optimize away updates if
-        # the value is considered equal by its own check *before* notifying.
-        # We add an explicit check here for robustness, although it might be
-        # redundant depending on the source's behavior.
         is_same_as_previous = (previous_value is not _NO_VALUE) and source_equal(previous_value, current_value)
 
         if is_same_as_previous:
              debug_log(f"Pairwise: current value {current_value} is same as previous {previous_value}, skipping update.")
-             # No need to update previous_value here as it's already the same.
              return # Skip emission
-
-        # If we are here, the value is different from the previous one (or it's the first run)
 
         output_value: Optional[Tuple[Optional[T], T]] = None
         should_emit = False
 
         if previous_value is _NO_VALUE:
-            # This is the first time the effect is running with a value from the source.
-            if emit_on_first:
-                # Emit (None, current_value) as the first emission.
-                debug_log(f"Pairwise (emit_on_first=True): First run, preparing (None, {current_value})")
-                output_value = (None, current_value)
-                should_emit = True
-            else:
-                # emit_on_first is False. Don't emit, just store the value as previous.
-                debug_log(f"Pairwise (emit_on_first=False): First run, storing previous={current_value}, no emission.")
-                pass # No emission needed yet
+            # This case should now only happen if emit_on_first was False
+            # and this is the first value received. We just store it.
+            debug_log(f"Pairwise (emit_on_first=False): First run, storing previous={current_value}, no emission.")
+            pass # No emission needed yet
         else:
             # This is a subsequent run. Prepare the pair.
             debug_log(f"Pairwise: Preparing ({previous_value}, {current_value})")
@@ -421,8 +436,9 @@ def pairwise_signal(
     # Create and schedule the internal effect
     internal_effect = Effect(_run_pairwise)
     pairwise_sig._internal_effect = internal_effect
-    # Schedule the initial run. This run will establish the dependency and
-    # potentially perform the first emission if emit_on_first is True.
+    # Schedule the effect. If emit_on_first was True, this run might be redundant
+    # for the *initial* value, but it establishes the dependency correctly and handles subsequent changes.
+    # If emit_on_first was False, this run reads the first value and stores it.
     internal_effect.schedule()
 
     return pairwise_sig

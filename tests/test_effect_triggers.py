@@ -182,3 +182,39 @@ def test_diamond_dependency_effect_trigger():
     
     # Cleanup
     eff.dispose()
+
+def test_multiple_signal_chain_updates():
+    # Create base values (signals)
+    price = signal(10.0)
+    quantity = signal(2)
+    tax_rate = signal(0.1)  # 10% tax
+
+    # Create derived values (computed)
+    subtotal = computed(lambda: price() * quantity())
+    tax = computed(lambda: subtotal() * tax_rate())
+    total = computed(lambda: subtotal() + tax())
+
+    # Collect logged outputs
+    logged_outputs = []
+    def logger():
+        logged_outputs.append(total())
+
+    eff = effect(logger)
+
+    # Initial state
+    assert logged_outputs[-1] == 22.0
+
+    # Change the quantity
+    quantity.set(3)
+    assert logged_outputs[-1] == 33.0
+
+    # Change the price
+    price.set(12.0)
+    assert logged_outputs[-1] == 39.6
+
+    # Change tax rate
+    tax_rate.set(0.15)
+    assert logged_outputs[-1] == 41.4
+    
+    # Cleanup
+    eff.dispose()

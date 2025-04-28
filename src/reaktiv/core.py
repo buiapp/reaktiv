@@ -434,11 +434,11 @@ class Effect(DependencyTracker, Subscriber):
         
         This method is kept for backward compatibility and will be removed in a future version.
         """
-    warnings.warn(
-        "schedule() is deprecated and will be removed in a future version. Effects are now automatically scheduled when created.",
-        DeprecationWarning, 
-        stacklevel=2
-    )
+        warnings.warn(
+            "schedule() is deprecated and will be removed in a future version. Effects are now automatically scheduled when created.",
+            DeprecationWarning, 
+            stacklevel=2
+        )
 
     def add_dependency(self, signal: Signal) -> None:
         if self._disposed:

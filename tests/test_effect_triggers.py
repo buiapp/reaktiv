@@ -1,6 +1,6 @@
 import pytest
 from typing import List
-from reaktiv import signal, computed, effect, batch
+from reaktiv import Signal, Computed, Effect, batch
 from reaktiv.core import set_debug
 
 
@@ -10,9 +10,9 @@ def test_effect_trigger_count():
     trigger_count = 0
     recorded_values: List[str] = []
     
-    a = signal(1)
-    b = computed(lambda: a() + 1)
-    c = computed(lambda: a() + 2)
+    a = Signal(1)
+    b = Computed(lambda: a() + 1)
+    c = Computed(lambda: a() + 2)
     
     # Create an effect that will increment the counter each time it runs
     def track_effect():
@@ -22,7 +22,7 @@ def test_effect_trigger_count():
     
     # Act
     # First run - should run once during initialization
-    eff = effect(track_effect)
+    eff = Effect(track_effect)
     initial_count = trigger_count
     
     # When we change a, b and c will both update, but the effect should only run once
@@ -53,11 +53,11 @@ def test_complex_dependency_chain():
     #       ↘ ↗
     #         e
     
-    a = signal(1)
-    b = computed(lambda: a() * 2)
-    c = computed(lambda: a() + 10)
-    d = computed(lambda: b() + c())
-    e = computed(lambda: c() * 2)
+    a = Signal(1)
+    b = Computed(lambda: a() * 2)
+    c = Computed(lambda: a() + 10)
+    d = Computed(lambda: b() + c())
+    e = Computed(lambda: c() * 2)
     
     def track_effect():
         nonlocal trigger_count
@@ -67,7 +67,7 @@ def test_complex_dependency_chain():
         e_val = e()
     
     # Act
-    eff = effect(track_effect)
+    eff = Effect(track_effect)
     initial_trigger_count = trigger_count
     
     # Initial state
@@ -96,10 +96,10 @@ def test_batch_update_effect_trigger():
     # Arrange
     trigger_count = 0
     
-    a = signal(1)
-    b = signal(10)
-    c = computed(lambda: a() + b())
-    d = computed(lambda: a() * 2)
+    a = Signal(1)
+    b = Signal(10)
+    c = Computed(lambda: a() + b())
+    d = Computed(lambda: a() * 2)
     
     def track_effect():
         nonlocal trigger_count
@@ -109,7 +109,7 @@ def test_batch_update_effect_trigger():
         d()
     
     # Act
-    eff = effect(track_effect)
+    eff = Effect(track_effect)
     initial_count = trigger_count
     assert initial_count == 1
     
@@ -137,17 +137,17 @@ def test_diamond_dependency_effect_trigger():
     #    \ /
     #     d
     
-    a = signal(1)
-    b = computed(lambda: a() + 1)
-    c = computed(lambda: a() * 2)
-    d = computed(lambda: b() + c())
+    a = Signal(1)
+    b = Computed(lambda: a() + 1)
+    c = Computed(lambda: a() * 2)
+    d = Computed(lambda: b() + c())
     
     def track_effect():
         value = f"d={d()}"
         triggers.append(value)
     
     # Act
-    eff = effect(track_effect)
+    eff = Effect(track_effect)
     
     # Initial value
     assert len(triggers) == 1
@@ -185,21 +185,21 @@ def test_diamond_dependency_effect_trigger():
 
 def test_multiple_signal_chain_updates():
     # Create base values (signals)
-    price = signal(10.0)
-    quantity = signal(2)
-    tax_rate = signal(0.1)  # 10% tax
+    price = Signal(10.0)
+    quantity = Signal(2)
+    tax_rate = Signal(0.1)  # 10% tax
 
     # Create derived values (computed)
-    subtotal = computed(lambda: price() * quantity())
-    tax = computed(lambda: subtotal() * tax_rate())
-    total = computed(lambda: subtotal() + tax())
+    subtotal = Computed(lambda: price() * quantity())
+    tax = Computed(lambda: subtotal() * tax_rate())
+    total = Computed(lambda: subtotal() + tax())
 
     # Collect logged outputs
     logged_outputs = []
     def logger():
         logged_outputs.append(total())
 
-    eff = effect(logger)
+    eff = Effect(logger)
 
     # Initial state
     assert logged_outputs[-1] == 22.0

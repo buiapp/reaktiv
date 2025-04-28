@@ -1,13 +1,13 @@
 import pytest
-from reaktiv import signal, computed, effect, filter_signal, pairwise_signal
+from reaktiv import Signal, Computed, Effect, filter_signal, pairwise_signal
 
 def test_computed_filter_pairwise_chain():
     """Tests chaining computed -> filter -> pairwise."""
     # Base signal
-    base_signal = signal(1)
+    base_signal = Signal(1)
 
     # Computed signal (doubles the base)
-    doubled_signal = computed(lambda: base_signal() * 2)
+    doubled_signal = Computed(lambda: base_signal() * 2)
 
     # Filtered signal (only values > 10)
     filtered_signal = filter_signal(doubled_signal, lambda x: x > 10)
@@ -23,11 +23,11 @@ def test_computed_filter_pairwise_chain():
         print("Filtered signal:", filtered_signal())
         print("Pairwise output:", pairwise_output())
 
-    log_eff = effect(log_results)
+    log_eff = Effect(log_results)
 
     # Effect to collect results
     results = []
-    test_effect = effect(lambda: results.append(pairwise_output()))
+    test_effect = Effect(lambda: results.append(pairwise_output()))
 
     print("Initial state:", pairwise_output())
 

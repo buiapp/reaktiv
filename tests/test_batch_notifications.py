@@ -1,16 +1,16 @@
 import pytest
 import asyncio
-from reaktiv import signal, computed, effect, batch
+from reaktiv import Signal, Computed, Effect, batch
 
 @pytest.mark.asyncio
 async def test_batch_effect_notifications():
     """Test that effects are only triggered once after a batch update completes."""
     # Setup simple counter signals
-    x = signal(5)
-    y = signal(10)
+    x = Signal(5)
+    y = Signal(10)
     
-    sum_xy = computed(lambda: x() + y())
-    product_xy = computed(lambda: x() * y())
+    sum_xy = Computed(lambda: x() + y())
+    product_xy = Computed(lambda: x() * y())
     
     # Track effect calls
     effect_calls = []
@@ -19,7 +19,7 @@ async def test_batch_effect_notifications():
         effect_calls.append((sum_xy(), product_xy()))
     
     # Register effect
-    tracker = effect(track_changes)
+    tracker = Effect(track_changes)
     
     # Wait for initial effect to complete
     await asyncio.sleep(0.01)
@@ -61,11 +61,11 @@ async def test_batch_effect_notifications():
 async def test_batch_sync_effect_notifications():
     """Test that synchronous effects are only triggered once after a batch update completes."""
     # Setup simple counter signals
-    a = signal(1)
-    b = signal(2)
+    a = Signal(1)
+    b = Signal(2)
     
-    sum_ab = computed(lambda: a() + b())
-    diff_ab = computed(lambda: a() - b())
+    sum_ab = Computed(lambda: a() + b())
+    diff_ab = Computed(lambda: a() - b())
     
     # Track effect calls
     effect_calls = []
@@ -74,7 +74,7 @@ async def test_batch_sync_effect_notifications():
         effect_calls.append((sum_ab(), diff_ab()))
     
     # Register sync effect
-    tracker = effect(track_changes_sync)
+    tracker = Effect(track_changes_sync)
     
     # Verify initial call
     assert len(effect_calls) == 1

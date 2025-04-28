@@ -704,11 +704,11 @@ def signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signa
         Use Signal class directly instead:
         counter = Signal(0)
     """
-    warnings.warn(
-        "The signal() function is deprecated. Use Signal class directly instead: Signal(value)",
-        DeprecationWarning, 
-        stacklevel=2
-    )
+    # warnings.warn(
+    #     "The signal() function is deprecated. Use Signal class directly instead: Signal(value)",
+    #     DeprecationWarning, 
+    #     stacklevel=2
+    # )
     return Signal(value, equal=equal)
 
 def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputeSignal[T]:
@@ -723,11 +723,11 @@ def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bo
         Use Computed class directly instead:
         doubled = Computed(lambda: count() * 2)
     """
-    warnings.warn(
-        "The computed() function is deprecated. Use Computed class directly instead: Computed(compute_fn)",
-        DeprecationWarning, 
-        stacklevel=2
-    )
+    # warnings.warn(
+    #     "The computed() function is deprecated. Use Computed class directly instead: Computed(compute_fn)",
+    #     DeprecationWarning, 
+    #     stacklevel=2
+    # )
     return ComputeSignal(compute_fn, None, equal=equal)
 
 def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Effect:
@@ -743,10 +743,10 @@ def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Eff
         Use Effect class directly instead:
         effect_instance = Effect(lambda: print(f"Count changed: {count()}"))
     """
-    warnings.warn(
-        "The effect() function is deprecated. Use Effect class directly instead: Effect(func)",
-        DeprecationWarning, 
-        stacklevel=2
-    )
+    # warnings.warn(
+    #     "The effect() function is deprecated. Use Effect class directly instead: Effect(func)",
+    #     DeprecationWarning, 
+    #     stacklevel=2
+    # )
     effect_instance = Effect(func)
     return effect_instance

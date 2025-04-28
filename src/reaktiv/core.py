@@ -4,7 +4,7 @@ import traceback
 import inspect
 from typing import (
     Generic, TypeVar, Optional, Callable,
-    Coroutine, Set, Protocol, Union, Deque, List
+    Coroutine, Set, Protocol, Union, Deque, List, Tuple
 )
 from weakref import WeakSet
 from collections import deque
@@ -32,6 +32,7 @@ def debug_log(msg: str) -> None:
 _batch_depth = 0
 _sync_effect_queue: Set['Effect'] = set()
 _deferred_computed_queue: Deque['ComputeSignal'] = deque()
+_deferred_signal_notifications: List[Tuple['Signal', List['Subscriber']]] = []
 _computation_stack: contextvars.ContextVar[List['ComputeSignal']] = contextvars.ContextVar(
     'computation_stack', default=[]
 )
@@ -57,8 +58,25 @@ def batch():
             # Increment the update cycle counter ONLY when the outermost batch completes
             _current_update_cycle += 1
             debug_log(f"Batch finished, incremented update cycle to: {_current_update_cycle}")
+            # Process all deferred notifications
+            _process_deferred_notifications()
             _process_deferred_computed()
             _process_sync_effects()
+
+def _process_deferred_notifications() -> None:
+    """Process all deferred signal notifications from the batch."""
+    global _deferred_signal_notifications
+    if _batch_depth > 0:
+        return
+    
+    # Copy the list to avoid issues if new notifications are added during processing
+    notifications = _deferred_signal_notifications
+    _deferred_signal_notifications = []
+    
+    for signal, subscribers in notifications:
+        debug_log(f"Processing deferred notifications for signal: {signal} to {len(subscribers)} subscribers")
+        for subscriber in subscribers:
+            subscriber.notify()
 
 def _process_deferred_computed() -> None:
     global _deferred_computed_queue
@@ -124,7 +142,7 @@ class Signal(Generic[T]):
         return self._value
 
     def set(self, new_value: T) -> None:
-        global _current_update_cycle
+        global _current_update_cycle, _deferred_signal_notifications
         debug_log(f"Signal set() called with new_value: {new_value} (old_value: {self._value})")
 
         # Use custom equality function if provided, otherwise use identity check
@@ -153,26 +171,28 @@ class Signal(Generic[T]):
              _current_update_cycle += 1
              debug_log(f"Signal set() incremented update cycle to: {_current_update_cycle}")
 
-
-        # Notify subscribers directly
         # Use list() to avoid issues if subscribers change during iteration
         subscribers_to_notify = list(self._subscribers)
-        for subscriber in subscribers_to_notify:
-            # Check if subscriber is still valid (WeakSet might have removed it)
-            # This check might not be strictly necessary with WeakSet but adds safety
-            if subscriber in self._subscribers:
-                 debug_log(f"Notifying direct subscriber: {subscriber}")
-                 subscriber.notify()
+        
+        if _batch_depth > 0:
+            # In batch mode, defer notifications until the batch completes
+            debug_log(f"Signal set() inside batch, deferring notifications for {len(subscribers_to_notify)} subscribers")
+            if subscribers_to_notify:
+                _deferred_signal_notifications.append((self, subscribers_to_notify))
+        else:
+            # Outside batch, notify subscribers immediately
+            debug_log(f"Signal set() outside batch, notifying {len(subscribers_to_notify)} subscribers immediately")
+            for subscriber in subscribers_to_notify:
+                # Check if subscriber is still valid (WeakSet might have removed it)
+                if subscriber in self._subscribers:
+                    debug_log(f"Notifying direct subscriber: {subscriber}")
+                    subscriber.notify()
 
-        # If this set() call is the outermost operation (not within a batch),
-        # process effects immediately after notifying direct subscribers and their consequences.
-        if is_top_level_trigger:
+            # If this set() call is the outermost operation (not within a batch),
+            # process effects immediately after notifying direct subscribers and their consequences.
             debug_log("Signal set() is top-level trigger, processing deferred computed and sync effects.")
             _process_deferred_computed() # Process any computed signals dirtied by this set
             _process_sync_effects()      # Process any effects dirtied by this set or computed signals
-        else:
-            debug_log("Signal set() is inside a batch, deferring effect processing.")
-
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         """Update the signal's value using a function that receives the current value."""

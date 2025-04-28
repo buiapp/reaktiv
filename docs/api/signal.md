@@ -1,14 +1,14 @@
 # Signal API
 
-The `signal()` function is the core building block in reaktiv. It creates a container for values that can change over time and notify dependents of those changes.
+The `Signal` class is the core building block in reaktiv. It creates a container for values that can change over time and notify dependents of those changes.
 
 ## Basic Usage
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
 # Create a signal with an initial value
-counter = signal(0)
+counter = Signal(0)
 
 # Get the current value
 value = counter()  # 0
@@ -23,7 +23,7 @@ counter.update(lambda x: x + 1)  # Now 6
 ## Creation
 
 ```python
-signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signal[T]
+Signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signal[T]
 ```
 
 Creates a new signal with an initial value.
@@ -106,7 +106,7 @@ Removes a subscriber so it no longer receives notifications.
 ## Custom Equality Example
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
 # Custom equality function for comparing dictionaries by value
 def dict_equal(a, b):
@@ -117,7 +117,7 @@ def dict_equal(a, b):
     return all(a[k] == b[k] for k in a)
 
 # Create a signal with custom equality
-user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
+user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
 
 # This won't trigger updates because the dictionaries have the same key-value pairs
 user.set({"name": "Alice", "age": 30})
@@ -128,4 +128,16 @@ user.set({"name": "Alice", "age": 31})
 
 ## Note on Signal vs signal()
 
-While reaktiv provides both the `Signal` class and `signal()` shortcut function, the recommended approach is to use the `signal()` shortcut function for a more concise and ergonomic API.
+While reaktiv provides both the `Signal` class and `signal()` shortcut function, the recommended approach is to use the `Signal` class directly for a more consistent API.
+
+The `signal()` function is deprecated and will be removed in a future version. It currently emits a deprecation warning:
+
+```python
+# Deprecated approach (will show warning):
+from reaktiv import signal
+counter = signal(0)
+
+# Recommended approach:
+from reaktiv import Signal
+counter = Signal(0)
+```

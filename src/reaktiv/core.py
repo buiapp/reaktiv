@@ -2,6 +2,7 @@ import asyncio
 import contextvars
 import traceback
 import inspect
+import warnings
 from typing import (
     Generic, TypeVar, Optional, Callable,
     Coroutine, Set, Protocol, Union, Deque, List, Tuple
@@ -394,6 +395,9 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     return True
         return False
 
+# Create an alias for ComputeSignal
+Computed = ComputeSignal
+
 class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies."""
     def __init__(self, func: Callable[..., Union[None, Coroutine[None, None, None]]]):
@@ -430,7 +434,11 @@ class Effect(DependencyTracker, Subscriber):
         
         This method is kept for backward compatibility and will be removed in a future version.
         """
-        pass
+    warnings.warn(
+        "schedule() is deprecated and will be removed in a future version. Effects are now automatically scheduled when created.",
+        DeprecationWarning, 
+        stacklevel=2
+    )
 
     def add_dependency(self, signal: Signal) -> None:
         if self._disposed:
@@ -691,7 +699,16 @@ def signal(value: T, *, equal: Optional[Callable[[T, T], bool]] = None) -> Signa
         print(counter())  # Access value: 0
         counter.set(5)    # Set value
         counter.update(lambda x: x + 1)  # Update value
+        
+    Deprecated:
+        Use Signal class directly instead:
+        counter = Signal(0)
     """
+    warnings.warn(
+        "The signal() function is deprecated. Use Signal class directly instead: Signal(value)",
+        DeprecationWarning, 
+        stacklevel=2
+    )
     return Signal(value, equal=equal)
 
 def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputeSignal[T]:
@@ -701,7 +718,16 @@ def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bo
         count = signal(0)
         doubled = computed(lambda: count() * 2)
         print(doubled())  # Access computed value
+        
+    Deprecated:
+        Use Computed class directly instead:
+        doubled = Computed(lambda: count() * 2)
     """
+    warnings.warn(
+        "The computed() function is deprecated. Use Computed class directly instead: Computed(compute_fn)",
+        DeprecationWarning, 
+        stacklevel=2
+    )
     return ComputeSignal(compute_fn, None, equal=equal)
 
 def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Effect:
@@ -712,6 +738,15 @@ def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Eff
     Usage:
         count = signal(0)
         effect_instance = effect(lambda: print(f"Count changed: {count()}"))
+        
+    Deprecated:
+        Use Effect class directly instead:
+        effect_instance = Effect(lambda: print(f"Count changed: {count()}"))
     """
+    warnings.warn(
+        "The effect() function is deprecated. Use Effect class directly instead: Effect(func)",
+        DeprecationWarning, 
+        stacklevel=2
+    )
     effect_instance = Effect(func)
     return effect_instance

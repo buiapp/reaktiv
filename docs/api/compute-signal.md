@@ -1,18 +1,18 @@
 # Computed Signal API
 
-The `computed()` function creates a signal that derives its value from other signals. It automatically tracks dependencies and updates when those dependencies change.
+The `Computed` class creates a signal that derives its value from other signals. It automatically tracks dependencies and updates when those dependencies change.
 
 ## Basic Usage
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
 # Base signals
-x = signal(10)
-y = signal(20)
+x = Signal(10)
+y = Signal(20)
 
 # Computed signal that depends on x and y
-sum_xy = computed(lambda: x() + y())
+sum_xy = Computed(lambda: x() + y())
 
 print(sum_xy())  # 30
 
@@ -24,7 +24,7 @@ print(sum_xy())  # 35
 ## Creation
 
 ```python
-computed(compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputedSignal[T]
+Computed(compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None) -> ComputedSignal[T]
 ```
 
 Creates a new computed signal that derives its value from other signals.
@@ -69,13 +69,13 @@ If the computation function raises an exception, the computed signal catches it 
 2. Returns the default value if one was provided, or the last successfully computed value
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
 # Base signal
-x = signal(10)
+x = Signal(10)
 
 # Computed signal with error handling
-safe_compute = computed(
+safe_compute = Computed(
     lambda: 100 / x(),  # Will throw ZeroDivisionError if x is 0
     default=0  # Default value to use in case of error
 )
@@ -99,16 +99,16 @@ A key feature of computed signals is lazy evaluation. The computation function o
 This means expensive computations are only performed when necessary:
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
-x = signal(10)
-y = signal(20)
+x = Signal(10)
+y = Signal(20)
 
 def expensive_computation():
     print("Computing...")
     return x() * y()
 
-result = computed(expensive_computation)
+result = Computed(expensive_computation)
 
 # Nothing happens yet - computation is lazy
 
@@ -127,4 +127,18 @@ print(result())  # Prints: "Computing..." then "100"
 
 ## Note on ComputeSignal vs computed()
 
-While reaktiv provides both the `ComputeSignal` class and `computed()` shortcut function, the recommended approach is to use the `computed()` shortcut function for a more concise and ergonomic API.
+While reaktiv provides both the `Computed` class (alias for `ComputeSignal`) and `computed()` shortcut function, the recommended approach is to use the `Computed` class directly for a more consistent API.
+
+The `computed()` function is deprecated and will be removed in a future version. It currently emits a deprecation warning:
+
+```python
+# Deprecated approach (will show warning):
+from reaktiv import signal, computed
+x = signal(10)
+doubled = computed(lambda: x() * 2)
+
+# Recommended approach:
+from reaktiv import Signal, Computed
+x = Signal(10)
+doubled = Computed(lambda: x() * 2)
+```

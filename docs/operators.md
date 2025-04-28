@@ -31,14 +31,14 @@ filter_signal(
 
 ```python
 import asyncio
-from reaktiv import signal, filter_signal, effect # Use shortcut APIs
+from reaktiv import Signal, filter_signal, Effect
 
-source = signal(0)
+source = Signal(0)
 even_numbers = filter_signal(source, lambda x: x % 2 == 0)
 
 # Effect will only run when even_numbers emits a new value
 # Keep a reference to the effect
-even_effect = effect(lambda: print(f"Got an even number: {even_numbers()}"))
+even_effect = Effect(lambda: print(f"Got an even number: {even_numbers()}"))
 
 source.set(1) # predicate(1) is False, even_numbers doesn't emit
 source.set(2) # predicate(2) is True, even_numbers emits 2
@@ -74,15 +74,15 @@ debounce_signal(
 
 ```python
 import asyncio
-from reaktiv import signal, debounce_signal, effect # Use shortcut APIs
+from reaktiv import Signal, debounce_signal, Effect
 
 async def main():
-    query = signal("")
+    query = Signal("")
     # Only process the query 500ms after the user stops typing
     debounced_query = debounce_signal(query, 0.5)
 
     # Keep a reference to the effect
-    query_effect = effect(lambda: print(f"Processing search for: {debounced_query()}"))
+    query_effect = Effect(lambda: print(f"Processing search for: {debounced_query()}"))
 
     print("User types 're'...")
     query.set("re")
@@ -130,15 +130,15 @@ throttle_signal(
 
 ```python
 import asyncio
-from reaktiv import signal, throttle_signal, effect
+from reaktiv import Signal, throttle_signal, Effect
 
 async def main():
-    clicks = signal(0)
+    clicks = Signal(0)
     # Handle click, but ignore rapid clicks within 200ms
     throttled_clicks = throttle_signal(clicks, 0.2, leading=True, trailing=False)
 
     # Keep a reference to the effect
-    click_effect = effect(lambda: print(f"Click handled! Count: {throttled_clicks()}"))
+    click_effect = Effect(lambda: print(f"Click handled! Count: {throttled_clicks()}"))
 
     print("Rapid clicks...")
     clicks.set(1) # Emitted (leading)
@@ -165,15 +165,15 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from reaktiv import signal, throttle_signal, effect
+from reaktiv import Signal, throttle_signal, Effect
 
 async def main():
-    sensor = signal(0.0)
+    sensor = Signal(0.0)
     # Process sensor value immediately, and also the last value after 1s interval
     processed_sensor = throttle_signal(sensor, 1.0, leading=True, trailing=True)
 
     # Keep a reference to the effect
-    sensor_effect = effect(lambda: print(f"Processed sensor value: {processed_sensor():.2f}"))
+    sensor_effect = Effect(lambda: print(f"Processed sensor value: {processed_sensor():.2f}"))
 
     print("Sensor updates rapidly...")
     sensor.set(10.5) # Emitted (leading)
@@ -217,15 +217,15 @@ pairwise_signal(
 
 ```python
 import asyncio
-from reaktiv import signal, pairwise_signal, effect # Use shortcut APIs
+from reaktiv import Signal, pairwise_signal, Effect
 
 async def main():
-    counter = signal(0)
+    counter = Signal(0)
     # Create a signal that emits (previous, current) tuples
     changes = pairwise_signal(counter)
     
     # Keep a reference to the effect
-    change_effect = effect(lambda: print(f"Counter changed from {changes()[0]} to {changes()[1]}"))
+    change_effect = Effect(lambda: print(f"Counter changed from {changes()[0]} to {changes()[1]}"))
     
     # Initial value doesn't emit with default settings (emit_on_first=False)
     print("Initial state - no effect output yet")
@@ -255,16 +255,16 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from reaktiv import signal, pairwise_signal, effect # Use shortcut APIs
+from reaktiv import Signal, pairwise_signal, Effect
 
 async def main():
-    price = signal(100.0)
+    price = Signal(100.0)
     # Create a signal that emits (previous, current) tuples, including on first value
     price_changes = pairwise_signal(price, emit_on_first=True)
     
     # Keep a reference to the effect
     # Handle the initial case where previous might be None
-    price_effect = effect(lambda: process_price_change(price_changes()))
+    price_effect = Effect(lambda: process_price_change(price_changes()))
     
     def process_price_change(change_tuple):
         prev, curr = change_tuple

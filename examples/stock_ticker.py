@@ -1,19 +1,19 @@
 import asyncio
-from reaktiv import signal, computed, effect, batch
+from reaktiv import batch, Signal, Computed, Effect
 
 async def main():
     # Real-time stock prices
-    apple_price = signal(195.00)
-    google_price = signal(2750.00)
+    apple_price = Signal(195.00)
+    google_price = Signal(2750.00)
     
     # User's portfolio
-    shares = signal({
+    shares = Signal({
         'AAPL': 100,
         'GOOGL': 50
     })
     
     # Computed total portfolio value
-    portfolio_value = computed(lambda: (
+    portfolio_value = Computed(lambda: (
         shares()['AAPL'] * apple_price() +
         shares()['GOOGL'] * google_price()
     ))
@@ -41,8 +41,8 @@ async def main():
         print(f"💰 Current value: ${portfolio_value():,.2f}")
     
     # Set up effects
-    alerts_effect = effect(check_alerts)
-    portfolio_effect = effect(monitor_portfolio)
+    alerts_effect = Effect(check_alerts)
+    portfolio_effect = Effect(monitor_portfolio)
     
     # Start live updates
     updates_task = asyncio.create_task(live_updates())

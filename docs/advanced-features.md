@@ -7,7 +7,7 @@ This page covers advanced features and techniques in reaktiv for building more s
 By default, reaktiv uses identity comparison (`is`) to determine if a signal's value has changed. For more complex types, you can provide custom equality functions:
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
 # Custom equality for dictionaries
 def dict_equal(a, b):
@@ -18,7 +18,7 @@ def dict_equal(a, b):
     return all(a[k] == b[k] for k in a)
 
 # Create a signal with custom equality
-user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
+user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
 
 # This won't trigger updates because the dictionaries are equal by value
 user.set({"name": "Alice", "age": 30})
@@ -38,9 +38,9 @@ Custom equality functions are especially useful for:
 Effects can register cleanup functions that will run before the next execution or when the effect is disposed:
 
 ```python
-from reaktiv import signal, effect
+from reaktiv import Signal, Effect
 
-counter = signal(0)
+counter = Signal(0)
 
 def counter_effect(on_cleanup):
     value = counter()
@@ -57,7 +57,7 @@ def counter_effect(on_cleanup):
     on_cleanup(cleanup)
 
 # Create and schedule the effect
-logger = effect(counter_effect)
+logger = Effect(counter_effect)
 
 # Prints: "Setting up for counter value: 0"
 
@@ -83,10 +83,10 @@ The `to_async_iter` utility lets you use signals with `async for` loops:
 
 ```python
 import asyncio
-from reaktiv import signal, to_async_iter
+from reaktiv import Signal, to_async_iter
 
 async def main():
-    counter = signal(0)
+    counter = Signal(0)
     
     # Start a task that increments the counter
     async def increment_counter():
@@ -125,11 +125,11 @@ This is useful for:
 You can selectively control which signals create dependencies using `untracked`:
 
 ```python
-from reaktiv import signal, effect, untracked
+from reaktiv import Signal, Effect, untracked
 
-user_id = signal(123)
-user_data = signal({"name": "Alice"})
-show_details = signal(False)
+user_id = Signal(123)
+user_data = Signal({"name": "Alice"})
+show_details = Signal(False)
 
 def render_user():
     # Always creates a dependency on user_id
@@ -143,7 +143,7 @@ def render_user():
         print(f"User {id_value}")
 
 # Create and schedule the effect
-display = effect(render_user)
+display = Effect(render_user)
 
 # Update dependencies will trigger the effect
 user_id.set(456)

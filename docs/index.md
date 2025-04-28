@@ -24,17 +24,17 @@ reaktiv is built around three core primitives:
 3. **Effects**: Run side effects when signals or computed signals change
 
 ```python
-from reaktiv import signal, effect
+from reaktiv import Signal, Effect
 
 # Create a signal with initial value
-name = signal("Alice")
+name = Signal("Alice")
 
 # Create an effect that reacts to changes
 def on_name_change():
     print(f"Hello, {name()}!")
 
-# Create and schedule the effect
-greeter = effect(on_name_change)  # Prints: "Hello, Alice!"
+# Create the effect
+greeter = Effect(on_name_change)  # Prints: "Hello, Alice!"
 
 # Update the signal value
 name.set("Bob")  # Will print: "Hello, Bob!"

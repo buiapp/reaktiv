@@ -32,25 +32,25 @@ Full documentation is available at [https://reaktiv.readthedocs.io/](https://rea
 ### Basic Reactivity
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 # Create some signals
-name = signal("Alice")
-age = signal(30)
-city = signal("New York")
+name = Signal("Alice")
+age = Signal(30)
+city = Signal("New York")
 
 # Computed value with automatically tracked dependencies
 # The system detects that this depends on name and age
-greeting = computed(lambda: f"{name()} is {age()} years old")
+greeting = Computed(lambda: f"{name()} is {age()} years old")
 
 # Another computed value with different dependencies
 # The system detects this depends only on name and city
-location = computed(lambda: f"{name()} lives in {city()}")
+location = Computed(lambda: f"{name()} lives in {city()}")
 
 # Create effects to demonstrate updates
 print("Initial Setup:")
-greeting_effect = effect(lambda: print(f"Greeting: {greeting()}"))
-location_effect = effect(lambda: print(f"Location: {location()}"))
+greeting_effect = Effect(lambda: print(f"Greeting: {greeting()}"))
+location_effect = Effect(lambda: print(f"Location: {location()}"))
 
 # Changing age only triggers recomputation of greeting
 print("\nChanging age to 31:")
@@ -73,9 +73,9 @@ name.set("Bob")
 Instead of calling `set(new_value)`, `update()` lets you modify a signal based on its current value.
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
-counter = signal(0)
+counter = Signal(0)
 
 # Standard way
 counter.set(counter() + 1)
@@ -89,12 +89,12 @@ print(counter())  # 2
 ### Computed Values
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
 # Synchronous context example
-price = signal(100)
-tax_rate = signal(0.2)
-total = computed(lambda: price() * (1 + tax_rate()))
+price = Signal(100)
+tax_rate = Signal(0.2)
+total = Computed(lambda: price() * (1 + tax_rate()))
 
 print(total())  # 120.0
 tax_rate.set(0.25)
@@ -190,20 +190,20 @@ Here are some simple examples to help you understand reaktiv's benefits:
 ### Example 1: A Price Calculator
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 # Create base values (signals)
-price = signal(10.0)
-quantity = signal(2)
-tax_rate = signal(0.1)  # 10% tax
+price = Signal(10.0)
+quantity = Signal(2)
+tax_rate = Signal(0.1)  # 10% tax
 
 # Create derived values (computed)
-subtotal = computed(lambda: price() * quantity())
-tax = computed(lambda: subtotal() * tax_rate())
-total = computed(lambda: subtotal() + tax())
+subtotal = Computed(lambda: price() * quantity())
+tax = Computed(lambda: subtotal() * tax_rate())
+total = Computed(lambda: subtotal() + tax())
 
 # Create a side effect for logging
-logger = effect(lambda: print(f"Order Total: ${total():.2f}"))
+logger = Effect(lambda: print(f"Order Total: ${total():.2f}"))
 
 # Initial output: "Order Total: $22.00"
 
@@ -223,14 +223,14 @@ tax_rate.set(0.15)
 ### Example 2: Simple Status Monitoring
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 # Base signals: system metrics
-memory_usage = signal(75)  # percent
-cpu_usage = signal(50)     # percent
+memory_usage = Signal(75)  # percent
+cpu_usage = Signal(50)     # percent
 
 # Computed value: system status based on thresholds
-system_status = computed(lambda: 
+system_status = Computed(lambda: 
     "critical" if memory_usage() > 90 or cpu_usage() > 90 else
     "warning" if memory_usage() > 70 or cpu_usage() > 70 else
     "normal"
@@ -243,7 +243,7 @@ def alert_on_status():
     if status != "normal":
         print(f"  Memory: {memory_usage()}%, CPU: {cpu_usage()}%")
 
-status_monitor = effect(alert_on_status)
+status_monitor = Effect(alert_on_status)
 # Initial output: "System status: warning"
 #                "  Memory: 75%, CPU: 50%"
 
@@ -260,16 +260,16 @@ cpu_usage.set(95)
 ### Example 2b: Async Status Monitoring
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 import asyncio
 
 async def demo_async_monitoring():
     # Base signals: system metrics
-    memory_usage = signal(75)  # percent
-    cpu_usage = signal(50)     # percent
+    memory_usage = Signal(75)  # percent
+    cpu_usage = Signal(50)     # percent
 
     # Computed value: system status
-    system_status = computed(lambda: 
+    system_status = Computed(lambda: 
         "critical" if memory_usage() > 90 or cpu_usage() > 90 else
         "warning" if memory_usage() > 70 or cpu_usage() > 70 else
         "normal"
@@ -292,7 +292,7 @@ async def demo_async_monitoring():
                 print("  🔄 Triggered automatic scaling")
 
     # Register the async effect
-    status_monitor = effect(async_alert_handler)
+    status_monitor = Effect(async_alert_handler)
     print("Starting monitoring...")
     
     # Give effect time to run initially
@@ -315,17 +315,17 @@ asyncio.run(demo_async_monitoring())
 ### Example 3: Configuration Management
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 # Different configuration sources
-default_config = signal({"timeout": 30, "retries": 3, "log_level": "INFO"})
-user_config = signal({})
+default_config = Signal({"timeout": 30, "retries": 3, "log_level": "INFO"})
+user_config = Signal({})
 
 # Effective config combines both sources, with user settings taking precedence
-effective_config = computed(lambda: {**default_config(), **user_config()})
+effective_config = Computed(lambda: {**default_config(), **user_config()})
 
 # Log when config changes
-config_logger = effect(lambda: print(f"Active config: {effective_config()}"))
+config_logger = Effect(lambda: print(f"Active config: {effective_config()}"))
 # Initial output: "Active config: {'timeout': 30, 'retries': 3, 'log_level': 'INFO'}"
 
 # When user updates their preferences
@@ -340,24 +340,24 @@ default_config.update(lambda cfg: {**cfg, "retries": 5, "max_connections": 100})
 ### Example 4: Simple Caching
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
 # Database simulation
 database = {"user1": "Alice", "user2": "Bob"}
 
 # Cache invalidation signal
-last_update = signal(0)  # timestamp or version number
+last_update = Signal(0)  # timestamp or version number
 
 # User data with automatic cache refresh
 def fetch_user(user_id):
     # In a real app, this would actually query a database
     return database.get(user_id)
 
-active_user_id = signal("user1")
+active_user_id = Signal("user1")
 
 # This computed value automatically refreshes when active_user_id changes
 # or when the cache is invalidated via last_update
-user_data = computed(lambda: {
+user_data = Computed(lambda: {
     "id": active_user_id(),
     "name": fetch_user(active_user_id()),
     "cache_version": last_update()
@@ -378,23 +378,23 @@ print(user_data())  # {'id': 'user2', 'name': 'Robert', 'cache_version': 1}
 ### Example 5: Processing a Stream of Events
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 import time
 
 # Event stream (simulating incoming data)
-events = signal([])
+events = Signal([])
 
 # Compute statistics from the events
-event_count = computed(lambda: len(events()))
-recent_events = computed(lambda: [e for e in events() if time.time() - e["timestamp"] < 60])
-error_count = computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
+event_count = Computed(lambda: len(events()))
+recent_events = Computed(lambda: [e for e in events() if time.time() - e["timestamp"] < 60])
+error_count = Computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
 
 # Monitor for problems
 def check_errors():
     if error_count() >= 3:
         print(f"ALERT: {error_count()} errors detected in the event stream!")
     
-error_monitor = effect(check_errors)
+error_monitor = Effect(check_errors)
 
 # Process new events
 def add_event(level, message):
@@ -413,18 +413,18 @@ add_event("ERROR", "Giving up after 3 attempts")
 ### Example 5b: Async Event Processing Pipeline
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 import asyncio
 import time
 
 # Demo async event processing
 async def demo_async_events():
     # Event stream
-    events = signal([])
+    events = Signal([])
 
     # Derived statistics
-    error_count = computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
-    warning_count = computed(lambda: len([e for e in events() if e["level"] == "WARNING"]))
+    error_count = Computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
+    warning_count = Computed(lambda: len([e for e in events() if e["level"] == "WARNING"]))
 
     # Async effect for error handling
     async def handle_errors():
@@ -441,7 +441,7 @@ async def demo_async_events():
                 print("✉️ Error notification dispatched to on-call team")
 
     # Register async effect
-    error_handler = effect(handle_errors)
+    error_handler = Effect(handle_errors)
 
     # Function to add events
     async def add_event_async(level, message):

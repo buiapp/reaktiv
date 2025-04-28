@@ -1,17 +1,17 @@
 import asyncio
 import random
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 async def main():
     # Initialize sensor readings (in °C)
-    sensor1 = signal(20.0)
-    sensor2 = signal(21.0)
-    sensor3 = signal(19.5)
+    sensor1 = Signal(20.0)
+    sensor2 = Signal(21.0)
+    sensor3 = Signal(19.5)
     
     # Compute aggregates: average, minimum, and maximum temperature.
-    avg_temp = computed(lambda: (sensor1() + sensor2() + sensor3()) / 3)
-    min_temp = computed(lambda: min(sensor1(), sensor2(), sensor3()))
-    max_temp = computed(lambda: max(sensor1(), sensor2(), sensor3()))
+    avg_temp = Computed(lambda: (sensor1() + sensor2() + sensor3()) / 3)
+    min_temp = Computed(lambda: min(sensor1(), sensor2(), sensor3()))
+    max_temp = Computed(lambda: max(sensor1(), sensor2(), sensor3()))
     
     # Effect to display current sensor readings and computed statistics.
     async def display_aggregates():
@@ -20,7 +20,7 @@ async def main():
         print("-------------------------------------------------------------")
     
     # Schedule the display effect.
-    display_effect = effect(display_aggregates)
+    display_effect = Effect(display_aggregates)
     
     # Effect to trigger alerts when values exceed safe limits.
     async def temperature_alert():
@@ -32,7 +32,7 @@ async def main():
             print("🚨 ALERT: A sensor is overheating! 🔥")
     
     # Schedule the alert effect.
-    alert_effect = effect(temperature_alert)
+    alert_effect = Effect(temperature_alert)
     
     def update_sensor(sensor, sensor_name: str):
         """

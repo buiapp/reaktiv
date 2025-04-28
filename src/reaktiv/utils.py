@@ -31,9 +31,8 @@ async def to_async_iter(signal: Signal[T], initial: bool = True) -> AsyncIterato
             # In case of errors, put the exception in the queue
             queue.put_nowait(e)
     
-    # Create and start the effect
+    # Create the effect
     effect = Effect(push_to_queue)
-    effect.schedule()
     
     try:
         while True:

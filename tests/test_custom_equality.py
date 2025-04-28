@@ -21,7 +21,6 @@ async def test_signal_custom_equality():
         effect_runs += 1
     
     effect = Effect(effect_fn)
-    effect.schedule()
     await asyncio.sleep(0)
     
     # Initial run
@@ -52,7 +51,6 @@ async def test_signal_default_equality():
         effect_runs += 1
     
     effect = Effect(effect_fn)
-    effect.schedule()
     await asyncio.sleep(0)
     
     # Initial run
@@ -141,7 +139,6 @@ async def test_deep_equality_example():
         effect_runs += 1
     
     effect = Effect(effect_fn)
-    effect.schedule()
     await asyncio.sleep(0)
     
     # Initial run
@@ -172,7 +169,6 @@ async def test_deep_equality_example():
         profile_updates += 1
     
     profile_monitor = Effect(profile_effect)
-    profile_monitor.schedule()
     await asyncio.sleep(0)
     
     # Initial run

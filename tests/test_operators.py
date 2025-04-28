@@ -26,9 +26,8 @@ async def collect_values(
             except Exception as e:
                 collected.append(e) # Collect errors too
 
-        # Create the effect using the class
+        # Create the effect
         effect_instance = Effect(_collector_effect)
-        effect_instance.schedule()
 
         # Allow initial effect run
         await asyncio.sleep(0.001)
@@ -267,7 +266,6 @@ async def test_operator_with_sync_effect():
     sync_effect = Effect(lambda: collected_sync.append(op_sig.get()))
 
     try:
-        sync_effect.schedule() # Initial run
         await asyncio.sleep(0.001) # Allow initial runs to settle
 
         # --- Action Sequence --- 

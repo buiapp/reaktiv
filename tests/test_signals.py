@@ -28,7 +28,6 @@ async def test_basic_effect_execution():
         execution_count += 1
 
     effect = Effect(test_effect)
-    effect.schedule()
     await asyncio.sleep(0)
     
     signal.set(1)
@@ -49,7 +48,7 @@ async def test_effect_dependency_tracking():
         execution_count += 1
 
     effect = Effect(test_effect)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0)
     
     signal2.set("new")
@@ -75,7 +74,7 @@ async def test_effect_disposal():
         execution_count += 1
 
     effect = Effect(test_effect)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0)
     
     signal.set(1)
@@ -102,8 +101,7 @@ async def test_multiple_effects():
 
     e1 = Effect(effect1)
     e2 = Effect(effect2)
-    e1.schedule()
-    e2.schedule()
+    # effects are automatically scheduled now
     await asyncio.sleep(0)
     
     signal.set(1)
@@ -121,7 +119,7 @@ async def test_async_effect():
         results.append(signal.get())
 
     effect = Effect(async_effect)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0.02)
     
     signal.set(1)
@@ -138,7 +136,7 @@ async def test_effect_error_handling(capsys):
         raise ValueError("Test error")
 
     effect = Effect(error_effect)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0)
     
     signal.set(1)
@@ -156,7 +154,7 @@ async def test_memory_management():
         signal.get()
 
     effect = Effect(test_effect)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0)
     
     assert len(signal._subscribers) == 1
@@ -207,7 +205,7 @@ async def test_compute_signal_effect():
         log.append(squared.get())
     
     effect = Effect(log_squared)
-    effect.schedule()
+    # effect is automatically scheduled now
     await asyncio.sleep(0)
     source.set(2)
     await asyncio.sleep(0)
@@ -340,7 +338,6 @@ async def test_signal_computed_effect_triggers_once():
 
     # 3) Create and schedule the effect (sync or async—this example is sync)
     eff = Effect(my_effect)
-    eff.schedule()
 
     # Check initial run
     assert effect_run_count == 1, "Effect should have run once initially."
@@ -393,7 +390,6 @@ async def test_signal_computed_async_effect_triggers_once():
 
     # 3) Create the asynchronous Effect and schedule the first run
     eff = Effect(my_async_effect)
-    eff.schedule()  # Manually schedule once to establish subscriptions
 
     # 4) Wait briefly for the initial effect run
     await asyncio.sleep(0.1)
@@ -457,7 +453,6 @@ async def test_no_redundant_triggers():
         sync_effect_trigger_count += 1
 
     sync_eff = Effect(sync_effect)
-    sync_eff.schedule()  # run once so it subscribes
 
     # ------------------------------------------------------------------------------
     # 5) Define an asynchronous effect that depends on c_sum
@@ -469,7 +464,6 @@ async def test_no_redundant_triggers():
         await asyncio.sleep(0.1)  # simulate "work"
 
     async_eff = Effect(async_effect)
-    async_eff.schedule()  # run once so it subscribes
 
     # Give a small pause so both effects subscribe (auto-run).
     await asyncio.sleep(0.05)
@@ -578,7 +572,6 @@ async def test_backpressure(capsys):
         print(f"Async read: {val}")
 
     async_eff = Effect(async_effect)
-    async_eff.schedule()
 
     # 2) A sync effect
     def sync_effect():
@@ -586,7 +579,6 @@ async def test_backpressure(capsys):
         print(f"Sync read: {val}")
 
     sync_eff = Effect(sync_effect)
-    sync_eff.schedule()
 
     # Wait for initial effects to run
     await asyncio.sleep(0.1)
@@ -650,7 +642,6 @@ async def test_signal_update_effect():
         executions += 1
     
     eff = Effect(effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     # Initial effect run
@@ -674,7 +665,6 @@ async def test_signal_update_no_change():
         executions += 1
     
     eff = Effect(effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     signal.update(lambda x: x)  # Returns same value
@@ -697,7 +687,6 @@ async def test_batch_basic():
         executions += 1
     
     eff = Effect(effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     # Initial execution
@@ -724,7 +713,6 @@ async def test_batch_nested():
         executions += 1
     
     eff = Effect(effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     with batch():
@@ -749,7 +737,6 @@ async def test_batch_with_computed():
         executions += 1
     
     eff = Effect(effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     with batch():
@@ -774,7 +761,6 @@ async def test_untracked(capsys):
         print(f"Effect ran: tracked={tracked}, untracked={untracked_val}")
 
     effect = Effect(effect_fn)
-    effect.schedule()
 
     # Let async effects process
     await asyncio.sleep(0)
@@ -809,7 +795,6 @@ async def test_effect_cleanup(capsys):
         print(f"Effect ran: {a.get()}")
 
     effect = Effect(effect_fn)
-    effect.schedule()
 
     await asyncio.sleep(0)
 
@@ -841,7 +826,6 @@ async def test_cleanup_on_dispose():
         on_cleanup(cleanup)
 
     effect = Effect(effect_fn)
-    effect.schedule()
     await asyncio.sleep(0)
     
     assert not cleanup_called
@@ -859,7 +843,6 @@ async def test_multiple_cleanups():
         on_cleanup(lambda: cleanups.append(2))
 
     effect = Effect(effect_fn)
-    effect.schedule()
     await asyncio.sleep(0)
     
     assert cleanups == []
@@ -939,7 +922,6 @@ async def test_compute_signal_equality_function():
     
     # Create and schedule the effect
     eff = Effect(track_effect)
-    eff.schedule()
     await asyncio.sleep(0)
     
     # Initial execution
@@ -985,7 +967,6 @@ async def test_compute_signal_custom_equality():
     
     # Set up an effect to track changes
     track_effect = Effect(track_computed_changes)
-    track_effect.schedule()
     await asyncio.sleep(0)
     
     # Initial update recorded
@@ -1031,7 +1012,6 @@ async def test_compute_signal_none_handling():
         updates.append(computed_with_safe_equality.get())
     
     eff = Effect(track)
-    eff.schedule()
     await asyncio.sleep(0)
     
     # Initial update

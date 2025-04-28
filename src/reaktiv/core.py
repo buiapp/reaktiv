@@ -408,6 +408,29 @@ class Effect(DependencyTracker, Subscriber):
         self._last_update_cycle = -1  # Track the last update cycle when this effect was triggered
         self._async_task: Optional[asyncio.Task] = None # To manage the async task if needed
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
+        
+        # Automatically schedule the effect upon creation (previously done by schedule())
+        if self._is_async:
+            # Schedule the initial async run if not already executing
+            if not self._executing:
+                debug_log("Scheduling initial async effect execution.")
+                self._async_task = asyncio.create_task(self._run_effect_func_async())
+            else:
+                debug_log("Initial async effect schedule skipped, already running.")
+        else:
+            # Mark sync effect as dirty and process immediately if not in batch
+            self._mark_dirty()
+            if _batch_depth == 0:
+                debug_log("Processing sync effects immediately after initial schedule.")
+                _process_sync_effects()
+    
+    def schedule(self) -> None:
+        """
+        DEPRECATED: Effects are now automatically scheduled when created.
+        
+        This method is kept for backward compatibility and will be removed in a future version.
+        """
+        pass
 
     def add_dependency(self, signal: Signal) -> None:
         if self._disposed:
@@ -447,27 +470,6 @@ class Effect(DependencyTracker, Subscriber):
         else:
             # Mark sync effect as dirty for processing later
             self._mark_dirty()
-
-    def schedule(self) -> None:
-        """Schedules the initial execution of the effect."""
-        debug_log("Effect schedule() called for initial run.")
-        if self._disposed:
-            debug_log("Effect schedule() called on disposed effect, ignoring.")
-            return
-
-        if self._is_async:
-            # Schedule the initial async run if not already executing
-            if not self._executing:
-                debug_log("Scheduling initial async effect execution.")
-                self._async_task = asyncio.create_task(self._run_effect_func_async())
-            else:
-                debug_log("Initial async effect schedule skipped, already running.")
-        else:
-            # Mark sync effect as dirty and process immediately if not in batch
-            self._mark_dirty()
-            if _batch_depth == 0:
-                debug_log("Processing sync effects immediately after initial schedule.")
-                _process_sync_effects()
 
     def _mark_dirty(self):
         # This should only be called for SYNC effects now
@@ -712,5 +714,4 @@ def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Eff
         effect_instance = effect(lambda: print(f"Count changed: {count()}"))
     """
     effect_instance = Effect(func)
-    effect_instance.schedule()  # Auto-schedule the effect immediately
     return effect_instance

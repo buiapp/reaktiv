@@ -177,10 +177,9 @@ def filter_signal(
         # Consider if we should update to None when predicate becomes false?
         # Current behavior: keeps last valid value.
 
-    # Create and schedule the internal effect
+    # Create the internal effect
     internal_effect = Effect(_run_filter)
     filtered_sig._internal_effect = internal_effect
-    internal_effect.schedule() # Manually schedule the initial run
 
     return filtered_sig
 
@@ -244,10 +243,9 @@ def debounce_signal(
                 timer_handle = None
         on_cleanup(cleanup)
 
-    # Create and schedule the internal effect
+    # Create the internal effect
     internal_effect = Effect(_run_debounce) # Effect detects async automatically
     debounced_sig._internal_effect = internal_effect
-    internal_effect.schedule() # Manually schedule the initial run
 
     return debounced_sig
 
@@ -347,9 +345,9 @@ def throttle_signal(
                     debug_log("Throttle: No running event loop found. Cannot schedule timer.")
                     pass
 
+    # Create the internal effect
     internal_effect = Effect(_run_throttle)
     throttled_sig._internal_effect = internal_effect
-    internal_effect.schedule() # Manually schedule the initial run
 
     return throttled_sig
 
@@ -433,12 +431,8 @@ def pairwise_signal(
 
         # No cleanup needed for pairwise
 
-    # Create and schedule the internal effect
+    # Create the internal effect
     internal_effect = Effect(_run_pairwise)
     pairwise_sig._internal_effect = internal_effect
-    # Schedule the effect. If emit_on_first was True, this run might be redundant
-    # for the *initial* value, but it establishes the dependency correctly and handles subsequent changes.
-    # If emit_on_first was False, this run reads the first value and stores it.
-    internal_effect.schedule()
 
     return pairwise_sig

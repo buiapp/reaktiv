@@ -130,6 +130,13 @@ class Signal(Generic[T]):
         self._equal = equal  # Store the custom equality function
         debug_log(f"Signal initialized with value: {value}")
     
+    def __repr__(self) -> str:
+        """Provide a useful representation (e.g. for Jupyter notebooks) that shows the current value."""
+        try:
+            return f"Signal(value={repr(self._value)})"
+        except Exception as e:
+            return f"Signal(error_displaying_value: {str(e)})"
+    
     def __call__(self) -> T:
         """Allow signals to be called directly to get their value."""
         return self.get()
@@ -220,6 +227,18 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         
         super().__init__(None, equal=equal) # type: ignore
         debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
+    
+    def __repr__(self) -> str:
+        """Provide a useful representation (e.g. for Jupyter notebooks) that shows the computed value."""
+        if self._dirty or not self._initialized:
+            # Don't trigger computation just for display purposes
+            return "Computed(value=<not computed yet>)"
+        
+        try:
+            value = self._value
+            return f"Computed(value={repr(value)})"
+        except Exception as e:
+            return f"Computed(error_displaying_value: {str(e)})"
     
     def get(self) -> T:
         if self._dirty or not self._initialized:

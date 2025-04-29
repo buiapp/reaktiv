@@ -215,18 +215,18 @@ class Signal(Generic[T]):
         debug_log(f"Subscriber {subscriber} removed from Signal.")
 
 class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
-    """Computed signal that derives value from other signals with error handling."""
-    def __init__(self, compute_fn: Callable[[], T], default: Optional[T] = None, *, equal: Optional[Callable[[T, T], bool]] = None):
+    """Computed signal that derives value from other signals."""
+    def __init__(self, compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bool]] = None):
         self._compute_fn = compute_fn
-        self._default = default
         self._dependencies: Set[Signal] = set()
         self._computing = False
         self._dirty = True  # Mark as dirty initially
         self._initialized = False  # Track if initial computation has been done
         self._notifying = False  # Flag to prevent notification loops
+        self._last_error: Optional[Exception] = None  # Track last error
         
         super().__init__(None, equal=equal) # type: ignore
-        debug_log(f"ComputeSignal initialized with default value: {default} and compute_fn: {compute_fn}")
+        debug_log(f"ComputeSignal initialized with compute_fn: {compute_fn}")
     
     def __repr__(self) -> str:
         """Provide a useful representation (e.g. for Jupyter notebooks) that shows the computed value."""
@@ -262,37 +262,42 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             self._dependencies.clear()
 
             tracker_token = _current_effect.set(self)
+            new_value = None
+            exception_occurred = False
             try:
+                # Store any dependency that gets tracked during the computation, even if it fails
                 new_value = self._compute_fn()
                 debug_log(f"ComputeSignal new computed value: {new_value}")
-            except Exception:
-                traceback.print_exc()
-                debug_log("ComputeSignal encountered an exception during computation. Using default value.")
-                new_value = self._default
+            except Exception as e:
+                # Remember that an exception occurred, but don't handle it here
+                exception_occurred = True
+                # Re-raise the exception after dependency tracking is complete
+                raise
             finally:
                 _current_effect.reset(tracker_token)
 
-            # Always update the internal value with the new computed result
-            old_value = self._value
-            self._value = new_value
+            # Only update the value if no exception occurred
+            if not exception_occurred:
+                old_value = self._value
+                self._value = new_value
 
-            # Check if values have changed based on equality function or identity
-            has_changed = True  # Default to assume changed
-            if self._equal is not None:
-                # Use custom equality function if provided
-                try:
-                    has_changed = not self._equal(old_value, new_value) if old_value is not None and new_value is not None else True
-                except Exception as e:
-                    debug_log(f"Error in custom equality check: {e}")
-            else:
-                # Default to identity comparison
-                has_changed = old_value is not new_value
+                # Check if values have changed based on equality function or identity
+                has_changed = True  # Default to assume changed
+                if self._equal is not None:
+                    # Use custom equality function if provided
+                    try:
+                        has_changed = not self._equal(old_value, new_value) if old_value is not None and new_value is not None else True
+                    except Exception as e:
+                        debug_log(f"Error in custom equality check: {e}")
+                else:
+                    # Default to identity comparison
+                    has_changed = old_value is not new_value
 
-            if has_changed:
-                debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")
-                self._queue_notifications()
-            else:
-                debug_log(f"ComputeSignal value not considered changed, no subscriber notifications.")
+                if has_changed:
+                    debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")
+                    self._queue_notifications()
+                else:
+                    debug_log(f"ComputeSignal value not considered changed, no subscriber notifications.")
 
             # Update dependencies
             for signal in old_deps - self._dependencies:
@@ -301,21 +306,13 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             for signal in self._dependencies - old_deps:
                 signal.subscribe(self)
                 debug_log(f"ComputeSignal subscribed to new dependency: {signal}")
-
-            # Circular Dependency Detection
-            global _suppress_debug
-            prev_suppress = _suppress_debug
-            _suppress_debug = True
-            try:
-                if self._detect_cycle():
-                    raise RuntimeError("Circular dependency detected") from None
-            finally:
-                _suppress_debug = prev_suppress
         finally:
             self._computing = False
-            self._dirty = False  # Ensure dirty flag is reset after computation
-            debug_log("ComputeSignal _compute() completed.")
+            if not exception_occurred:
+                self._dirty = False  # Ensure dirty flag is reset after computation only if no exception
+            # Always restore the token, whether exception occurred or not
             _computation_stack.reset(token)
+            debug_log("ComputeSignal _compute() completed.")
 
     def _queue_notifications(self):
         """Queue notifications to be processed after batch completion"""
@@ -353,45 +350,58 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         was_dirty = self._dirty
         self._dirty = True
         
-        # Only proceed if we weren't already dirty and we have subscribers
-        if not was_dirty and self._subscribers:
-            # If we have custom equality, we need to compute now to determine if we should notify
+        # Only notify subscribers if we have a custom equality function and need to check equality
+        # or if we're transitioning from an error state
+        if self._subscribers:
             if self._equal is not None:
-                # Store old value before computing
+                # We need to compute now to check if the value changed according to our custom equality
                 old_value = self._value
                 
-                # Clear the internal dirty flag and compute the new value
-                # but don't allow it to queue additional notifications
+                # Temporarily clear the dirty flag for computation
                 self._dirty = False
                 self._computing = True
                 try:
-                    self._compute()  # Updates internal value, but won't queue notifications due to _computing=True
-                finally:
-                    self._computing = False
+                    # Try to compute the new value
+                    new_value = self._compute_fn()
                     
-                # Now manually check if we should notify based on custom equality
-                new_value = self._value  # Get the updated value after _compute
-                should_notify = True  # Default to notifying
-                
-                try:
-                    if old_value is not None and new_value is not None and self._equal(old_value, new_value):
-                        debug_log("ComputeSignal values equal according to custom equality, suppressing notification")
-                        should_notify = False
+                    # Always update the internal value
+                    self._value = new_value
+                    
+                    # Check if the values are considered equal by our custom equality function
+                    should_notify = True
+                    try:
+                        if old_value is not None and new_value is not None:
+                            if self._equal(old_value, new_value):
+                                debug_log("ComputeSignal values equal according to custom equality, suppressing notification")
+                                should_notify = False
+                    except Exception as e:
+                        debug_log(f"Error in custom equality check: {e}")
+                    
+                    # Only notify if values are not considered equal
+                    if should_notify:
+                        debug_log("ComputeSignal values differ or error in equality check, will notify subscribers")
+                        if _batch_depth > 0:
+                            debug_log("ComputeSignal deferring notifications until batch completion")
+                            _deferred_computed_queue.append(self)
+                        else:
+                            self._notify_subscribers()
                     else:
-                        debug_log("ComputeSignal values differ according to custom equality, will notify")
-                except Exception as e:
-                    debug_log(f"Error in custom equality check: {e}")
-                
-                # Only queue notification if the values differ according to custom equality
-                if should_notify:
-                    # Use standard notification procedure
+                        # Don't reset dirty flag if we have error, so we recompute next time
+                        self._dirty = False
+                except Exception:
+                    # An exception occurred during computation, restore dirty state
+                    debug_log("Exception occurred during ComputeSignal notification check")
+                    self._dirty = True
+                    # Always notify when transitioning to or from error state
                     if _batch_depth > 0:
                         debug_log("ComputeSignal deferring notifications until batch completion")
                         _deferred_computed_queue.append(self)
                     else:
                         self._notify_subscribers()
+                finally:
+                    self._computing = False
             else:
-                # No custom equality, use standard notification procedure
+                # No custom equality function, always notify
                 if _batch_depth > 0:
                     debug_log("ComputeSignal deferring notifications until batch completion")
                     _deferred_computed_queue.append(self)
@@ -538,6 +548,7 @@ class Effect(DependencyTracker, Subscriber):
                 current_cleanups.append(fn)
 
             token = _current_effect.set(self)
+            exception_occurred = False
             try:
                 # Directly await the coroutine function
                 if pass_on_cleanup:
@@ -552,6 +563,7 @@ class Effect(DependencyTracker, Subscriber):
                      except Exception: traceback.print_exc()
                  raise # Re-raise CancelledError
             except Exception:
+                exception_occurred = True
                 traceback.print_exc()
                 debug_log("Effect function raised an exception during async execution.")
             finally:
@@ -568,23 +580,31 @@ class Effect(DependencyTracker, Subscriber):
 
             self._cleanups = current_cleanups
 
-            # Update dependencies
-            new_deps = self._new_dependencies if self._new_dependencies is not None else set()
-            self._new_dependencies = None # Clear for next run
-            old_deps = set(self._dependencies)
+            # Update dependencies - use the new dependencies if available,
+            # otherwise maintain the existing dependencies to preserve subscriptions
+            # when exceptions occur (similar to sync effect implementation)
+            if not exception_occurred and self._new_dependencies is not None and len(self._new_dependencies) > 0:
+                new_deps = self._new_dependencies
+                old_deps = set(self._dependencies)
 
-            # Unsubscribe from signals that are no longer dependencies
-            for signal in old_deps - new_deps:
-                signal.unsubscribe(self)
-                debug_log(f"Effect unsubscribed from old dependency: {signal}")
+                # Unsubscribe from signals that are no longer dependencies
+                for signal in old_deps - new_deps:
+                    signal.unsubscribe(self)
+                    debug_log(f"Effect unsubscribed from old dependency: {signal}")
 
-            # Subscribe to new signals
-            # No need to re-subscribe if already subscribed
-            for signal in new_deps - old_deps:
-                 signal.subscribe(self)
-                 debug_log(f"Effect subscribed to new dependency: {signal}")
+                # Subscribe to new signals
+                for signal in new_deps - old_deps:
+                     signal.subscribe(self)
+                     debug_log(f"Effect subscribed to new dependency: {signal}")
 
-            self._dependencies = new_deps
+                self._dependencies = new_deps
+            else:
+                # If an exception occurred, maintain existing dependencies
+                debug_log("Exception occurred or no new dependencies tracked in async effect, maintaining existing dependencies")
+
+            # Always clear new_dependencies for next run regardless of what happened
+            self._new_dependencies = None
+
             debug_log("Async effect dependency update complete.")
 
         finally:
@@ -630,6 +650,7 @@ class Effect(DependencyTracker, Subscriber):
                 current_cleanups.append(fn)
 
             token = _current_effect.set(self)
+            exception_occurred = False
             try:
                 # Call the sync function directly
                 if pass_on_cleanup:
@@ -637,6 +658,7 @@ class Effect(DependencyTracker, Subscriber):
                 else:
                     self._func()
             except Exception:
+                exception_occurred = True
                 traceback.print_exc()
                 debug_log("Effect function raised an exception during sync execution.")
             finally:
@@ -653,23 +675,32 @@ class Effect(DependencyTracker, Subscriber):
 
             self._cleanups = current_cleanups
 
-            # Update dependencies
-            new_deps = self._new_dependencies if self._new_dependencies is not None else set()
-            self._new_dependencies = None # Clear for next run
-            old_deps = set(self._dependencies)
+            # Update dependencies - use the new dependencies if available,
+            # otherwise maintain the existing dependencies to preserve subscriptions
+            # even when exceptions occur
+            if not exception_occurred and self._new_dependencies is not None and len(self._new_dependencies) > 0:
+                new_deps = self._new_dependencies
+                old_deps = set(self._dependencies)
 
-            # Unsubscribe from signals that are no longer dependencies
-            for signal in old_deps - new_deps:
-                signal.unsubscribe(self)
-                debug_log(f"Effect unsubscribed from old dependency: {signal}")
+                # Unsubscribe from signals that are no longer dependencies
+                for signal in old_deps - new_deps:
+                    signal.unsubscribe(self)
+                    debug_log(f"Effect unsubscribed from old dependency: {signal}")
 
-            # Subscribe to new signals
-            # No need to re-subscribe if already subscribed
-            for signal in new_deps - old_deps:
-                 signal.subscribe(self)
-                 debug_log(f"Effect subscribed to new dependency: {signal}")
+                # Subscribe to new signals
+                # No need to re-subscribe if already subscribed
+                for signal in new_deps - old_deps:
+                     signal.subscribe(self)
+                     debug_log(f"Effect subscribed to new dependency: {signal}")
 
-            self._dependencies = new_deps
+                self._dependencies = new_deps
+            else:
+                # If an exception occurred, maintain existing dependencies
+                debug_log("Exception occurred or no new dependencies tracked, maintaining existing dependencies")
+
+            # Always clear new_dependencies for next run regardless of what happened
+            self._new_dependencies = None
+
             debug_log("Sync effect dependency update complete.")
 
         finally:
@@ -747,7 +778,7 @@ def computed(compute_fn: Callable[[], T], *, equal: Optional[Callable[[T, T], bo
     #     DeprecationWarning, 
     #     stacklevel=2
     # )
-    return ComputeSignal(compute_fn, None, equal=equal)
+    return ComputeSignal(compute_fn, equal=equal)
 
 def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Effect:
     """Create an effect that automatically runs when its dependencies change.

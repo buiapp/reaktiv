@@ -323,7 +323,7 @@ async def test_signal_computed_effect_triggers_once():
     """
     # 1) Create our Signal and ComputeSignal
     a = Signal(1)
-    b = ComputeSignal(lambda: a.get() + 10, default=0)  # b = a + 10
+    b = ComputeSignal(lambda: a.get() + 10)  # b = a + 10
 
     # 2) Track how many times the effect runs, and what values it observed
     effect_run_count = 0
@@ -370,7 +370,7 @@ async def test_signal_computed_async_effect_triggers_once():
 
     # 1) Create the Signal and ComputeSignal
     a = Signal(1)
-    b = ComputeSignal(lambda: a.get() + 10, default=0)  # b = a + 10
+    b = ComputeSignal(lambda: a.get() + 10)  # b = a + 10
 
     # 2) Track how many times the effect runs, and what values it observed
     effect_run_count = 0
@@ -442,7 +442,7 @@ async def test_no_redundant_triggers():
         compute_trigger_count += 1
         return s1.get() + s2.get()
 
-    c_sum = ComputeSignal(compute_fn, default=0)
+    c_sum = ComputeSignal(compute_fn)
 
     # ------------------------------------------------------------------------------
     # 4) Define a synchronous effect that depends on s1
@@ -856,50 +856,67 @@ async def test_multiple_cleanups():
     assert cleanups == [1, 2]
 
 @pytest.mark.asyncio
-async def test_compute_signal_default():
-    """Test that ComputeSignal's default parameter works correctly"""
+async def test_compute_signal_exception_propagation():
+    """Test that ComputeSignal now properly propagates exceptions to callers (Angular signals behavior)"""
     # Test with a compute signal that depends on another signal
     source = Signal(0)
-    computed = ComputeSignal(lambda: 10 / source.get(), default=10)
+    # Now using division to match expected math results: 10 divided by source value
+    computed = ComputeSignal(lambda: 10 / source.get())
     
-    # Initially, since source is 0 and creates an exception, should return default
-    assert computed.get() == 10
+    # Initially, since source is 0, trying to access the computed signal should raise an exception
+    with pytest.raises(ZeroDivisionError):
+        computed.get()
     
-    # After setting source to a value, should compute normally
+    # After setting source to a valid value, should compute normally
     source.set(2)
     assert computed.get() == 5
     
-    source.set(8)
-    assert computed.get() == 1.25
+    # Make source a subscriber of the computed signal to ensure notification
+    source.subscribe(computed) 
     
-    # Setting source to None should return default again
-    source.set(None)
-    assert computed.get() == 10
+    source.set(5) 
+    assert computed.get() == 2
+    
+    # Setting source back to 0 should raise an exception again
+    source.set(0)
+    with pytest.raises(ZeroDivisionError):
+        computed.get()
 
 @pytest.mark.asyncio
-async def test_compute_signal_default_with_multiple_dependencies():
-    """Test ComputeSignal default behavior with multiple signal dependencies"""
-    a = Signal(None)
+async def test_compute_signal_exception_with_multiple_dependencies():
+    """Test ComputeSignal exception handling with multiple signal dependencies"""
+    a = Signal(5)
     b = Signal(3)
     computed = ComputeSignal(
-        lambda: a.get() + b.get(),
-        default=42
+        lambda: a.get() + b.get() if a.get() is not None and b.get() is not None else None
     )
     
-    # Initially, with a being None, should return default
-    assert computed.get() == 42
-    
-    # Setting a to a valid value should allow normal computation
-    a.set(5)
+    # Initially, should compute normally
     assert computed.get() == 8  # 5 + 3
     
-    # Setting either signal to None should revert to default
+    # Setting either signal to None should now result in None
     a.set(None)
-    assert computed.get() == 42
+    assert computed.get() is None
     
-    a.set(5)
-    b.set(None)
-    assert computed.get() == 42
+    # Setting back to valid values should compute properly
+    a.set(10)
+    assert computed.get() == 13  # 10 + 3
+    
+    # Test with exception in computation
+    def problematic_compute():
+        if a.get() < 0 or b.get() < 0:
+            raise ValueError("Negative values not allowed")
+        return a.get() + b.get()
+    
+    computed_with_validation = ComputeSignal(problematic_compute)
+    
+    # Should work with valid values
+    assert computed_with_validation.get() == 13  # 10 + 3
+    
+    # Should raise exception with negative values
+    a.set(-5)
+    with pytest.raises(ValueError, match="Negative values not allowed"):
+        computed_with_validation.get()
 
 @pytest.mark.asyncio
 async def test_compute_signal_equality_function():
@@ -1032,3 +1049,107 @@ async def test_compute_signal_none_handling():
     source.set("test")  # Same string, no update
     await asyncio.sleep(0)
     assert len(updates) == 2
+
+@pytest.mark.asyncio
+async def test_effect_with_computed_exception(capsys):
+    """Test how effects handle exceptions from computed signals"""
+    source = Signal(1)
+    # Create a computed signal that will throw an error when source is 0
+    computed = ComputeSignal(lambda: 10 / source.get())
+    
+    effect_runs = 0
+    error_caught = False
+    
+    def effect_fn():
+        nonlocal effect_runs, error_caught
+        effect_runs += 1
+        try:
+            value = computed.get()
+            print(f"Effect got computed value: {value}")
+        except Exception as e:
+            error_caught = True
+            print(f"Effect caught exception: {e}")
+    
+    # Create the effect
+    effect = Effect(effect_fn)
+    
+    # Initial run - computation should succeed
+    await asyncio.sleep(0)
+    assert effect_runs == 1
+    assert not error_caught
+    
+    # Change source to a value that will cause exception
+    source.set(0)
+    await asyncio.sleep(0)
+    
+    # Effect should have run again, and caught the exception
+    assert effect_runs == 2
+    assert error_caught
+    
+    # Change source back to valid value
+    error_caught = False  # Reset flag
+    source.set(2)
+    await asyncio.sleep(0)
+    
+    # Effect should run again and succeed
+    assert effect_runs == 3
+    assert not error_caught
+    
+    # Check console output
+    captured = capsys.readouterr()
+    assert "Effect got computed value: 10.0" in captured.out  # First run (10/1)
+    assert "Effect caught exception: division by zero" in captured.out  # Second run
+    assert "Effect got computed value: 5.0" in captured.out  # Third run (10/2)
+
+@pytest.mark.asyncio
+async def test_async_effect_with_computed_exception(capsys):
+    """Test how async effects handle exceptions from computed signals"""
+    source = Signal(1)
+    # Create a computed signal that will throw an error when source is 0
+    computed = ComputeSignal(lambda: 10 / source.get())
+    
+    effect_runs = 0
+    error_caught = False
+    
+    async def async_effect_fn():
+        nonlocal effect_runs, error_caught
+        effect_runs += 1
+        try:
+            # Add a small delay to simulate async processing
+            await asyncio.sleep(0.01)
+            value = computed.get()
+            print(f"Async effect got computed value: {value}")
+        except Exception as e:
+            error_caught = True
+            print(f"Async effect caught exception: {e}")
+    
+    # Create the async effect
+    effect = Effect(async_effect_fn)
+    
+    # Initial run - computation should succeed
+    await asyncio.sleep(0.05)
+    assert effect_runs == 1
+    assert not error_caught
+    
+    # Change source to a value that will cause exception
+    source.set(0)
+    await asyncio.sleep(0.05)
+    
+    # Effect should have run again, and caught the exception
+    assert effect_runs == 2
+    assert error_caught
+    
+    # Change source back to valid value
+    error_caught = False  # Reset flag
+    source.set(2)
+    await asyncio.sleep(0.05)
+    
+    # Effect should run again and succeed
+    assert effect_runs == 3
+    assert not error_caught
+    
+    # Check console output
+    captured = capsys.readouterr()
+    assert "Async effect got computed value: 10.0" in captured.out  # First run (10/1)
+    assert "Async effect caught exception: division by zero" in captured.out  # Second run
+    assert "Async effect got computed value: 5.0" in captured.out  # Third run (10/2)

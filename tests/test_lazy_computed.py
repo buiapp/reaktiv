@@ -78,17 +78,23 @@ def test_multiple_dependencies():
     assert compute_fn.call_count == 2
 
 def test_error_handling():
-    """Test errors in computation are handled and cached"""
+    """Test errors in computation are propagated to the caller"""
     compute_fn = Mock(side_effect=RuntimeError("Oops"))
-    computed = ComputeSignal(compute_fn, default=0)
+    computed = ComputeSignal(compute_fn)
     
-    # First access should catch error and return default
-    assert computed.get() == 0
+    # First access should raise the error
+    with pytest.raises(RuntimeError, match="Oops"):
+        computed.get()
+    
+    # Function was called once
     compute_fn.assert_called_once()
     
-    # Subsequent access continues returning cached value
-    assert computed.get() == 0
-    compute_fn.assert_called_once()
+    # Next access should also raise (no caching of errors)
+    with pytest.raises(RuntimeError, match="Oops"):
+        computed.get()
+    
+    # Function should be called again
+    assert compute_fn.call_count == 2
 
 def test_nested_computations():
     """Test nested computed signals only compute when needed"""

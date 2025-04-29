@@ -84,7 +84,6 @@ async def test_computed_signal_custom_equality():
     base = Signal(100)
     computed = ComputeSignal(
         lambda: base.get() / 10,  # Simple computation: divide by 10
-        default=10.0,
         equal=lambda a, b: within_tolerance(a, b)
     )
     

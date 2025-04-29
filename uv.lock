@@ -111,7 +111,7 @@ wheels = [
 
 [[package]]
 name = "reaktiv"
-version = "0.14.3"
+version = "0.14.6"
 source = { editable = "." }
 
 [package.dev-dependencies]

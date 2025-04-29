@@ -24,6 +24,6 @@ markdown_extensions:
   - toc:
       permalink: true
 extra:
-  version: 0.14.5
+  version: 0.14.6
 plugins:
   - search

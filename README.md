@@ -470,6 +470,64 @@ async def demo_async_events():
 asyncio.run(demo_async_events())
 ```
 
+## Important Usage Tips
+
+### Effect Retention
+
+Effects must be retained (assigned to a variable) to prevent garbage collection. If you create an Effect without assigning it to a variable, it may be immediately garbage collected:
+
+```python
+# INCORRECT: Effect will be garbage collected immediately
+Effect(lambda: print(f"Value changed: {my_signal()}"))
+
+# CORRECT: Effect is retained
+my_effect = Effect(lambda: print(f"Value changed: {my_signal()}"))
+```
+
+When using Effects in classes, assign them to instance attributes in the constructor:
+
+```python
+class MyComponent:
+    def __init__(self):
+        self._counter = Signal(0)
+        
+        def _handle_counter_change():
+            print(f"Counter changed: {self._counter()}")
+        
+        # Assign Effect to self to prevent garbage collection
+        self._effect = Effect(_handle_counter_change)
+```
+
+### Default Equality Check
+
+By default, reaktiv uses identity comparison (`is`) to detect value changes. This means that mutable objects like lists, dictionaries, or custom objects with the same content but different identity will be treated as different values:
+
+```python
+items = Signal([1, 2, 3])
+
+# This WILL trigger updates because it's a different list instance
+items.set([1, 2, 3])  
+
+# Modifying the list in-place WON'T trigger updates
+current = items()
+current.append(4)  # Signal doesn't detect this change
+```
+
+For collection types, you can provide a custom equality function:
+
+```python
+def list_equal(a, b):
+    return len(a) == len(b) and all(a_item == b_item for a_item, b_item in zip(a, b))
+
+items = Signal([1, 2, 3], equal=list_equal)
+
+# With custom equality, this WON'T trigger updates (values are equal)
+items.set([1, 2, 3])
+
+# This WILL trigger updates (values are different)
+items.set([1, 2, 3, 4])
+```
+
 ## More Examples
 
 You can find more example scripts in the examples folder to help you get started with using this project.

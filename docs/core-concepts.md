@@ -178,13 +178,65 @@ reaktiv uses weak references for its internal subscriber tracking, which means:
 2. You need to maintain a reference to your effects to prevent premature garbage collection
 3. Call `dispose()` on effects when you're done with them to clean up resources
 
-## Custom Equality
+### Retaining Effects
 
-By default, reaktiv uses identity (`is`) to determine if a signal's value has changed. You can provide a custom equality function for more sophisticated behavior:
+It's critical to retain (assign to a variable) all Effects to prevent garbage collection. If you create an Effect without assigning it to a variable, it may be immediately garbage collected:
 
 ```python
-from reaktiv import Signal
+# INCORRECT: Effect will be garbage collected immediately
+Effect(lambda: print(f"Value changed: {my_signal()}"))
 
+# CORRECT: Effect is retained
+my_effect = Effect(lambda: print(f"Value changed: {my_signal()}"))
+```
+
+When using Effects in classes, assign them to instance attributes in the constructor to ensure they're retained throughout the object's lifecycle:
+
+```python
+class TemperatureMonitor:
+    def __init__(self, initial_temp=0):
+        self._temperature = Signal(initial_temp)
+
+        def _handle_temperature_change():
+            current_temp = self._temperature()
+            print(f"Temperature changed: {current_temp}°C")
+            if current_temp > 30:
+                print("Warning: Temperature too high!")
+
+        # Assign Effect to self._effect to prevent garbage collection
+        self._effect = Effect(_handle_temperature_change)
+```
+
+## Custom Equality
+
+By default, reaktiv uses identity (`is`) to determine if a signal's value has changed. This is important to understand because it affects how mutable objects behave in your reactive system.
+
+### Identity vs. Value Equality
+
+With the default identity comparison:
+
+- Primitive values like numbers, strings, and booleans work as expected
+- For mutable objects like lists, dictionaries, or custom classes:
+  - Creating a new object with the same content will be detected as a change
+  - Modifying an object in-place won't be detected as a change
+
+```python
+# With default identity equality
+items = Signal([1, 2, 3])
+
+# This WILL trigger updates (different list instance)
+items.set([1, 2, 3])  
+
+# In-place modification WON'T trigger updates
+current = items()
+current.append(4)  # Signal doesn't detect this change
+```
+
+### Customizing Equality Checks
+
+For collections or custom objects, you can provide a custom equality function:
+
+```python
 # Custom equality for comparing lists by value
 def list_equal(a, b):
     if len(a) != len(b):
@@ -199,4 +251,39 @@ items.set([1, 2, 3])
 
 # This will trigger updates because the values differ
 items.set([1, 2, 3, 4])
+```
+
+For dictionaries:
+
+```python
+def dict_equal(a, b):
+    return a.keys() == b.keys() and all(a[k] == b[k] for k in a.keys())
+
+config = Signal({"theme": "dark", "font_size": 12}, equal=dict_equal)
+
+# Won't trigger updates (same content)
+config.set({"theme": "dark", "font_size": 12})
+
+# Will trigger updates (different content)
+config.set({"theme": "light", "font_size": 12})
+```
+
+When working with mutable objects, you have two options:
+1. Provide a custom equality function that compares by value
+2. Always create new instances when updating (immutable approach)
+
+The immutable approach is often cleaner and less error-prone:
+
+```python
+# Immutable approach with lists
+items = Signal([1, 2, 3])
+
+# Create a new list when updating
+items.update(lambda current: current + [4])  # [1, 2, 3, 4]
+
+# Immutable approach with dictionaries
+config = Signal({"theme": "dark"})
+
+# Create a new dict when updating
+config.update(lambda current: {**current, "font_size": 14})
 ```

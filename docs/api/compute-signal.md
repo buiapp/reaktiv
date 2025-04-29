@@ -63,10 +63,7 @@ These methods work the same as in regular signals and are usually used internall
 
 ## Error Handling
 
-If the computation function raises an exception, the computed signal catches it and:
-
-1. Logs the exception via `traceback.print_exc()`
-2. Returns the default value if one was provided, or the last successfully computed value
+When a computed signal's computation function raises an exception, the exception is propagated to the caller. This allows you to handle errors at the appropriate level in your application.
 
 ```python
 from reaktiv import Signal, Computed
@@ -74,20 +71,30 @@ from reaktiv import Signal, Computed
 # Base signal
 x = Signal(10)
 
-# Computed signal with error handling
-safe_compute = Computed(
-    lambda: 100 / x(),  # Will throw ZeroDivisionError if x is 0
-    default=0  # Default value to use in case of error
-)
+# Computed signal with potential error
+result = Computed(lambda: 100 / x())
 
-print(safe_compute())  # 10 (100 / 10)
+print(result())  # 10 (100 / 10)
 
 # Set x to 0, which would cause a division by zero
 x.set(0)
 
-# Instead of crashing, it returns the default value
-print(safe_compute())  # 0 (the default value)
+# The exception will be propagated to the caller
+try:
+    print(result())
+except ZeroDivisionError as e:
+    print(f"Caught error: {e}")  # Prints: "Caught error: division by zero"
+
+# After fixing the dependency value, computation works again
+x.set(5)
+print(result())  # 20 (100 / 5)
 ```
+
+This transparent error propagation gives you full control over error handling in your application. You can:
+
+1. Use try/except blocks where you access computed values
+2. Let exceptions bubble up to a higher-level error handler
+3. Use defensive programming in your computation functions
 
 ## Lazy Evaluation
 

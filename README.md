@@ -130,7 +130,7 @@ graph LR
 
 ## Why reaktiv?
 
-If you've worked with modern frontend frameworks like React, Vue, or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. 
+If you've worked with modern frontend frameworks like React, Vue, SolidJS or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. 
 
 While this pattern revolutionized frontend development, **its benefits are equally powerful in backend systems** where complex state management is often overlooked or implemented with brittle, ad-hoc solutions.
 
@@ -534,4 +534,4 @@ You can find more example scripts in the examples folder to help you get started
 
 ---
 
-**Inspired by** Angular Signals • **Built for** Python's async-first world • **Made in** Hamburg
+**Inspired by** Angular Signals and [TC39 Signals Proposal](https://github.com/tc39/proposal-signals) • **Built for** Python's async-first world and backend uses • **Made in** Hamburg

@@ -153,6 +153,24 @@ class Signal(Generic[T]):
         global _current_update_cycle, _deferred_signal_notifications
         debug_log(f"Signal set() called with new_value: {new_value} (old_value: {self._value})")
 
+        # Check if this set() is being called during a ComputeSignal's computation
+        computation_stack = _computation_stack.get()
+        if computation_stack:
+            # There's at least one ComputeSignal computing right now
+            caller_compute = computation_stack[-1]  # The most recent ComputeSignal in the stack
+            
+            # Get information about the compute function without using traceback
+            try:
+                compute_fn_info = f"{caller_compute._compute_fn.__code__.co_filename}:{caller_compute._compute_fn.__code__.co_firstlineno}"
+            except Exception:
+                compute_fn_info = str(caller_compute._compute_fn)
+                
+            raise RuntimeError(
+                f"Side effect detected: Cannot set Signal from within a ComputeSignal computation.\n"
+                f"ComputeSignal should only read signals, not set them.\n"
+                f"The offending ComputeSignal was defined at: {compute_fn_info}"
+            )
+
         # Use custom equality function if provided, otherwise use identity check
         should_update = True
         if self._equal is not None:

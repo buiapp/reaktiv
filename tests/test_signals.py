@@ -1153,3 +1153,34 @@ async def test_async_effect_with_computed_exception(capsys):
     assert "Async effect got computed value: 10.0" in captured.out  # First run (10/1)
     assert "Async effect caught exception: division by zero" in captured.out  # Second run
     assert "Async effect got computed value: 5.0" in captured.out  # Third run (10/2)
+
+def test_compute_signal_cannot_set_signals():
+    """Test that a ComputeSignal cannot set another Signal."""
+    from reaktiv import Signal, Computed, batch
+    
+    # Create signals
+    a = Signal(1)
+    b = Signal(2)
+    
+    # Try to create a computed signal that sets another signal
+    def create_bad_computed():
+        return Computed(lambda: a.get() + b.set(10))  # This should fail
+    
+    # Check that creating such a computed signal raises RuntimeError
+    try:
+        c = create_bad_computed()
+        # Trigger computation by getting the value
+        c.get()
+        assert False, "Should have raised RuntimeError"
+    except RuntimeError as e:
+        assert "Side effect detected" in str(e)
+        assert "Cannot set Signal from within a ComputeSignal computation" in str(e)
+    
+    # Also test within batch context
+    try:
+        with batch():
+            c = create_bad_computed()
+            c.get()  # Trigger computation
+        assert False, "Should have raised RuntimeError"
+    except RuntimeError as e:
+        assert "Side effect detected" in str(e)

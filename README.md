@@ -104,20 +104,70 @@ print(total())  # 125.0
 ## Core Concepts
 
 ```mermaid
-graph LR
-    A[Signal] -->|Value| B[Computed Signal]
-    A -->|Change| C[Effect]
-    B -->|Value| C
-    B -->|Change| C
-    C -->|Update| D[External System]
+graph TD
+    %% Define node subgraphs for better organization
+    subgraph "Data Sources"
+        S1[Signal A]
+        S2[Signal B]
+        S3[Signal C]
+    end
     
-    classDef signal fill:#4CAF50,color:white;
-    classDef computed fill:#2196F3,color:white;
-    classDef effect fill:#FF9800,color:white;
+    subgraph "Derived Values"
+        C1[Computed X]
+        C2[Computed Y]
+    end
     
-    class A,B signal;
-    class B computed;
-    class C effect;
+    subgraph "Side Effects"
+        E1[Effect 1]
+        E2[Effect 2]
+    end
+    
+    subgraph "External Systems"
+        EXT1[UI Update]
+        EXT2[API Call]
+        EXT3[Database Write]
+    end
+    
+    %% Define relationships between nodes
+    S1 -->|"get()"| C1
+    S2 -->|"get()"| C1
+    S2 -->|"get()"| C2
+    S3 -->|"get()"| C2
+    
+    C1 -->|"get()"| E1
+    C2 -->|"get()"| E1
+    S3 -->|"get()"| E2
+    C2 -->|"get()"| E2
+    
+    E1 --> EXT1
+    E1 --> EXT2
+    E2 --> EXT3
+    
+    %% Change propagation path
+    S1 -.-> |"1\. set()"| C1
+    C1 -.->|"2\. recompute"| E1
+    E1 -.->|"3\. execute"| EXT1
+    
+    %% Style nodes by type
+    classDef signal fill:#4CAF50,color:white,stroke:#388E3C,stroke-width:1px
+    classDef computed fill:#2196F3,color:white,stroke:#1976D2,stroke-width:1px
+    classDef effect fill:#FF9800,color:white,stroke:#F57C00,stroke-width:1px
+    
+    %% Apply styles to nodes
+    class S1,S2,S3 signal
+    class C1,C2 computed
+    class E1,E2 effect
+    
+    %% Legend node
+    LEGEND[" Legend:
+    • Signal: Stores a value, notifies dependents
+    • Computed: Derives value from dependencies
+    • Effect: Runs side effects when dependencies change
+    • → Data flow / Dependency (read)
+    • ⟿ Change propagation (update)
+    "]
+    classDef legend fill:none,stroke:none,text-align:left
+    class LEGEND legend
 ```
 
 ## How it Works

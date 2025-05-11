@@ -101,6 +101,40 @@ tax_rate.set(0.25)
 print(total())  # 125.0
 ```
 
+### Type Safety
+
+`reaktiv` provides full type hint support, making it compatible with static type checkers. This enables better IDE autocompletion, early error detection, and improved code maintainability.
+
+```python
+from reaktiv import Signal, Computed
+
+# Signals with explicit type annotations
+name: Signal[str] = Signal("Alice")
+age: Signal[int] = Signal(30)
+
+# Alternative constructor syntax with type parameters
+active = Signal[bool](True)
+
+# Type inference works automatically
+inferred_list = Signal([1, 2, 3])  # Inferred as Signal[list[int]]
+
+# Computed values preserve type information
+name_length: Computed[int] = Computed(lambda: len(name()))
+full_info: Computed[str] = Computed(lambda: f"{name()}, {age()} years old")
+
+# Computed values also get inferred automatically
+inferred_computed = Computed(lambda: name().upper())  # Inferred as Computed[str]
+inferred_calc = Computed(lambda: age() * 2)  # Inferred as Computed[int]
+
+# Parameter and return types in update functions
+def increment_age(current: int) -> int:
+    return current + 1
+
+age.update(increment_age)
+```
+
+Type hints ensure that your reactive code is checked at development time, reducing runtime errors and making refactoring safer.
+
 ## Core Concepts
 
 ```mermaid

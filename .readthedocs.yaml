@@ -10,6 +10,10 @@ build:
   tools:
     python: "3.13"
 
+  jobs:
+    pre_install:
+      - pip install mkdocs-material
+  
 # Build documentation with Mkdocs
 mkdocs:
    configuration: mkdocs.yml

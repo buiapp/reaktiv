@@ -4,7 +4,7 @@ site_author: Tuan Anh Bui <mail@bui.app>
 repo_url: https://github.com/buiapp/reaktiv
 edit_uri: edit/main/docs/
 theme:
-  name: readthedocs
+  name: material
   navigation_depth: 4
   highlightjs: true
 nav:

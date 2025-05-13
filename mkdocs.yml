@@ -6,7 +6,13 @@ edit_uri: edit/main/docs/
 theme:
   name: material
   navigation_depth: 4
-  highlightjs: true
+  features:
+    - content.code.copy
+  palette:
+    primary: indigo
+  highlight:
+    use_pygments: true
+    pygments_lang_class: true
 nav:
   - Home: index.md
   - Installation: installation.md
@@ -23,6 +29,13 @@ markdown_extensions:
   - admonition
   - toc:
       permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
 extra:
   version: 0.14.7
 plugins:

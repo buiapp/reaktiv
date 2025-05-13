@@ -4,7 +4,7 @@
 
 **Reactive Computation Graphs for Python** with first-class async support, inspired by Angular's reactivity model.
 
-![reaktiv](assets/logo_2.png)
+![reaktiv](assets/logo_3.png)
 
 ## Installation
 

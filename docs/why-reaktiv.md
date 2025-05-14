@@ -256,6 +256,7 @@ Many developers don't realize they're already paying a cost when managing state 
 4. **Testing Complexity**: More moving parts to test when state updates are manual
 
 reaktiv eliminates these hidden costs, allowing you to:
+
 - Declare relationships once
 - Let the system handle updates automatically
 - Focus on business logic rather than state synchronization

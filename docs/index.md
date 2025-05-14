@@ -11,6 +11,11 @@
 ![PyPI - Downloads](https://img.shields.io/pypi/dm/reaktiv)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+## Links
+
+- **Documentation**: [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/)
+- **GitHub**: [https://github.com/buiapp/reaktiv](https://github.com/buiapp/reaktiv)
+
 ## What is reaktiv?
 
 reaktiv is a lightweight reactive state management library for Python that automatically keeps your derived values and side effects in sync with their data sources. When data changes, everything that depends on it updates automatically.

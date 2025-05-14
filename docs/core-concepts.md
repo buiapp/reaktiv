@@ -78,6 +78,7 @@ graph TD
 ```
 
 The diagram above illustrates how reaktiv's primitives interact:
+
 - **Signals** (green) store values and form the foundation of your reactive system
 - **Computed values** (blue) derive data from signals and other computed values
 - **Effects** (orange) perform side effects when their dependencies change

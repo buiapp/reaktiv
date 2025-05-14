@@ -7,8 +7,6 @@ theme:
   palette:
     primary: indigo
     accent: indigo
-  logo: docs/assets/logo_3.png
-  favicon: docs/assets/logo_3.png
   features:
     - navigation.tabs
     - navigation.sections

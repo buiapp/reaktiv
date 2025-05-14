@@ -397,8 +397,12 @@ def pairwise_signal(
         # Get current value and track source dependency
         current_value = source.get()
 
-        # Get the source's equality function safely
-        source_equal = getattr(source, '_equal', lambda a, b: a is b)
+        # Get the source's equality function
+        default_equal = lambda a, b: a is b
+        source_equal = getattr(source, '_equal', default_equal)
+        
+        if source_equal is None:
+            source_equal = default_equal
 
         # Check if the current value is the same as the previous one.
         is_same_as_previous = (previous_value is not _NO_VALUE) and source_equal(previous_value, current_value)

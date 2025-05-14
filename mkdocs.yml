@@ -1,42 +1,60 @@
-site_name: reaktiv Documentation
-site_description: Documentation for the reaktiv library - Reactive signals for Python with first-class async support
-site_author: Tuan Anh Bui <mail@bui.app>
-repo_url: https://github.com/buiapp/reaktiv
-edit_uri: edit/main/docs/
+site_name: reaktiv
+site_description: Reactive Computation Graphs for Python with first-class async support
+site_url: https://reaktiv.readthedocs.io/
+
 theme:
   name: material
-  navigation_depth: 4
-  features:
-    - content.code.copy
   palette:
     primary: indigo
-  highlight:
-    use_pygments: true
-    pygments_lang_class: true
-nav:
-  - Home: index.md
-  - Installation: installation.md
-  - Quick Start: quickstart.md
-  - Core Concepts: core-concepts.md
-  - Operators: operators.md
-  - Advanced Features: advanced-features.md
-  - API Reference:
-    - Signal: api/signal.md
-    - ComputeSignal: api/compute-signal.md
-    - Effect: api/effect.md
-    - Utilities: api/utils.md
+    accent: indigo
+  logo: docs/assets/logo_3.png
+  favicon: docs/assets/logo_3.png
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+repo_url: https://github.com/buiapp/reaktiv
+repo_name: buiapp/reaktiv
+
 markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - admonition
   - toc:
       permalink: true
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.superfences
-extra:
-  version: 0.14.9
+
 plugins:
   - search
+  - mermaid2
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          rendering:
+            show_source: true
+      watch:
+        - ../reaktiv/
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+    - Why reaktiv?: why-reaktiv.md
+  - Core Concepts: core-concepts.md
+  - API Reference:
+    - Signal: api/signal.md
+    - Effect: api/effect.md
+    - Utils: api/utils.md
+  - Advanced:
+    - Advanced Features: advanced-features.md
+  - Examples:
+    - Examples: examples/index.md

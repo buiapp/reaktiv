@@ -1,6 +1,6 @@
 # Operators
 
-Reaktiv provides several built-in operators that allow you to create new signals derived from existing ones by applying transformations or controlling the timing of emissions. These operators return a read-only signal (`_OperatorSignal`) that automatically updates based on the source signal and the operator's logic.
+reaktiv provides several built-in operators that allow you to create new signals derived from existing ones by applying transformations or controlling the timing of emissions. These operators return a read-only signal (`_OperatorSignal`) that automatically updates based on the source signal and the operator's logic.
 
 All operators are designed to work seamlessly with both synchronous and asynchronous effects and computations.
 

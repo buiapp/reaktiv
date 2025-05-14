@@ -10,6 +10,16 @@ reaktiv is built around three core primitives:
 2. **Computed Signals**: Derive values that automatically update when dependencies change
 3. **Effects**: Run side effects when signals or computed signals change
 
+## Installation
+
+The quickest way to get started is to install reaktiv using pip:
+
+```bash
+pip install reaktiv
+# or with uv
+uv pip install reaktiv
+```
+
 ## Basic Example
 
 Here's a simple example showing the core functionality:
@@ -39,6 +49,39 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## Solving Real Problems
+
+Let's look at a more practical example. Imagine you're calculating the total price of items in a shopping cart:
+
+```python
+from reaktiv import signal, computed, effect
+
+# Create signals for our base values
+price = signal(10.0)
+quantity = signal(2)
+tax_rate = signal(0.1)  # 10% tax
+
+# Create computed values that automatically update when dependencies change
+subtotal = computed(lambda: price() * quantity())
+tax = computed(lambda: subtotal() * tax_rate())
+total = computed(lambda: subtotal() + tax())
+
+# Create an effect to display the total (will run initially and when dependencies change)
+display = effect(lambda: print(f"Order total: ${total():.2f}"))
+# Prints: "Order total: $22.00"
+
+# Update a signal - all dependent computed values and effects update automatically
+quantity.set(3)
+# Prints: "Order total: $33.00"
+
+# Update multiple values
+price.set(15.0)
+tax_rate.set(0.15)
+# Prints: "Order total: $51.75"
+```
+
+Notice how we never needed to manually recalculate the total! reaktiv automatically detects the dependencies between values and updates them when needed.
 
 ## Computed Values
 
@@ -153,6 +196,7 @@ asyncio.run(main())
 
 ## Next Steps
 
+- Read [Why reaktiv?](why-reaktiv.md) to understand when and why to use reaktiv
 - See the [Core Concepts](core-concepts.md) page for a deeper understanding of reaktiv's design
-- Check out the [Examples](examples.md) page for real-world usage examples
+- Check out the [Examples](examples/index.md) page for real-world usage examples
 - Explore the [Advanced Features](advanced-features.md) for more powerful capabilities

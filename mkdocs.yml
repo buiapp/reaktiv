@@ -38,10 +38,8 @@ plugins:
       default_handler: python
       handlers:
         python:
-          rendering:
+          options:
             show_source: true
-      watch:
-        - ../reaktiv/
 
 nav:
   - Home: index.md

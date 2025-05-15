@@ -94,7 +94,7 @@ stats = Computed(lambda: {
 })
 
 print(stats())
-# {'count': 3, 'sum': 30, 'average': 10.0}
+# {'count': 4, 'sum': 39, 'average': 9.75}
 
 # Update the raw data - all stages recompute automatically
 raw_data.set('{"values": [10, 20, 30, 40]}')

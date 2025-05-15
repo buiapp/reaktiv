@@ -28,6 +28,7 @@ user.set({"name": "Alice", "age": 31})
 ```
 
 Custom equality functions are especially useful for:
+
 - Complex data structures like dictionaries, lists, or custom objects
 - Case-insensitive string comparison
 - Numerical comparison with tolerance (for floating-point values)
@@ -72,6 +73,7 @@ logger.dispose()
 ```
 
 This pattern is useful for:
+
 - Managing subscriptions to external event sources
 - Releasing resources when values change or the effect is disposed
 - Setting up and tearing down UI elements in response to data changes
@@ -115,6 +117,7 @@ Got value: 4
 ```
 
 This is useful for:
+
 - Building reactive data processing pipelines
 - Integrating with other async code
 - Responding to signal changes in event loops

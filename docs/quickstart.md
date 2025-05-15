@@ -26,18 +26,18 @@ Here's a simple example showing the core functionality:
 
 ```python
 import asyncio
-from reaktiv import signal, effect
+from reaktiv import Signal, Effect
 
 async def main():
     # Create a signal with initial value
-    name = signal("Alice")
+    name = Signal("Alice")
     
     # Create an effect that depends on the signal
     async def greet():
         print(f"Hello, {name()}!")
     
     # Create and schedule the effect (important: keep a reference to prevent garbage collection)
-    greeter = effect(greet)
+    greeter = Effect(greet)
     
     # Prints: "Hello, Alice!"
     
@@ -55,20 +55,20 @@ asyncio.run(main())
 Let's look at a more practical example. Imagine you're calculating the total price of items in a shopping cart:
 
 ```python
-from reaktiv import signal, computed, effect
+from reaktiv import Signal, Computed, Effect
 
 # Create signals for our base values
-price = signal(10.0)
-quantity = signal(2)
-tax_rate = signal(0.1)  # 10% tax
+price = Signal(10.0)
+quantity = Signal(2)
+tax_rate = Signal(0.1)  # 10% tax
 
 # Create computed values that automatically update when dependencies change
-subtotal = computed(lambda: price() * quantity())
-tax = computed(lambda: subtotal() * tax_rate())
-total = computed(lambda: subtotal() + tax())
+subtotal = Computed(lambda: price() * quantity())
+tax = Computed(lambda: subtotal() * tax_rate())
+total = Computed(lambda: subtotal() + tax())
 
 # Create an effect to display the total (will run initially and when dependencies change)
-display = effect(lambda: print(f"Order total: ${total():.2f}"))
+display = Effect(lambda: print(f"Order total: ${total():.2f}"))
 # Prints: "Order total: $22.00"
 
 # Update a signal - all dependent computed values and effects update automatically
@@ -88,14 +88,14 @@ Notice how we never needed to manually recalculate the total! reaktiv automatica
 Computed signals let you derive values from other signals:
 
 ```python
-from reaktiv import signal, computed
+from reaktiv import Signal, Computed
 
 # Create base signals
-price = signal(100)
-tax_rate = signal(0.2)
+price = Signal(100)
+tax_rate = Signal(0.2)
 
 # Create a computed signal that depends on price and tax_rate
-total = computed(lambda: price() * (1 + tax_rate()))
+total = Computed(lambda: price() * (1 + tax_rate()))
 
 print(total())  # 120.0
 
@@ -111,9 +111,9 @@ print(total())  # 125.0
 Instead of using `set(new_value)`, you can use `update()` to modify a signal based on its current value:
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
-counter = signal(0)
+counter = Signal(0)
 
 # Standard way
 counter.set(counter() + 1)
@@ -129,11 +129,11 @@ print(counter())  # 2
 When making multiple signal updates, you can batch them together to optimize performance:
 
 ```python
-from reaktiv import signal, computed, batch
+from reaktiv import Signal, Computed, batch
 
-x = signal(10)
-y = signal(20)
-sum_xy = computed(lambda: x() + y())
+x = Signal(10)
+y = Signal(20)
+sum_xy = Computed(lambda: x() + y())
 
 # Without batching, computed values are recalculated after each signal update
 x.set(5)  # Recalculates sum_xy
@@ -151,14 +151,14 @@ with batch():
 By default, signals use identity (`is`) for equality checking. You can provide a custom equality function:
 
 ```python
-from reaktiv import signal
+from reaktiv import Signal
 
 # Custom equality function for case-insensitive string comparison
 def case_insensitive_equal(a, b):
     return a.lower() == b.lower()
 
 # Create a signal with custom equality function
-name = signal("Alice", equal=case_insensitive_equal)
+name = Signal("Alice", equal=case_insensitive_equal)
 
 # This won't trigger updates because "alice" is considered equal to "Alice"
 name.set("alice")
@@ -173,16 +173,16 @@ reaktiv has first-class support for async functions:
 
 ```python
 import asyncio
-from reaktiv import signal, effect
+from reaktiv import Signal, Effect
 
 async def main():
-    counter = signal(0)
+    counter = Signal(0)
     
     async def print_counter():
         print(f"Counter value is: {counter()}")
     
     # Keep a reference to prevent garbage collection
-    counter_effect = effect(print_counter)
+    counter_effect = Effect(print_counter)
     
     for i in range(1, 4):
         await asyncio.sleep(1)

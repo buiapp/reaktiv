@@ -48,6 +48,7 @@ nav:
   - Core Concepts: core-concepts.md
   - API Reference:
     - Signal: api/signal.md
+    - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
     - Utils: api/utils.md
   - Advanced:

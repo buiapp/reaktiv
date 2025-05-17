@@ -19,7 +19,6 @@ class TodoState:
         self.todos = Signal([])
         self.filter = Signal("all")  # all, active, completed
         
-        # These can be used by both UI and API endpoints
         self.filtered_todos = Computed(lambda: [
             todo for todo in self.todos()
             if self.filter() == "all" 

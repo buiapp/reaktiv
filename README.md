@@ -614,7 +614,14 @@ items.set([1, 2, 3, 4])
 
 ## More Examples
 
-You can find more example scripts in the examples folder to help you get started with using this project.
+You can find more example scripts in the [examples](./examples) folder to help you get started with using this project.
+
+Including integration examples with:
+
+- [FastAPI - Websocket](./examples/fastapi_websocket.py)
+- [NiceGUI - Todo-App](./examples/nicegui_todo_app.py)
+- [Jupyter Notebook - Reactive IPyWidgets](./examples/reactive_jupyter_notebook.ipynb)
+- [NumPy Matplotlib - Reactive Plotting](./examples/numpy_plotting.py)
 
 ---
 

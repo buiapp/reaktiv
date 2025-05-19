@@ -2,6 +2,24 @@
 
 When building applications that manage state, developers often struggle with keeping derived data in sync with its sources. reaktiv solves this fundamental problem through automatic dependency tracking and fine-grained reactivity.
 
+## The Hidden Cost You Didn't Know You Were Paying
+
+Many developers don't realize they're already paying a cost when managing state manually:
+
+1. **Mental Overhead**: Constantly tracking what needs to update when something changes
+2. **Bug Potential**: Forgotten updates leading to inconsistent state
+3. **Refactoring Risk**: Adding new derived state requires updating many places
+4. **Testing Complexity**: More moving parts to test when state updates are manual
+
+reaktiv eliminates these hidden costs, allowing you to:
+
+- Declare relationships once
+- Let the system handle updates automatically
+- Focus on business logic rather than state synchronization
+- Build more reliable and maintainable applications
+
+Reactive programming isn't just another tool—it's a fundamental shift in how we think about state management that can dramatically simplify complex applications.
+
 ## The Pain Points reaktiv Solves
 
 ### 1. The Manual State Synchronization Problem
@@ -292,21 +310,3 @@ reaktiv might not be the best fit for:
 2. **Fire-and-forget Events**: For pure event handling without state tracking, a simpler event system may suffice
 3. **Stream Processing**: If you're primarily doing stream operations like filtering, mapping large data streams (consider RxPy)
 4. **Performance-critical, High-frequency Updates**: For systems where absolute minimal overhead is critical
-
-## The Hidden Cost You Didn't Know You Were Paying
-
-Many developers don't realize they're already paying a cost when managing state manually:
-
-1. **Mental Overhead**: Constantly tracking what needs to update when something changes
-2. **Bug Potential**: Forgotten updates leading to inconsistent state
-3. **Refactoring Risk**: Adding new derived state requires updating many places
-4. **Testing Complexity**: More moving parts to test when state updates are manual
-
-reaktiv eliminates these hidden costs, allowing you to:
-
-- Declare relationships once
-- Let the system handle updates automatically
-- Focus on business logic rather than state synchronization
-- Build more reliable and maintainable applications
-
-Reactive programming isn't just another tool—it's a fundamental shift in how we think about state management that can dramatically simplify complex applications.

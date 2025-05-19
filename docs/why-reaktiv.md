@@ -52,11 +52,32 @@ Many developers don't realize how much "hidden state" exists in their applicatio
 ```python
 # Without reaktiv: Hidden state management
 def get_total_price(items, tax_rate):
-    subtotal = sum(item.price for item in items)
+    subtotal = sum(item["price"] for item in items)
     return subtotal * (1 + tax_rate)
 
 # This function is called in many places
 # If items or tax_rate changes, you need to manually recalculate everywhere
+```
+
+#### After reaktiv: Making Hidden State Explicit
+
+```python
+from reaktiv import Signal, Computed
+
+# Make state explicit with signals
+items = Signal([])
+tax_rate = Signal(0.1)
+
+# Hidden state becomes explicit computed values
+subtotal = Computed(lambda: sum(item["price"] for item in items()))
+total_price = Computed(lambda: subtotal() * (1 + tax_rate()))
+
+# Now when items or tax_rate changes, total_price updates automatically
+items.set([{"price": 10}, {"price": 20}])
+print(total_price())  # 33.0
+
+tax_rate.set(0.2)
+print(total_price())  # 36.0 - automatically recalculated
 ```
 
 ### 3. The Dependency Tracking Problem
@@ -86,6 +107,32 @@ class ShoppingCart:
         self.total = self.subtotal + self.tax  # Depends on both
         
     # What if we add more derived values? The dependency chain gets complex!
+```
+
+#### After reaktiv: Automatic Dependency Tracking
+
+```python
+from reaktiv import Signal, Computed
+
+class ReactiveShoppingCart:
+    def __init__(self, initial_items=None):
+        self.items = Signal(initial_items or [])
+        
+        # Dependencies are automatically tracked
+        self.subtotal = Computed(lambda: sum(item.price for item in self.items()))
+        self.tax = Computed(lambda: self.subtotal() * 0.1)  # Automatically depends on subtotal
+        self.total = Computed(lambda: self.subtotal() + self.tax())  # Automatically depends on both
+
+        # Adding more derived values is easy and doesn't increase complexity
+        self.discount = Computed(lambda: 0.05 if self.subtotal() > 100 else 0)
+        self.final_price = Computed(lambda: self.total() * (1 - self.discount()))
+        
+    def add_item(self, item):
+        # Just update the source data
+        self.items.update(lambda items: items + [item])
+        # No need to manually update dependencies - they update automatically!
+
+cart = ReactiveShoppingCart()
 ```
 
 ## Before & After: How reaktiv Makes Your Code Better

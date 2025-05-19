@@ -622,6 +622,7 @@ Including integration examples with:
 - [NiceGUI - Todo-App](./examples/nicegui_todo_app.py)
 - [Jupyter Notebook - Reactive IPyWidgets](./examples/reactive_jupyter_notebook.ipynb)
 - [NumPy Matplotlib - Reactive Plotting](./examples/numpy_plotting.py)
+- [IoT Sensor Agent Thread - Reactive Hardware](./examples/iot_sensor_agent_thread.py)
 
 ---
 

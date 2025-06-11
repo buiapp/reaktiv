@@ -781,6 +781,60 @@ async def test_untracked(capsys):
     assert effect_count == 2  # Should remain unchanged
 
 @pytest.mark.asyncio
+def test_untracked_direct_signal():
+    """Test that untracked can be called with a signal directly as an argument."""
+    tracked_signal = Signal(1)
+    untracked_signal = Signal(10)
+    effect_count = 0
+    
+    # Use these lists to track values instead of printing to console
+    tracked_values = []
+    untracked_values = []
+
+    def effect_fn():
+        nonlocal effect_count
+        effect_count += 1
+        
+        # Get and track values
+        tracked_val = tracked_signal.get()
+        tracked_values.append(tracked_val)
+        
+        # Use the direct signal argument approach
+        untracked_val = untracked(untracked_signal)  # No lambda needed
+        
+        # Also test the original lambda approach for comparison
+        untracked_val2 = untracked(lambda: untracked_signal.get())
+        
+        # Track the untracked value
+        untracked_values.append(untracked_val)
+        
+        # Both approaches should give the same result
+        assert untracked_val == untracked_val2
+
+    effect = Effect(effect_fn)
+
+    # Initial run
+    assert effect_count == 1
+    assert tracked_values == [1]
+    assert untracked_values == [10]
+
+    # Update tracked signal
+    tracked_signal.set(2)
+    assert effect_count == 2
+    assert tracked_values == [1, 2]
+    assert untracked_values == [10, 10]  # Still 10, as we haven't updated untracked_signal yet
+
+    # Update untracked signal - should not trigger effect regardless of how untracked was called
+    untracked_signal.set(20)
+    assert effect_count == 2  # Should remain unchanged
+    assert len(tracked_values) == 2  # No additional tracked values
+    assert len(untracked_values) == 2  # No additional untracked values
+    
+    # Verify the updated value is returned by both untracked approaches
+    assert untracked(untracked_signal) == 20
+    assert untracked(lambda: untracked_signal.get()) == 20
+
+@pytest.mark.asyncio
 async def test_effect_cleanup(capsys):
     a = Signal(0)
     cleanup_called = []

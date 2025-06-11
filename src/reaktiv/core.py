@@ -114,11 +114,32 @@ _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = contextva
     "_current_effect", default=None
 )
 
-def untracked(func: Callable[[], T]) -> T:
-    """Execute a function without creating dependencies on accessed signals."""
+def untracked(func_or_signal: Union[Callable[[], T], 'Signal[T]']) -> T:
+    """Execute a function without creating dependencies on accessed signals,
+    or get a signal's value without creating a dependency.
+    
+    Args:
+        func_or_signal: Either a function to execute or a signal to read.
+        
+    Examples:
+        # Using with a signal directly
+        counter = Signal(0)
+        value = untracked(counter)  # Read without tracking
+        
+        # Using with a function
+        value = untracked(lambda: counter() * 2)  # Execute without tracking
+    
+    Returns:
+        The result of the function or the signal's value.
+    """
     token = _current_effect.set(None)
     try:
-        return func()
+        if isinstance(func_or_signal, Signal):
+            # If a signal is passed, return its value without tracking
+            return func_or_signal._value
+        else:
+            # If a function is passed, execute it without tracking
+            return func_or_signal()
     finally:
         _current_effect.reset(token)
 

@@ -140,7 +140,7 @@ def render_user():
     
     # Only access user_data if show_details is true,
     # but don't create a dependency on show_details
-    if untracked(lambda: show_details()):
+    if untracked(show_details):
         print(f"User {id_value}: {user_data()}")
     else:
         print(f"User {id_value}")

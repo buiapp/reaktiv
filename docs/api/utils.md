@@ -45,18 +45,19 @@ with batch():
 ## untracked
 
 ```python
-untracked(func: Callable[[], T]) -> T
+untracked(func_or_signal: Union[Callable[[], T], Signal[T]]) -> T
 ```
 
-Executes a function without creating dependencies on any signals accessed within it.
+Executes a function without creating dependencies on any signals accessed within it, or gets a signal's value without creating a dependency.
 
 ### Parameters
 
-- `func`: The function to execute without tracking signal dependencies.
+- `func_or_signal`: Either a function to execute without tracking signal dependencies, or a signal whose value should be read without creating a dependency.
 
 ### Returns
 
-- The return value of the executed function.
+- If a function is provided: The return value of the executed function.
+- If a signal is provided: The current value of the signal.
 
 ### Usage
 
@@ -70,10 +71,18 @@ def log_message():
     # This creates a dependency on the 'name' signal
     person = name()
     
+    # Method 1: Using a lambda function (original approach)
     # This does NOT create a dependency on the 'greeting' signal
-    prefix = untracked(lambda: greeting())
+    prefix1 = untracked(lambda: greeting())
     
-    print(f"{prefix}, {person}!")
+    # Method 2: Passing the signal directly (new approach)
+    # This also does NOT create a dependency on the 'greeting' signal
+    prefix2 = untracked(greeting)
+    
+    # Both methods produce the same result
+    assert prefix1 == prefix2
+    
+    print(f"{prefix1}, {person}!")
 
 logger = effect(log_message)  # Prints: "Hello, Alice!"
 

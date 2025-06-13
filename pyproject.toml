@@ -7,7 +7,7 @@ license-files = []
 
 [project]
 name = "reaktiv"
-version = "0.14.9"
+version = "0.14.10"
 description = "Reactive signals for Python with async support"
 readme = "README.md"
 authors = [{name = "Tuan Anh Bui", email = "mail@bui.app"}]

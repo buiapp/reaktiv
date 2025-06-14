@@ -27,6 +27,8 @@ uv pip install reaktiv
 
 Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
 
+For a comprehensive guide on reactive state management concepts, check out [The Missing Manual for Signals: State Management for Python Developers](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/).
+
 ## Quick Start
 
 ### Basic Reactivity

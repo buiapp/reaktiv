@@ -31,6 +31,7 @@ def debug_log(msg: str) -> None:
 # --------------------------------------------------
 
 _batch_depth = 0
+_processing_batch = False  # Flag to track when we're processing batch notifications
 _sync_effect_queue: Set['Effect'] = set()
 _deferred_computed_queue: Deque['ComputeSignal'] = deque()
 _deferred_signal_notifications: List[Tuple['Signal', List['Subscriber']]] = []
@@ -59,10 +60,16 @@ def batch():
             # Increment the update cycle counter ONLY when the outermost batch completes
             _current_update_cycle += 1
             debug_log(f"Batch finished, incremented update cycle to: {_current_update_cycle}")
-            # Process all deferred notifications
-            _process_deferred_notifications()
-            _process_deferred_computed()
-            _process_sync_effects()
+            # Set processing flag to ensure computed signals defer notifications
+            global _processing_batch
+            _processing_batch = True
+            try:
+                # Process all deferred notifications
+                _process_deferred_notifications()
+                _process_deferred_computed()
+                _process_sync_effects()
+            finally:
+                _processing_batch = False
 
 def _process_deferred_notifications() -> None:
     """Process all deferred signal notifications from the batch."""
@@ -74,18 +81,33 @@ def _process_deferred_notifications() -> None:
     notifications = _deferred_signal_notifications
     _deferred_signal_notifications = []
     
+    # Collect all unique subscribers to avoid duplicate notifications
+    unique_subscribers = set()
     for signal, subscribers in notifications:
         debug_log(f"Processing deferred notifications for signal: {signal} to {len(subscribers)} subscribers")
         for subscriber in subscribers:
-            subscriber.notify()
+            unique_subscribers.add(subscriber)
+    
+    # Notify each subscriber only once
+    for subscriber in unique_subscribers:
+        subscriber.notify()
 
 def _process_deferred_computed() -> None:
     global _deferred_computed_queue
     if _batch_depth > 0:
         return
+    
+    # Collect all unique subscribers from all computed signals to avoid duplicate notifications
+    unique_subscribers = set()
     while _deferred_computed_queue:
         computed = _deferred_computed_queue.popleft()
-        computed._notify_subscribers()
+        debug_log(f"Processing deferred computed signal: {computed} with {len(computed._subscribers)} subscribers")
+        for subscriber in computed._subscribers:
+            unique_subscribers.add(subscriber)
+    
+    # Notify each subscriber only once
+    for subscriber in unique_subscribers:
+        subscriber.notify()
 
 def _process_sync_effects() -> None:
     global _sync_effect_queue
@@ -419,7 +441,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     # Only notify if values are not considered equal
                     if should_notify:
                         debug_log("ComputeSignal values differ or error in equality check, will notify subscribers")
-                        if _batch_depth > 0:
+                        if _batch_depth > 0 or _processing_batch:
                             debug_log("ComputeSignal deferring notifications until batch completion")
                             _deferred_computed_queue.append(self)
                         else:
@@ -432,7 +454,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     debug_log("Exception occurred during ComputeSignal notification check")
                     self._dirty = True
                     # Always notify when transitioning to or from error state
-                    if _batch_depth > 0:
+                    if _batch_depth > 0 or _processing_batch:
                         debug_log("ComputeSignal deferring notifications until batch completion")
                         _deferred_computed_queue.append(self)
                     else:
@@ -441,7 +463,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     self._computing = False
             else:
                 # No custom equality function, always notify
-                if _batch_depth > 0:
+                if _batch_depth > 0 or _processing_batch:
                     debug_log("ComputeSignal deferring notifications until batch completion")
                     _deferred_computed_queue.append(self)
                 else:
@@ -477,7 +499,6 @@ class Effect(DependencyTracker, Subscriber):
         self._dirty = False
         self._cleanups: Optional[List[Callable[[], None]]] = None
         self._executing = False  # Flag to prevent recursive/concurrent runs
-        self._last_update_cycle = -1  # Track the last update cycle when this effect was triggered
         self._async_task: Optional[asyncio.Task] = None # To manage the async task if needed
         debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
         
@@ -526,15 +547,6 @@ class Effect(DependencyTracker, Subscriber):
         if self._disposed:
             debug_log("Effect is disposed, ignoring notify().")
             return
-        # Removed _executing check here, let the execution methods handle it
-
-        # Check if this effect was already scheduled in the current update cycle
-        if self._last_update_cycle == _current_update_cycle:
-            debug_log(f"Effect already scheduled in current update cycle {_current_update_cycle}, skipping duplicate notification.")
-            return
-
-        # Mark that this effect was scheduled in the current update cycle
-        self._last_update_cycle = _current_update_cycle
 
         if self._is_async:
             # Schedule the async task to run if not already executing
@@ -659,11 +671,13 @@ class Effect(DependencyTracker, Subscriber):
              debug_log("ERROR: _execute_sync called on async effect.") # Should not happen
              return
 
-        # Combined checks
-        if self._disposed or not self._dirty or self._executing:
-            debug_log(f"Sync effect execution skipped: disposed={self._disposed}, dirty={self._dirty}, executing={self._executing}")
+        # Only check if disposed or not dirty - remove _executing check to allow loops
+        if self._disposed or not self._dirty:
+            debug_log(f"Sync effect execution skipped: disposed={self._disposed}, dirty={self._dirty}")
             return
 
+        # Track that we're executing but don't prevent re-execution
+        was_executing = self._executing
         self._executing = True
         self._dirty = False # Mark as not dirty since we are running it now
         debug_log("Sync effect execution starting.")
@@ -743,7 +757,10 @@ class Effect(DependencyTracker, Subscriber):
             debug_log("Sync effect dependency update complete.")
 
         finally:
-            self._executing = False
+            # Only restore previous executing state if we weren't already executing
+            # This ensures nested executions can complete properly
+            if not was_executing:
+                self._executing = False
             debug_log("Sync effect execution finished.")
 
     def dispose(self) -> None:

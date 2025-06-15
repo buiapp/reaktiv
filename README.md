@@ -2,7 +2,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![PyPI - Downloads](https://img.shields.io/pypi/dm/reaktiv) ![Documentation Status](https://readthedocs.org/projects/reaktiv/badge/) ![License](https://img.shields.io/badge/license-MIT-green) [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
-**Reactive Computation Graphs for Python** with first-class async support, inspired by Angular's reactivity model.
+**Declarative State Management for Python** - automatic dependency tracking and updates for your application state.
 
 ![reaktiv](assets/logo_3.png)
 
@@ -14,130 +14,126 @@ pip install reaktiv
 uv pip install reaktiv
 ```
 
-`reaktiv` creates efficient reactive computation graphs that only recalculate values when their dependencies change. The system automatically tracks dependencies between signals, computed values, and effects, eliminating the need for manual subscription management.
+`reaktiv` lets you **declare relationships between your data** instead of manually managing updates. When data changes, everything that depends on it updates automatically - eliminating a whole class of bugs where you forget to update dependent state.
 
-**Key features:**
-- 🔄 **Efficient computation graph**: Only recomputes values affected by a change
-- 🔍 **Automatic dependency tracking**: Dependencies are discovered at runtime
-- 🧠 **Intelligent memoization**: Computed values are cached until dependencies change
-- 🔌 **Side effects via subscriptions**: Changes propagate to effects for integration with external systems
-- ⚡ **Async-first design**: Built for Python's asyncio ecosystem
+**Key benefits:**
+- 🐛 **Fewer bugs**: No more forgotten state updates or inconsistent data
+- 📋 **Clearer code**: State relationships are explicit and centralized
+- ⚡ **Better performance**: Only recalculates what actually changed
+- 🔄 **Automatic updates**: Dependencies are tracked and updated automatically
+- 🎯 **Python-native**: Built for Python's patterns with full async support
+- 🔒 **Type safe**: Full type hint support with automatic inference
 
 ## Documentation
 
 Full documentation is available at [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/).
 
-For a comprehensive guide on reactive state management concepts, check out [The Missing Manual for Signals: State Management for Python Developers](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/).
+For a comprehensive guide, check out [The Missing Manual for Signals: State Management for Python Developers](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/).
 
 ## Quick Start
-
-### Basic Reactivity
 
 ```python
 from reaktiv import Signal, Computed, Effect
 
-# Create some signals
+# Your base data
 name = Signal("Alice")
 age = Signal(30)
-city = Signal("New York")
 
-# Computed value with automatically tracked dependencies
-# The system detects that this depends on name and age
-greeting = Computed(lambda: f"{name()} is {age()} years old")
+# Derived data - automatically stays in sync
+greeting = Computed(lambda: f"Hello, {name()}! You are {age()} years old.")
 
-# Another computed value with different dependencies
-# The system detects this depends only on name and city
-location = Computed(lambda: f"{name()} lives in {city()}")
+# Side effects - automatically run when data changes
+# IMPORTANT: Must assign to variable to prevent garbage collection
+greeting_effect = Effect(lambda: print(f"Updated: {greeting()}"))
 
-# Create effects to demonstrate updates
-print("Initial Setup:")
-greeting_effect = Effect(lambda: print(f"Greeting: {greeting()}"))
-location_effect = Effect(lambda: print(f"Location: {location()}"))
-
-# Changing age only triggers recomputation of greeting
-print("\nChanging age to 31:")
-age.set(31)
-# Only greeting recomputed (location unaffected)
-
-# Changing city only triggers recomputation of location
-print("\nChanging city to Boston:")
-city.set("Boston")
-# Only location recomputed (greeting unaffected)
-
-# Changing name triggers recomputation of both derived values
-print("\nChanging name to Bob:")
-name.set("Bob")
-# Both greeting and location recomputed
+# Just change your base data - everything else updates automatically
+name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
+age.set(31)      # Prints: "Updated: Hello, Bob! You are 31 years old."
 ```
 
-### Using `update()`
+## The Problem This Solves
 
-Instead of calling `set(new_value)`, `update()` lets you modify a signal based on its current value.
+Consider a simple order calculation:
 
+### Without reaktiv (Manual Updates)
 ```python
-from reaktiv import Signal
-
-counter = Signal(0)
-
-# Standard way
-counter.set(counter() + 1)
-
-# Using update() for cleaner syntax
-counter.update(lambda x: x + 1)
-
-print(counter())  # 2
+class Order:
+    def __init__(self):
+        self.price = 100.0
+        self.quantity = 2
+        self.tax_rate = 0.1
+        self._update_totals()  # Must remember to call this
+    
+    def set_price(self, price):
+        self.price = price
+        self._update_totals()  # Must remember to call this
+    
+    def set_quantity(self, quantity):
+        self.quantity = quantity
+        self._update_totals()  # Must remember to call this
+    
+    def _update_totals(self):
+        # Must update in the correct order
+        self.subtotal = self.price * self.quantity
+        self.tax = self.subtotal * self.tax_rate
+        self.total = self.subtotal + self.tax
+        # Oops, forgot to update the display!
 ```
 
-### Computed Values
+Problems:
+- Easy to forget calling `_update_totals()`
+- Must update fields in the correct order
+- Update logic scattered across methods
+- Side effects (like updating displays) easily forgotten
 
+### With reaktiv (Automatic Updates)
 ```python
-from reaktiv import Signal, Computed
+from reaktiv import Signal, Computed, Effect
 
-# Synchronous context example
-price = Signal(100)
-tax_rate = Signal(0.2)
-total = Computed(lambda: price() * (1 + tax_rate()))
+# Declare your data
+price = Signal(100.0)
+quantity = Signal(2)
+tax_rate = Signal(0.1)
 
-print(total())  # 120.0
-tax_rate.set(0.25)
-print(total())  # 125.0
+# Declare how data relates - reaktiv handles the rest
+subtotal = Computed(lambda: price() * quantity())
+tax = Computed(lambda: subtotal() * tax_rate())
+total = Computed(lambda: subtotal() + tax())
+
+# Declare side effects - MUST assign to variable!
+total_effect = Effect(lambda: print(f"Order total: ${total():.2f}"))
+
+# Just change data - everything updates automatically in the right order
+price.set(120.0)     # Automatically recalculates subtotal, tax, total, prints result
+quantity.set(3)      # Same thing
 ```
 
-### Type Safety
-
-`reaktiv` provides full type hint support, making it compatible with static type checkers. This enables better IDE autocompletion, early error detection, and improved code maintainability.
-
-```python
-from reaktiv import Signal, Computed
-
-# Signals with explicit type annotations
-name: Signal[str] = Signal("Alice")
-age: Signal[int] = Signal(30)
-
-# Alternative constructor syntax with type parameters
-active = Signal[bool](True)
-
-# Type inference works automatically
-inferred_list = Signal([1, 2, 3])  # Inferred as Signal[list[int]]
-
-# Computed values preserve type information
-name_length: Computed[int] = Computed(lambda: len(name()))
-full_info: Computed[str] = Computed(lambda: f"{name()}, {age()} years old")
-
-# Computed values also get inferred automatically
-inferred_computed = Computed(lambda: name().upper())  # Inferred as Computed[str]
-inferred_calc = Computed(lambda: age() * 2)  # Inferred as Computed[int]
-
-# Parameter and return types in update functions
-def increment_age(current: int) -> int:
-    return current + 1
-
-age.update(increment_age)
-```
-
-Type hints ensure that your reactive code is checked at development time, reducing runtime errors and making refactoring safer.
+Benefits:
+- ✅ Cannot forget to update dependent data
+- ✅ Updates always happen in the correct order
+- ✅ State relationships are explicit and centralized
+- ✅ Side effects are guaranteed to run
 
 ## Core Concepts
+
+`reaktiv` provides three simple building blocks:
+
+1. **Signal**: Holds a value that can change
+2. **Computed**: Automatically derives a value from other signals/computed values
+3. **Effect**: Runs side effects when signals/computed values change
+
+```python
+# Signal: wraps a value
+counter = Signal(0)
+
+# Computed: derives from other values
+doubled = Computed(lambda: counter() * 2)
+
+# Effect: runs when dependencies change - MUST assign to variable!
+counter_effect = Effect(lambda: print(f"Counter: {counter()}, Doubled: {doubled()}"))
+
+counter.set(5)  # Prints: "Counter: 5, Doubled: 10"
+```
 
 ```mermaid
 graph TD
@@ -206,412 +202,318 @@ graph TD
     class LEGEND legend
 ```
 
-## How it Works
+## Type Safety
 
-`reaktiv` provides three core primitives:
-
-1. **Signals**: Store a value and notify dependents when it changes
-2. **Computed Signals**: Derive values that automatically update when dependencies change
-3. **Effects**: Run side effects when signals or computed signals change
-
-## Why reaktiv?
-
-If you've worked with modern frontend frameworks like React, Vue, SolidJS or Angular, you're familiar with the power of reactive state management. The idea is simple but transformative: when data changes, everything that depends on it updates automatically. 
-
-While this pattern revolutionized frontend development, **its benefits are equally powerful in backend systems** where complex state management is often overlooked or implemented with brittle, ad-hoc solutions.
-
-`reaktiv` brings these **reactive programming** advantages to your Python backend projects:
-
-- **Automatic state dependency tracking:** No more manually tracing which components need updating when data changes
-- **Declarative state relationships:** Define how data is transformed once, not every time it changes
-- **Efficient fine-grained updates:** Only recompute what actually needs to change
-- **Async-first design:** Seamlessly integrates with Python's `asyncio` for managing real-time data flows
-- **Zero external dependencies:** Lightweight with minimal overhead
-- **Type-safe:** Fully annotated for clarity and maintainability
-
-## Benefits for Backend Development
-
-`reaktiv` addresses key challenges in backend state management:
-
-1. **Eliminates manual dependency tracking**: No more forgotten update logic when state changes
-2. **Prevents state synchronization bugs**: Updates happen automatically and consistently
-3. **Improves performance**: Only affected computations are recalculated
-4. **Reduces cognitive load**: Declare relationships once, not throughout your codebase
-5. **Simplifies testing**: Clean separation of state, derivation, and effects
-
-Even in "stateless" architectures, ephemeral state still exists during request processing. `reaktiv` helps manage this complexity without the boilerplate of observers, callbacks, or event dispatchers.
-
-## Beyond Pub/Sub: State Management in Backend Systems
-
-Many backend developers view reactive libraries as just another pub/sub system and question their value in "stateless" architectures. However, `reaktiv` addresses fundamentally different problems:
-
-### Traditional Pub/Sub vs. Reaktiv
-
-| Pub/Sub Systems | Reaktiv |
-|----------------|---------|
-| Message delivery between components | Automatic state dependency tracking |
-| Point-to-point or broadcast messaging | Fine-grained computation graphs |
-| Manual subscription management | Automatic dependency detection |
-| Focus on message transport | Focus on state derivation |
-| Stateless by design | Intentional state management |
-
-### State in "Stateless" Systems
-
-Even in "stateless" microservices and serverless functions, state exists during request processing:
-
-- Configuration management
-- Request context propagation
-- In-memory caching
-- Rate limiting and circuit breaking
-- Feature flag evaluation
-- Connection pooling
-- Runtime metrics collection
-
-`reaktiv` helps manage this ephemeral state with less code, fewer bugs, and better maintainability.
-
-## Basic Examples
-
-Here are some simple examples to help you understand reaktiv's benefits:
-
-### Example 1: A Price Calculator
+`reaktiv` provides full type hint support, making it compatible with static type checkers like mypy and pyright. This enables better IDE autocompletion, early error detection, and improved code maintainability.
 
 ```python
 from reaktiv import Signal, Computed, Effect
 
-# Create base values (signals)
-price = Signal(10.0)
-quantity = Signal(2)
-tax_rate = Signal(0.1)  # 10% tax
+# Explicit type annotations
+name: Signal[str] = Signal("Alice")
+age: Signal[int] = Signal(30)
+active: Signal[bool] = Signal(True)
 
-# Create derived values (computed)
-subtotal = Computed(lambda: price() * quantity())
-tax = Computed(lambda: subtotal() * tax_rate())
-total = Computed(lambda: subtotal() + tax())
+# Type inference works automatically
+score = Signal(100.0)  # Inferred as Signal[float]
+items = Signal([1, 2, 3])  # Inferred as Signal[list[int]]
 
-# Create a side effect for logging
-logger = Effect(lambda: print(f"Order Total: ${total():.2f}"))
+# Computed values preserve and infer types
+name_length: Computed[int] = Computed(lambda: len(name()))
+greeting = Computed(lambda: f"Hello, {name()}!")  # Inferred as Computed[str]
+total_score = Computed(lambda: score() * 1.5)  # Inferred as Computed[float]
 
-# Initial output: "Order Total: $22.00"
+# Type-safe update functions
+def increment_age(current: int) -> int:
+    return current + 1
 
-# Change the quantity
-quantity.set(3)
-# Automatically logs: "Order Total: $33.00"
-
-# Change the price
-price.set(12.0) 
-# Automatically logs: "Order Total: $39.60"
-
-# Change tax rate
-tax_rate.set(0.15)
-# Automatically logs: "Order Total: $41.40"
+age.update(increment_age)  # Type checked!
 ```
 
-### Example 2: Simple Status Monitoring
+## Why This Pattern?
 
-```python
-from reaktiv import Signal, Computed, Effect
-
-# Base signals: system metrics
-memory_usage = Signal(75)  # percent
-cpu_usage = Signal(50)     # percent
-
-# Computed value: system status based on thresholds
-system_status = Computed(lambda: 
-    "critical" if memory_usage() > 90 or cpu_usage() > 90 else
-    "warning" if memory_usage() > 70 or cpu_usage() > 70 else
-    "normal"
-)
-
-# Effect: alert when system status changes
-def alert_on_status():
-    status = system_status()
-    print(f"System status: {status}")
-    if status != "normal":
-        print(f"  Memory: {memory_usage()}%, CPU: {cpu_usage()}%")
-
-status_monitor = Effect(alert_on_status)
-# Initial output: "System status: warning"
-#                "  Memory: 75%, CPU: 50%"
-
-# Simulate memory dropping
-memory_usage.set(60)
-# Output: "System status: normal"
-
-# Simulate CPU spiking
-cpu_usage.set(95)
-# Output: "System status: critical"
-#         "  Memory: 60%, CPU: 95%" 
-```
-
-### Example 2b: Async Status Monitoring
-
-```python
-from reaktiv import Signal, Computed, Effect
-import asyncio
-
-async def demo_async_monitoring():
-    # Base signals: system metrics
-    memory_usage = Signal(75)  # percent
-    cpu_usage = Signal(50)     # percent
-
-    # Computed value: system status
-    system_status = Computed(lambda: 
-        "critical" if memory_usage() > 90 or cpu_usage() > 90 else
-        "warning" if memory_usage() > 70 or cpu_usage() > 70 else
-        "normal"
-    )
-
-    # Async effect: alert and take action when status changes
-    async def async_alert_handler():
-        status = system_status()
-        print(f"System status: {status}")
+```mermaid
+graph TD
+    subgraph "Traditional Approach"
+        T1[Manual Updates]
+        T2[Scattered Logic] 
+        T3[Easy to Forget]
+        T4[Hard to Debug]
         
-        if status == "critical":
-            print(f"  Memory: {memory_usage()}%, CPU: {cpu_usage()}%")
-            # Simulate sending notification
-            await asyncio.sleep(0.1)  # non-blocking wait
-            print("  ✉️ Alert notification sent")
-            
-            # Simulate recovery action
-            if cpu_usage() > 90:
-                await asyncio.sleep(0.2)  # simulating some async operation
-                print("  🔄 Triggered automatic scaling")
-
-    # Register the async effect
-    status_monitor = Effect(async_alert_handler)
-    print("Starting monitoring...")
+        T1 --> T2
+        T2 --> T3
+        T3 --> T4
+    end
     
-    # Give effect time to run initially
-    await asyncio.sleep(0.2)
+    subgraph "Reactive Approach"
+        R1[Declare Relationships]
+        R2[Automatic Updates]
+        R3[Centralized Logic]
+        R4[Guaranteed Consistency]
+        
+        R1 --> R2
+        R2 --> R3
+        R3 --> R4
+    end
     
-    # Simulate CPU spike
-    print("\nSimulating CPU spike:")
-    cpu_usage.set(95)
-    await asyncio.sleep(0.5)  # Allow effect to complete
+    classDef traditional fill:#f44336,color:white
+    classDef reactive fill:#4CAF50,color:white
     
-    # Simulate recovery
-    print("\nSimulating recovery:")
-    cpu_usage.set(50)
-    memory_usage.set(60)
-    await asyncio.sleep(0.2)
-
-asyncio.run(demo_async_monitoring())
+    class T1,T2,T3,T4 traditional
+    class R1,R2,R3,R4 reactive
 ```
 
-### Example 3: Configuration Management
+This approach comes from frontend frameworks like **Angular** and **SolidJS**, where automatic dependency tracking revolutionized UI development. While those frameworks use this pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring relationships between data leads to fewer bugs** than manually managing updates.
 
-```python
-from reaktiv import Signal, Computed, Effect
+The pattern is particularly valuable in Python applications for:
+- Configuration management with cascading overrides
+- Caching with automatic invalidation
+- Real-time data processing pipelines
+- Request/response processing with derived context
+- Monitoring and alerting systems
 
-# Different configuration sources
-default_config = Signal({"timeout": 30, "retries": 3, "log_level": "INFO"})
-user_config = Signal({})
+## Practical Examples
 
-# Effective config combines both sources, with user settings taking precedence
-effective_config = Computed(lambda: {**default_config(), **user_config()})
-
-# Log when config changes
-config_logger = Effect(lambda: print(f"Active config: {effective_config()}"))
-# Initial output: "Active config: {'timeout': 30, 'retries': 3, 'log_level': 'INFO'}"
-
-# When user updates their preferences
-user_config.set({"timeout": 60, "log_level": "DEBUG"})
-# Automatically logs: "Active config: {'timeout': 60, 'retries': 3, 'log_level': 'DEBUG'}"
-
-# When defaults are updated (e.g., from a config file)
-default_config.update(lambda cfg: {**cfg, "retries": 5, "max_connections": 100})
-# Automatically logs: "Active config: {'timeout': 60, 'retries': 5, 'log_level': 'DEBUG', 'max_connections': 100}"
-```
-
-### Example 4: Simple Caching
-
+### Configuration Management
 ```python
 from reaktiv import Signal, Computed
 
-# Database simulation
-database = {"user1": "Alice", "user2": "Bob"}
+# Multiple config sources
+defaults = Signal({"timeout": 30, "retries": 3})
+user_prefs = Signal({"timeout": 60})
+feature_flags = Signal({"new_retry_logic": True})
 
-# Cache invalidation signal
-last_update = Signal(0)  # timestamp or version number
-
-# User data with automatic cache refresh
-def fetch_user(user_id):
-    # In a real app, this would actually query a database
-    return database.get(user_id)
-
-active_user_id = Signal("user1")
-
-# This computed value automatically refreshes when active_user_id changes
-# or when the cache is invalidated via last_update
-user_data = Computed(lambda: {
-    "id": active_user_id(),
-    "name": fetch_user(active_user_id()),
-    "cache_version": last_update()
+# Automatically merged config
+config = Computed(lambda: {
+    **defaults(),
+    **user_prefs(),
+    **feature_flags()
 })
 
-print(user_data())  # {'id': 'user1', 'name': 'Alice', 'cache_version': 0}
+print(config())  # {'timeout': 60, 'retries': 3, 'new_retry_logic': True}
 
-# Switch to another user - cache updates automatically
-active_user_id.set("user2")
-print(user_data())  # {'id': 'user2', 'name': 'Bob', 'cache_version': 0}
-
-# Backend data changes - we update the database and invalidate cache
-database["user2"] = "Robert"
-last_update.set(1)  # increment version number
-print(user_data())  # {'id': 'user2', 'name': 'Robert', 'cache_version': 1}
+# Change any source - merged config updates automatically
+defaults.update(lambda d: {**d, "max_connections": 100})
+print(config())  # Now includes max_connections
 ```
 
-### Example 5: Processing a Stream of Events
-
+### Data Processing Pipeline
 ```python
-from reaktiv import Signal, Computed, Effect
 import time
+from reaktiv import Signal, Computed, Effect
 
-# Event stream (simulating incoming data)
-events = Signal([])
+# Raw data stream
+raw_data = Signal([])
 
-# Compute statistics from the events
-event_count = Computed(lambda: len(events()))
-recent_events = Computed(lambda: [e for e in events() if time.time() - e["timestamp"] < 60])
-error_count = Computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
+# Processing pipeline
+filtered_data = Computed(lambda: [x for x in raw_data() if x > 0])
+processed_data = Computed(lambda: [x * 2 for x in filtered_data()])
+summary = Computed(lambda: {
+    "count": len(processed_data()),
+    "sum": sum(processed_data()),
+    "avg": sum(processed_data()) / len(processed_data()) if processed_data() else 0
+})
 
-# Monitor for problems
-def check_errors():
-    if error_count() >= 3:
-        print(f"ALERT: {error_count()} errors detected in the event stream!")
-    
-error_monitor = Effect(check_errors)
+# Monitoring - MUST assign to variable!
+summary_effect = Effect(lambda: print(f"Summary: {summary()}"))
 
-# Process new events
-def add_event(level, message):
-    new_event = {"timestamp": time.time(), "level": level, "message": message}
-    events.update(lambda current: current + [new_event])
-
-# Simulate incoming events
-add_event("INFO", "Application started")
-add_event("INFO", "Processing request")
-add_event("ERROR", "Database connection failed")
-add_event("ERROR", "Retry failed")
-add_event("ERROR", "Giving up after 3 attempts")
-# Automatically triggers: "ALERT: 3 errors detected in the event stream!"
+# Add data - entire pipeline recalculates automatically
+raw_data.set([1, -2, 3, 4])  # Prints summary
+raw_data.update(lambda d: d + [5, 6])  # Updates summary
 ```
 
-### Example 5b: Async Event Processing Pipeline
+#### Pipeline Visualization
 
+```mermaid
+graph LR
+    subgraph "Data Processing Pipeline"
+        RD[raw_data<br/>Signal&lt;list&gt;]
+        FD[filtered_data<br/>Computed&lt;list&gt;]
+        PD[processed_data<br/>Computed&lt;list&gt;]
+        SUM[summary<br/>Computed&lt;dict&gt;]
+        
+        RD -->|filter x > 0| FD
+        FD -->|map x * 2| PD
+        PD -->|aggregate| SUM
+        
+        SUM --> EFF[Effect: print summary]
+    end
+    
+    NEW[New Data] -.->|"raw_data.set()"| RD
+    RD -.->|auto update| FD
+    FD -.->|auto update| PD
+    PD -.->|auto update| SUM
+    SUM -.->|auto trigger| EFF
+    
+    classDef signal fill:#4CAF50,color:white
+    classDef computed fill:#2196F3,color:white
+    classDef effect fill:#FF9800,color:white
+    classDef input fill:#9C27B0,color:white
+    
+    class RD signal
+    class FD,PD,SUM computed
+    class EFF effect
+    class NEW input
+```
+
+### System Monitoring
 ```python
 from reaktiv import Signal, Computed, Effect
+
+# System metrics
+cpu_usage = Signal(20)
+memory_usage = Signal(60)
+disk_usage = Signal(80)
+
+# Health calculation
+system_health = Computed(lambda: 
+    "critical" if any(x > 90 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
+    "warning" if any(x > 75 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
+    "healthy"
+)
+
+# Automatic alerting - MUST assign to variable!
+alert_effect = Effect(lambda: print(f"System status: {system_health()}") 
+                     if system_health() != "healthy" else None)
+
+cpu_usage.set(95)  # Automatically prints: "System status: critical"
+```
+
+## Advanced Features
+
+### Custom Equality
+```python
+# For objects where you want value-based comparison
+items = Signal([1, 2, 3], equal=lambda a, b: a == b)
+items.set([1, 2, 3])  # Won't trigger updates (same values)
+```
+
+### Update Functions
+```python
+counter = Signal(0)
+counter.update(lambda x: x + 1)  # Increment based on current value
+```
+
+### Async Effects
+```python
 import asyncio
-import time
 
-# Demo async event processing
-async def demo_async_events():
-    # Event stream
-    events = Signal([])
+async def async_effect():
+    await asyncio.sleep(0.1)
+    print(f"Async processing: {my_signal()}")
 
-    # Derived statistics
-    error_count = Computed(lambda: len([e for e in events() if e["level"] == "ERROR"]))
-    warning_count = Computed(lambda: len([e for e in events() if e["level"] == "WARNING"]))
-
-    # Async effect for error handling
-    async def handle_errors():
-        errors = error_count()
-        if errors > 0:
-            print(f"Found {errors} errors")
-            
-            # Simulate error processing that takes time
-            await asyncio.sleep(0.2)
-            
-            if errors >= 3:
-                print("🚨 Critical error threshold reached")
-                await asyncio.sleep(0.1)  # Simulate sending alert
-                print("✉️ Error notification dispatched to on-call team")
-
-    # Register async effect
-    error_handler = Effect(handle_errors)
-
-    # Function to add events
-    async def add_event_async(level, message):
-        new_event = {"timestamp": time.time(), "level": level, "message": message}
-        events.update(lambda current: current + [new_event])
-        # Simulate some processing time
-        await asyncio.sleep(0.1)
-    print("Starting event monitoring...")
-    
-    # Add some events
-    await add_event_async("INFO", "Application started")
-    await add_event_async("INFO", "User logged in")
-    await add_event_async("WARNING", "Slow database query detected")
-    
-    # Add error events that will trigger our effect
-    print("\nSimulating error condition:")
-    await add_event_async("ERROR", "Database connection timeout")
-    await add_event_async("ERROR", "Retry failed")
-    await add_event_async("ERROR", "Service unavailable")
-    
-    # Give effect time to complete
-    await asyncio.sleep(0.5)
-    
-    print(f"\nFinal status: {error_count()} errors, {warning_count()} warnings")
-
-asyncio.run(demo_async_events())
+# MUST assign to variable!
+my_async_effect = Effect(async_effect)
 ```
 
-## Important Usage Tips
+## Important Notes
 
-### Effect Retention
-
-Effects must be retained (assigned to a variable) to prevent garbage collection. If you create an Effect without assigning it to a variable, it may be immediately garbage collected:
-
-```python
-# INCORRECT: Effect will be garbage collected immediately
-Effect(lambda: print(f"Value changed: {my_signal()}"))
-
-# CORRECT: Effect is retained
-my_effect = Effect(lambda: print(f"Value changed: {my_signal()}"))
-```
-
-When using Effects in classes, assign them to instance attributes in the constructor:
+### ⚠️ Effect Retention (Critical!)
+**Effects must be assigned to a variable to prevent garbage collection.** This is the most common mistake when using reaktiv:
 
 ```python
-class MyComponent:
+# ❌ WRONG - effect gets garbage collected immediately and won't work
+Effect(lambda: print("This will never print"))
+
+# ✅ CORRECT - effect stays active
+my_effect = Effect(lambda: print("This works!"))
+
+# ✅ Also correct - store in a list or class attribute
+effects = []
+effects.append(Effect(lambda: print("This also works!")))
+
+# ✅ In classes, assign to self
+class MyClass:
     def __init__(self):
-        self._counter = Signal(0)
-        
-        def _handle_counter_change():
-            print(f"Counter changed: {self._counter()}")
-        
-        # Assign Effect to self to prevent garbage collection
-        self._effect = Effect(_handle_counter_change)
+        self.counter = Signal(0)
+        # Keep effect alive by assigning to instance
+        self.effect = Effect(lambda: print(f"Counter: {self.counter()}"))
 ```
 
-### Default Equality Check
+### Mutable Objects
+By default, reaktiv uses identity comparison. For mutable objects:
 
-By default, reaktiv uses identity comparison (`is`) to detect value changes. This means that mutable objects like lists, dictionaries, or custom objects with the same content but different identity will be treated as different values:
+```python
+data = Signal([1, 2, 3])
 
+# This triggers update (new list object)
+data.set([1, 2, 3])  
+
+# This doesn't trigger update (same object, modified in place)
+current = data()
+current.append(4)  # reaktiv doesn't see this change
+```
+
+### Working with Lists and Dictionaries
+
+When working with mutable objects like lists and dictionaries, you need to create new objects to trigger updates:
+
+#### Lists
 ```python
 items = Signal([1, 2, 3])
 
-# This WILL trigger updates because it's a different list instance
-items.set([1, 2, 3])  
-
-# Modifying the list in-place WON'T trigger updates
+# ❌ WRONG - modifies in place, no update triggered
 current = items()
-current.append(4)  # Signal doesn't detect this change
+current.append(4)  # reaktiv doesn't detect this
+
+# ✅ CORRECT - create new list
+items.set([*items(), 4])  # or items.set(items() + [4])
+
+# ✅ CORRECT - using update() method
+items.update(lambda current: current + [4])
+items.update(lambda current: [*current, 4])
+
+# Other list operations
+items.update(lambda lst: [x for x in lst if x > 2])  # Filter
+items.update(lambda lst: [x * 2 for x in lst])       # Map
+items.update(lambda lst: lst[:-1])                   # Remove last
+items.update(lambda lst: [0] + lst)                  # Prepend
 ```
 
-For collection types, you can provide a custom equality function:
+#### Dictionaries
+```python
+config = Signal({"timeout": 30, "retries": 3})
+
+# ❌ WRONG - modifies in place, no update triggered
+current = config()
+current["new_key"] = "value"  # reaktiv doesn't detect this
+
+# ✅ CORRECT - create new dictionary
+config.set({**config(), "new_key": "value"})
+
+# ✅ CORRECT - using update() method
+config.update(lambda current: {**current, "new_key": "value"})
+
+# Other dictionary operations
+config.update(lambda d: {**d, "timeout": 60})           # Update value
+config.update(lambda d: {k: v for k, v in d.items() if k != "retries"})  # Remove key
+config.update(lambda d: {**d, **{"max_conn": 100, "pool_size": 5}})      # Merge multiple
+```
+
+#### Alternative: Value-Based Equality
+If you prefer to modify objects in place, provide a custom equality function:
 
 ```python
+# For lists - compares actual values
 def list_equal(a, b):
-    return len(a) == len(b) and all(a_item == b_item for a_item, b_item in zip(a, b))
+    return len(a) == len(b) and all(x == y for x, y in zip(a, b))
 
 items = Signal([1, 2, 3], equal=list_equal)
 
-# With custom equality, this WON'T trigger updates (values are equal)
-items.set([1, 2, 3])
+# Now you can modify in place and trigger updates manually
+current = items()
+current.append(4)
+items.set(current)  # Triggers update because values changed
 
-# This WILL trigger updates (values are different)
-items.set([1, 2, 3, 4])
+# For dictionaries - compares actual content
+def dict_equal(a, b):
+    return a == b
+
+config = Signal({"timeout": 30}, equal=dict_equal)
+
+current = config()
+current["retries"] = 3
+config.set(current)  # Triggers update
 ```
 
 ## More Examples
@@ -628,4 +530,4 @@ Including integration examples with:
 
 ---
 
-**Inspired by** Angular Signals and [TC39 Signals Proposal](https://github.com/tc39/proposal-signals) • **Built for** Python's async-first world and backend uses • **Made in** Hamburg
+**Inspired by** Angular Signals and SolidJS reactivity • **Built for** Python developers who want fewer state management bugs • **Made in** Hamburg

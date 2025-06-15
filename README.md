@@ -51,6 +51,32 @@ name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 age.set(31)      # Prints: "Updated: Hello, Bob! You are 31 years old."
 ```
 
+### Using Named Functions
+
+You can use named functions instead of lambdas for better readability and debugging:
+
+```python
+from reaktiv import Signal, Computed, Effect
+
+# Your base data
+name = Signal("Alice")
+age = Signal(30)
+
+# Named functions for computed values
+def create_greeting():
+    return f"Hello, {name()}! You are {age()} years old."
+
+def print_greeting():
+    print(f"Updated: {greeting()}")
+
+# Use named functions with reaktiv
+greeting = Computed(create_greeting)
+greeting_effect = Effect(print_greeting)
+
+# Works exactly the same as lambdas
+name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
+```
+
 ## The Problem This Solves
 
 Consider a simple order calculation:
@@ -126,11 +152,17 @@ Benefits:
 # Signal: wraps a value
 counter = Signal(0)
 
-# Computed: derives from other values
-doubled = Computed(lambda: counter() * 2)
+# Computed: derives from other values (using named function)
+def calculate_doubled():
+    return counter() * 2
+
+doubled = Computed(calculate_doubled)
 
 # Effect: runs when dependencies change - MUST assign to variable!
-counter_effect = Effect(lambda: print(f"Counter: {counter()}, Doubled: {doubled()}"))
+def print_values():
+    print(f"Counter: {counter()}, Doubled: {doubled()}")
+
+counter_effect = Effect(print_values)
 
 counter.set(5)  # Prints: "Counter: 5, Doubled: 10"
 ```
@@ -404,6 +436,58 @@ async def async_effect():
 
 # MUST assign to variable!
 my_async_effect = Effect(async_effect)
+```
+
+### Untracked Reads
+Use `untracked()` to read signals without creating dependencies:
+
+```python
+from reaktiv import Signal, Computed, untracked
+
+user_id = Signal(1)
+debug_mode = Signal(False)
+
+# This computed only depends on user_id, not debug_mode
+def get_user_data():
+    uid = user_id()  # Creates dependency
+    if untracked(debug_mode):  # No dependency created
+        print(f"Loading user {uid}")
+    return f"User data for {uid}"
+
+user_data = Computed(get_user_data)
+
+debug_mode.set(True)   # Won't trigger recomputation
+user_id.set(2)         # Will trigger recomputation
+```
+
+### Batch Updates
+Use `batch()` to group multiple updates and trigger effects only once:
+
+```python
+from reaktiv import Signal, Effect, batch
+
+name = Signal("Alice")
+age = Signal(30)
+city = Signal("New York")
+
+def print_info():
+    print(f"{name()}, {age()}, {city()}")
+
+info_effect = Effect(print_info)
+# Effect prints one time on init
+
+# Without batch - prints 3 times
+name.set("Bob")
+age.set(25)
+city.set("Boston")
+
+# With batch - prints only once at the end
+def update_person():
+    name.set("Charlie")
+    age.set(35)
+    city.set("Chicago")
+
+batch(update_person)  # Only prints once: "Charlie, 35, Chicago"
 ```
 
 ## Important Notes

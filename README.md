@@ -2,7 +2,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) ![PyPI - Downloads](https://img.shields.io/pypi/dm/reaktiv) ![Documentation Status](https://readthedocs.org/projects/reaktiv/badge/) ![License](https://img.shields.io/badge/license-MIT-green) [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
-**Declarative State Management for Python** - automatic dependency tracking and updates for your application state.
+**Reactive Declarative State Management Library for Python** - automatic dependency tracking and reactive updates for your application state.
 
 ![reaktiv](assets/logo_3.png)
 
@@ -14,7 +14,9 @@ pip install reaktiv
 uv pip install reaktiv
 ```
 
-`reaktiv` lets you **declare relationships between your data** instead of manually managing updates. When data changes, everything that depends on it updates automatically - eliminating a whole class of bugs where you forget to update dependent state.
+`reaktiv` is a **reactive declarative state management library** that lets you **declare relationships between your data** instead of manually managing updates. When data changes, everything that depends on it updates automatically - eliminating a whole class of bugs where you forget to update dependent state.
+
+**Think of it like Excel spreadsheets for your Python code**: when you change a cell value, all formulas that depend on it automatically recalculate. That's exactly how `reaktiv` works with your application state.
 
 **Key benefits:**
 - 🐛 **Fewer bugs**: No more forgotten state updates or inconsistent data
@@ -35,137 +37,101 @@ For a comprehensive guide, check out [The Missing Manual for Signals: State Mana
 ```python
 from reaktiv import Signal, Computed, Effect
 
-# Your base data
+# Your reactive data sources
 name = Signal("Alice")
 age = Signal(30)
 
-# Derived data - automatically stays in sync
+# Reactive derived data - automatically stays in sync
 greeting = Computed(lambda: f"Hello, {name()}! You are {age()} years old.")
 
-# Side effects - automatically run when data changes
+# Reactive side effects - automatically run when data changes
 # IMPORTANT: Must assign to variable to prevent garbage collection
 greeting_effect = Effect(lambda: print(f"Updated: {greeting()}"))
 
-# Just change your base data - everything else updates automatically
+# Just change your base data - everything reacts automatically
 name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 age.set(31)      # Prints: "Updated: Hello, Bob! You are 31 years old."
 ```
 
 ### Using Named Functions
 
-You can use named functions instead of lambdas for better readability and debugging:
+You can use named functions instead of lambdas for better readability and debugging in your reactive system:
 
 ```python
 from reaktiv import Signal, Computed, Effect
 
-# Your base data
+# Your reactive data sources
 name = Signal("Alice")
 age = Signal(30)
 
-# Named functions for computed values
+# Named functions for reactive computations
 def create_greeting():
     return f"Hello, {name()}! You are {age()} years old."
 
 def print_greeting():
     print(f"Updated: {greeting()}")
 
-# Use named functions with reaktiv
+# Build your reactive system with named functions
 greeting = Computed(create_greeting)
 greeting_effect = Effect(print_greeting)
 
-# Works exactly the same as lambdas
+# Works exactly the same as lambdas - everything reacts automatically
 name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 ```
 
-## The Problem This Solves
-
-Consider a simple order calculation:
-
-### Without reaktiv (Manual Updates)
-```python
-class Order:
-    def __init__(self):
-        self.price = 100.0
-        self.quantity = 2
-        self.tax_rate = 0.1
-        self._update_totals()  # Must remember to call this
-    
-    def set_price(self, price):
-        self.price = price
-        self._update_totals()  # Must remember to call this
-    
-    def set_quantity(self, quantity):
-        self.quantity = quantity
-        self._update_totals()  # Must remember to call this
-    
-    def _update_totals(self):
-        # Must update in the correct order
-        self.subtotal = self.price * self.quantity
-        self.tax = self.subtotal * self.tax_rate
-        self.total = self.subtotal + self.tax
-        # Oops, forgot to update the display!
-```
-
-Problems:
-- Easy to forget calling `_update_totals()`
-- Must update fields in the correct order
-- Update logic scattered across methods
-- Side effects (like updating displays) easily forgotten
-
-### With reaktiv (Automatic Updates)
-```python
-from reaktiv import Signal, Computed, Effect
-
-# Declare your data
-price = Signal(100.0)
-quantity = Signal(2)
-tax_rate = Signal(0.1)
-
-# Declare how data relates - reaktiv handles the rest
-subtotal = Computed(lambda: price() * quantity())
-tax = Computed(lambda: subtotal() * tax_rate())
-total = Computed(lambda: subtotal() + tax())
-
-# Declare side effects - MUST assign to variable!
-total_effect = Effect(lambda: print(f"Order total: ${total():.2f}"))
-
-# Just change data - everything updates automatically in the right order
-price.set(120.0)     # Automatically recalculates subtotal, tax, total, prints result
-quantity.set(3)      # Same thing
-```
-
-Benefits:
-- ✅ Cannot forget to update dependent data
-- ✅ Updates always happen in the correct order
-- ✅ State relationships are explicit and centralized
-- ✅ Side effects are guaranteed to run
-
 ## Core Concepts
 
-`reaktiv` provides three simple building blocks:
+`reaktiv` provides three simple building blocks for reactive programming - just like Excel has cells and formulas:
 
-1. **Signal**: Holds a value that can change
-2. **Computed**: Automatically derives a value from other signals/computed values
-3. **Effect**: Runs side effects when signals/computed values change
+1. **Signal**: Holds a reactive value that can change (like an Excel cell with a value)
+2. **Computed**: Automatically derives a reactive value from other signals/computed values (like an Excel formula)
+3. **Effect**: Runs reactive side effects when signals/computed values change (like Excel charts that update when data changes)
 
 ```python
-# Signal: wraps a value
+# Signal: wraps a reactive value (like Excel cell A1 = 5)
 counter = Signal(0)
 
-# Computed: derives from other values (using named function)
+# Computed: derives from other reactive values (like Excel cell B1 = A1 * 2)
 def calculate_doubled():
     return counter() * 2
 
 doubled = Computed(calculate_doubled)
 
-# Effect: runs when dependencies change - MUST assign to variable!
+# Effect: reactive side effects (like Excel chart that updates when cells change)
 def print_values():
     print(f"Counter: {counter()}, Doubled: {doubled()}")
 
 counter_effect = Effect(print_values)
 
-counter.set(5)  # Prints: "Counter: 5, Doubled: 10"
+counter.set(5)  # Reactive update: prints "Counter: 5, Doubled: 10"
 ```
+
+### Excel Spreadsheet Analogy
+
+If you've ever used Excel, you already understand reactive programming:
+
+| Cell | Value/Formula | reaktiv Equivalent |
+|------|---------------|-------------------|
+| A1   | `5`           | `Signal(5)`       |
+| B1   | `=A1 * 2`     | `Computed(lambda: a1() * 2)` |
+| C1   | `=A1 + B1`    | `Computed(lambda: a1() + b1())` |
+
+When you change A1 in Excel, B1 and C1 automatically recalculate. That's exactly what happens with reaktiv:
+
+```python
+# Excel-style reactive programming in Python
+a1 = Signal(5)                           # A1 = 5
+b1 = Computed(lambda: a1() * 2)         # B1 = A1 * 2
+c1 = Computed(lambda: a1() + b1())      # C1 = A1 + B1
+
+# Display effect (like Excel showing the values)
+display_effect = Effect(lambda: print(f"A1={a1()}, B1={b1()}, C1={c1()}"))
+
+a1.set(10)  # Change A1 - everything recalculates automatically!
+# Prints: A1=10, B1=20, C1=30
+```
+
+Just like in Excel, you don't need to manually update B1 and C1 when A1 changes - the dependency tracking handles it automatically.
 
 ```mermaid
 graph TD
@@ -234,6 +200,65 @@ graph TD
     class LEGEND legend
 ```
 
+## The Problem This Solves
+
+Consider a simple order calculation:
+
+### Without reaktiv (Manual Updates)
+```python
+class Order:
+    def __init__(self):
+        self.price = 100.0
+        self.quantity = 2
+        self.tax_rate = 0.1
+        self._update_totals()  # Must remember to call this
+    
+    def set_price(self, price):
+        self.price = price
+        self._update_totals()  # Must remember to call this
+    
+    def set_quantity(self, quantity):
+        self.quantity = quantity
+        self._update_totals()  # Must remember to call this
+    
+    def _update_totals(self):
+        # Must update in the correct order
+        self.subtotal = self.price * self.quantity
+        self.tax = self.subtotal * self.tax_rate
+        self.total = self.subtotal + self.tax
+        # Oops, forgot to update the display!
+```
+
+### With reaktiv (Excel-style Automatic Updates)
+This is like Excel - change a cell and everything recalculates automatically:
+
+```python
+from reaktiv import Signal, Computed, Effect
+
+# Base values (like Excel input cells)
+price = Signal(100.0)      # A1
+quantity = Signal(2)       # A2  
+tax_rate = Signal(0.1)     # A3
+
+# Formulas (like Excel computed cells)
+subtotal = Computed(lambda: price() * quantity())           # B1 = A1 * A2
+tax = Computed(lambda: subtotal() * tax_rate())            # B2 = B1 * A3
+total = Computed(lambda: subtotal() + tax())               # B3 = B1 + B2
+
+# Auto-display (like Excel chart that updates automatically)
+total_effect = Effect(lambda: print(f"Order total: ${total():.2f}"))
+
+# Just change the input - everything recalculates like Excel!
+price.set(120.0)  # Change A1 - B1, B2, B3 all update automatically
+quantity.set(3)      # Same thing
+```
+
+Benefits:
+- ✅ Cannot forget to update dependent data
+- ✅ Updates always happen in the correct order
+- ✅ State relationships are explicit and centralized
+- ✅ Side effects are guaranteed to run
+
 ## Type Safety
 
 `reaktiv` provides full type hint support, making it compatible with static type checkers like mypy and pyright. This enables better IDE autocompletion, early error detection, and improved code maintainability.
@@ -295,9 +320,9 @@ graph TD
     class R1,R2,R3,R4 reactive
 ```
 
-This approach comes from frontend frameworks like **Angular** and **SolidJS**, where automatic dependency tracking revolutionized UI development. While those frameworks use this pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring relationships between data leads to fewer bugs** than manually managing updates.
+This reactive approach comes from frontend frameworks like **Angular** and **SolidJS**, where automatic dependency tracking revolutionized UI development. While those frameworks use this reactive pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring reactive relationships between data leads to fewer bugs** than manually managing updates.
 
-The pattern is particularly valuable in Python applications for:
+The reactive pattern is particularly valuable in Python applications for:
 - Configuration management with cascading overrides
 - Caching with automatic invalidation
 - Real-time data processing pipelines
@@ -306,16 +331,16 @@ The pattern is particularly valuable in Python applications for:
 
 ## Practical Examples
 
-### Configuration Management
+### Reactive Configuration Management
 ```python
 from reaktiv import Signal, Computed
 
-# Multiple config sources
+# Multiple reactive config sources
 defaults = Signal({"timeout": 30, "retries": 3})
 user_prefs = Signal({"timeout": 60})
 feature_flags = Signal({"new_retry_logic": True})
 
-# Automatically merged config
+# Automatically reactive merged config
 config = Computed(lambda: {
     **defaults(),
     **user_prefs(),
@@ -324,20 +349,20 @@ config = Computed(lambda: {
 
 print(config())  # {'timeout': 60, 'retries': 3, 'new_retry_logic': True}
 
-# Change any source - merged config updates automatically
+# Change any source - merged config reacts automatically
 defaults.update(lambda d: {**d, "max_connections": 100})
 print(config())  # Now includes max_connections
 ```
 
-### Data Processing Pipeline
+### Reactive Data Processing Pipeline
 ```python
 import time
 from reaktiv import Signal, Computed, Effect
 
-# Raw data stream
+# Reactive raw data stream
 raw_data = Signal([])
 
-# Processing pipeline
+# Reactive processing pipeline
 filtered_data = Computed(lambda: [x for x in raw_data() if x > 0])
 processed_data = Computed(lambda: [x * 2 for x in filtered_data()])
 summary = Computed(lambda: {
@@ -346,36 +371,36 @@ summary = Computed(lambda: {
     "avg": sum(processed_data()) / len(processed_data()) if processed_data() else 0
 })
 
-# Monitoring - MUST assign to variable!
+# Reactive monitoring - MUST assign to variable!
 summary_effect = Effect(lambda: print(f"Summary: {summary()}"))
 
-# Add data - entire pipeline recalculates automatically
+# Add data - entire reactive pipeline recalculates automatically
 raw_data.set([1, -2, 3, 4])  # Prints summary
 raw_data.update(lambda d: d + [5, 6])  # Updates summary
 ```
 
-#### Pipeline Visualization
+#### Reactive Pipeline Visualization
 
 ```mermaid
 graph LR
-    subgraph "Data Processing Pipeline"
+    subgraph "Reactive Data Processing Pipeline"
         RD[raw_data<br/>Signal&lt;list&gt;]
         FD[filtered_data<br/>Computed&lt;list&gt;]
         PD[processed_data<br/>Computed&lt;list&gt;]
         SUM[summary<br/>Computed&lt;dict&gt;]
         
-        RD -->|filter x > 0| FD
-        FD -->|map x * 2| PD
-        PD -->|aggregate| SUM
+        RD -->|reactive filter x > 0| FD
+        FD -->|reactive map x * 2| PD
+        PD -->|reactive aggregate| SUM
         
         SUM --> EFF[Effect: print summary]
     end
     
     NEW[New Data] -.->|"raw_data.set()"| RD
-    RD -.->|auto update| FD
-    FD -.->|auto update| PD
-    PD -.->|auto update| SUM
-    SUM -.->|auto trigger| EFF
+    RD -.->|reactive update| FD
+    FD -.->|reactive update| PD
+    PD -.->|reactive update| SUM
+    SUM -.->|reactive trigger| EFF
     
     classDef signal fill:#4CAF50,color:white
     classDef computed fill:#2196F3,color:white
@@ -388,27 +413,27 @@ graph LR
     class NEW input
 ```
 
-### System Monitoring
+### Reactive System Monitoring
 ```python
 from reaktiv import Signal, Computed, Effect
 
-# System metrics
+# Reactive system metrics
 cpu_usage = Signal(20)
 memory_usage = Signal(60)
 disk_usage = Signal(80)
 
-# Health calculation
+# Reactive health calculation
 system_health = Computed(lambda: 
     "critical" if any(x > 90 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
     "warning" if any(x > 75 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
     "healthy"
 )
 
-# Automatic alerting - MUST assign to variable!
+# Reactive automatic alerting - MUST assign to variable!
 alert_effect = Effect(lambda: print(f"System status: {system_health()}") 
                      if system_health() != "healthy" else None)
 
-cpu_usage.set(95)  # Automatically prints: "System status: critical"
+cpu_usage.set(95)  # Reactive system automatically prints: "System status: critical"
 ```
 
 ## Advanced Features

@@ -780,7 +780,6 @@ async def test_untracked(capsys):
     await asyncio.sleep(0)
     assert effect_count == 2  # Should remain unchanged
 
-@pytest.mark.asyncio
 def test_untracked_direct_signal():
     """Test that untracked can be called with a signal directly as an argument."""
     tracked_signal = Signal(1)

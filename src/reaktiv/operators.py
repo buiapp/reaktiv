@@ -1,5 +1,6 @@
 import asyncio
 import time
+import warnings
 from typing import TypeVar, Callable, Generic, Optional, Union, Set, List, Tuple, Any
 from weakref import WeakSet
 from .core import (
@@ -10,12 +11,46 @@ from .core import (
 T = TypeVar("T")
 
 # --------------------------------------------------
+# DEPRECATION NOTICE
+# --------------------------------------------------
+"""
+DEPRECATED: The operators module is deprecated and will be removed in a future version.
+
+After reconsidering the design philosophy of reactive signals, I've decided that signal-based 
+state management should NOT have a time dimension, unlike RxJS observables. 
+
+Signals are meant to represent current state values that change over time, but the operators 
+in this module (debounce, throttle, filter, etc.) introduce temporal behavior that doesn't 
+align with the core concept of signals as state containers.
+
+For time-based operations, consider using:
+- Standard async/await patterns
+- asyncio utilities (asyncio.sleep, asyncio.wait_for, etc.)
+- Custom Effects that implement the temporal logic you need
+- External libraries designed for reactive streams (like RxPY) if you need complex temporal operators
+
+The core Signal, Computed, and Effect primitives remain the recommended way to manage 
+reactive state without temporal concerns.
+"""
+
+# --------------------------------------------------
 # Base Class for Operator Signals
 # --------------------------------------------------
 
 class _OperatorSignal(Generic[T]):
-    """A read-only signal produced by an operator. Implements methods for duck typing."""
+    """
+    DEPRECATED: A read-only signal produced by an operator. 
+    
+    This class is deprecated along with all operators as they introduce temporal
+    behavior that doesn't align with signal-based state management principles.
+    """
     def __init__(self, initial_value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
+        warnings.warn(
+            "_OperatorSignal is deprecated and will be removed in a future version. "
+            "Operators introduce temporal behavior that doesn't belong in signal-based state management.",
+            DeprecationWarning,
+            stacklevel=3  # Higher stack level since this is typically called from operator functions
+        )
         self._value = initial_value
         self._subscribers: WeakSet[Subscriber] = WeakSet()
         self._equal = equal or (lambda a, b: a is b) # Default to identity check like Signal
@@ -139,6 +174,14 @@ def filter_signal(
     predicate: Callable[[T], bool]
 ) -> _OperatorSignal[Optional[T]]:
     """
+    DEPRECATED: This function is deprecated and will be removed in a future version.
+    
+    Signal-based state management should not have temporal/filtering behavior.
+    Consider using a ComputeSignal with conditional logic instead:
+    
+    Example:
+        filtered = Computed(lambda: source() if predicate(source()) else None)
+    
     Creates a read-only signal that only emits values from the source signal
     that satisfy the predicate function.
 
@@ -149,6 +192,13 @@ def filter_signal(
 
     This operator is synchronous and does not require an asyncio event loop.
     """
+    warnings.warn(
+        "filter_signal is deprecated and will be removed in a future version. "
+        "Signal-based state management should not have filtering behavior. "
+        "Consider using ComputeSignal with conditional logic instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     # Get initial value without tracking dependency here
     initial_source_value = source.get()
     initial_value_passes = False
@@ -188,11 +238,23 @@ def debounce_signal(
     delay_seconds: float
 ) -> _OperatorSignal[T]:
     """
+    DEPRECATED: This function is deprecated and will be removed in a future version.
+    
+    Signal-based state management should not have temporal behavior like debouncing.
+    Consider using asyncio utilities in an Effect instead.
+    
     Creates a read-only signal that emits a value from the source signal
     only after a particular time span has passed without another source emission.
 
     Note: This operator requires a running asyncio event loop to manage its internal timer.
     """
+    warnings.warn(
+        "debounce_signal is deprecated and will be removed in a future version. "
+        "Signal-based state management should not have temporal behavior. "
+        "Consider using asyncio utilities in Effects instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     initial_source_value = source.get()
     source_equal = getattr(source, '_equal', None)
     debounced_sig = _OperatorSignal(initial_source_value, equal=source_equal)
@@ -256,12 +318,24 @@ def throttle_signal(
     trailing: bool = False
 ) -> _OperatorSignal[T]:
     """
+    DEPRECATED: This function is deprecated and will be removed in a future version.
+    
+    Signal-based state management should not have temporal behavior like throttling.
+    Consider using asyncio utilities in an Effect instead.
+    
     Creates a read-only signal that emits a value from the source signal,
     then ignores subsequent source emissions for a specified duration.
     Can optionally emit a trailing value. Uses non-shortcut API.
 
     Note: This operator requires a running asyncio event loop to manage its internal timer(s).
     """
+    warnings.warn(
+        "throttle_signal is deprecated and will be removed in a future version. "
+        "Signal-based state management should not have temporal behavior. "
+        "Consider using asyncio utilities in Effects instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     initial_source_value = source.get()
     source_equal = getattr(source, '_equal', None)
     throttled_sig = _OperatorSignal(initial_source_value, equal=source_equal)
@@ -359,6 +433,11 @@ def pairwise_signal(
     emit_on_first: bool = False
 ) -> _OperatorSignal[Optional[Tuple[Optional[T], T]]]:
     """
+    DEPRECATED: This function is deprecated and will be removed in a future version.
+    
+    Signal-based state management should not have temporal/stateful behavior like pairwise.
+    Consider maintaining previous state explicitly in a Signal or using a ComputeSignal.
+    
     Creates a read-only signal that emits a tuple containing the previous
     and current values from the source signal.
 
@@ -374,6 +453,13 @@ def pairwise_signal(
         The type of `previous` is `Optional[T]`. The initial value of the
         signal before any valid pair is emitted is `None`.
     """
+    warnings.warn(
+        "pairwise_signal is deprecated and will be removed in a future version. "
+        "Signal-based state management should not have temporal/stateful behavior. "
+        "Consider maintaining previous state explicitly in Signals instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
     previous_value: Any = _NO_VALUE
     # Get initial value without tracking dependency here
     initial_source_value = source.get()

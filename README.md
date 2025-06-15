@@ -21,10 +21,12 @@ uv pip install reaktiv
 **Key benefits:**
 - 🐛 **Fewer bugs**: No more forgotten state updates or inconsistent data
 - 📋 **Clearer code**: State relationships are explicit and centralized
-- ⚡ **Better performance**: Only recalculates what actually changed
+- ⚡ **Better performance**: Only recalculates what actually changed (fine-grained reactivity)
 - 🔄 **Automatic updates**: Dependencies are tracked and updated automatically
 - 🎯 **Python-native**: Built for Python's patterns with full async support
 - 🔒 **Type safe**: Full type hint support with automatic inference
+- 🚀 **Lazy evaluation**: Computed values are only calculated when needed
+- 💾 **Smart memoization**: Results are cached and only recalculated when dependencies change
 
 ## Documentation
 
@@ -320,7 +322,74 @@ graph TD
     class R1,R2,R3,R4 reactive
 ```
 
-This reactive approach comes from frontend frameworks like **Angular** and **SolidJS**, where automatic dependency tracking revolutionized UI development. While those frameworks use this reactive pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring reactive relationships between data leads to fewer bugs** than manually managing updates.
+This reactive approach comes from frontend frameworks like **Angular** and **SolidJS**, where fine-grained reactivity revolutionized UI development. While those frameworks use this reactive pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring reactive relationships between data leads to fewer bugs** than manually managing updates.
+
+### Fine-Grained Reactivity
+
+`reaktiv` implements **fine-grained reactivity**, meaning only the exact parts of your system that depend on changed data will update. This is much more efficient than coarse-grained approaches that might recalculate entire data structures or trigger unnecessary operations:
+
+```python
+from reaktiv import Signal, Computed, Effect
+
+# Multiple independent data sources
+user_name = Signal("Alice")
+user_age = Signal(30)
+system_status = Signal("online")
+
+# Fine-grained computed values - each only depends on specific signals
+greeting = Computed(lambda: f"Hello, {user_name()}!")
+age_category = Computed(lambda: "adult" if user_age() >= 18 else "minor")
+status_display = Computed(lambda: f"System: {system_status}")
+
+# Effects run once at creation, then only when their specific dependencies change
+greeting_effect = Effect(lambda: print(f"Greeting updated: {greeting()}"))
+# Prints immediately: "Greeting updated: Hello, Alice!"
+age_effect = Effect(lambda: print(f"Age category: {age_category()}"))
+# Prints immediately: "Age category: adult"
+status_effect = Effect(lambda: print(f"Status: {status_display()}"))
+# Prints immediately: "Status: System: online"
+
+# Only greeting_effect runs - age and status effects are unaffected
+user_name.set("Bob")  # Only prints: "Greeting updated: Hello, Bob!"
+
+# Only age_effect runs - greeting and status effects are unaffected  
+user_age.set(25)      # Only prints: "Age category: adult"
+```
+
+### Lazy Evaluation & Memoization
+
+Computed values in `reaktiv` are **lazily evaluated** and **automatically memoized**:
+
+- **Lazy**: Computed values are only calculated when actually accessed
+- **Memoized**: Results are cached until dependencies change
+- **Efficient**: No unnecessary recalculations
+
+```python
+from reaktiv import Signal, Computed
+import time
+
+base_data = Signal([1, 2, 3, 4, 5])
+
+# This expensive computation is only done when the result is actually needed
+expensive_computation = Computed(lambda: [
+    x ** 2 for x in base_data() 
+    if (time.sleep(0.1) or True)  # Simulate expensive work
+])
+
+print("Computed created - no calculation yet!")
+
+# First access: calculation happens
+print(f"First access: {expensive_computation()}")  # Takes ~0.5s
+
+# Second access: memoized result returned instantly
+print(f"Second access: {expensive_computation()}")  # Instant!
+
+# Only recalculates when dependency changes
+base_data.set([1, 2, 3])
+print(f"After change: {expensive_computation()}")   # Recalculates once
+```
+
+This means your application only does the work it actually needs, when it needs it, and caches results intelligently.
 
 The reactive pattern is particularly valuable in Python applications for:
 - Configuration management with cascading overrides

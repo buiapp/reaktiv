@@ -7,7 +7,7 @@ calculations only run when their input parameters change, while
 visualization settings can change without triggering recalculation.
 
 To run this example:
-    pip install numpy matplotlib ipywidgets
+    pip install reaktiv numpy matplotlib ipywidgets
     python examples/numpy_plotting.py
 """
 

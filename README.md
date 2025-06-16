@@ -608,6 +608,17 @@ class MyClass:
         self.effect = Effect(lambda: print(f"Counter: {self.counter()}"))
 ```
 
+**Why this design?** This explicit retention requirement prevents accidental memory leaks. Unlike some reactive systems that automatically keep effects alive indefinitely, `reaktiv` requires you to explicitly manage effect lifetimes. When you no longer need an effect, simply let the variable go out of scope or delete it - the effect will be automatically cleaned up. This gives you control over when reactive behavior starts and stops, preventing long-lived applications from accumulating abandoned effects.
+
+**Manual cleanup:** You can also explicitly dispose of effects when you're done with them:
+
+```python
+my_effect = Effect(lambda: print("This will run"))
+# ... some time later ...
+my_effect.dispose()  # Manually clean up the effect
+# Effect will no longer run when dependencies change
+```
+
 ### Mutable Objects
 By default, reaktiv uses identity comparison. For mutable objects:
 

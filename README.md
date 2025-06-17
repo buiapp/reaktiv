@@ -202,6 +202,45 @@ graph TD
     class LEGEND legend
 ```
 
+### Additional Features That reaktiv Provides
+
+**Lazy Evaluation** - Computations only happen when results are actually needed:
+```python
+# This expensive computation isn't calculated until you access it
+expensive_calc = Computed(lambda: sum(range(1000000)))  # Not calculated yet!
+print(expensive_calc())  # NOW it calculates when you need the result
+print(expensive_calc())  # Instant! (cached result)
+```
+
+**Memoization** - Results are cached until dependencies change:
+```python
+# Results are automatically cached for efficiency
+a1 = Signal(5)
+b1 = Computed(lambda: a1() * 2)  # Define the computation
+
+result1 = b1()  # Calculates: 5 * 2 = 10
+result2 = b1()  # Cached! No recalculation needed
+
+a1.set(6)       # Dependency changed - cache invalidated
+result3 = b1()  # Recalculates: 6 * 2 = 12
+```
+
+**Fine-Grained Reactivity** - Only affected computations recalculate:
+```python
+# Independent data sources don't affect each other
+a1 = Signal(5)    # Independent signal
+d2 = Signal(100)  # Another independent signal
+
+b1 = Computed(lambda: a1() * 2)        # Depends only on a1
+c1 = Computed(lambda: a1() + b1())     # Depends on a1 and b1
+e2 = Computed(lambda: d2() / 10)       # Depends only on d2
+
+a1.set(10)  # Only b1 and c1 recalculate, e2 stays cached
+d2.set(200) # Only e2 recalculates, b1 and c1 stay cached
+```
+
+This intelligent updating means your application only recalculates what actually needs to be updated, making it highly efficient.
+
 ## The Problem This Solves
 
 Consider a simple order calculation:
@@ -323,73 +362,6 @@ graph TD
 ```
 
 This reactive approach comes from frontend frameworks like **Angular** and **SolidJS**, where fine-grained reactivity revolutionized UI development. While those frameworks use this reactive pattern to efficiently update user interfaces, the core insight applies everywhere: **declaring reactive relationships between data leads to fewer bugs** than manually managing updates.
-
-### Fine-Grained Reactivity
-
-`reaktiv` implements **fine-grained reactivity**, meaning only the exact parts of your system that depend on changed data will update. This is much more efficient than coarse-grained approaches that might recalculate entire data structures or trigger unnecessary operations:
-
-```python
-from reaktiv import Signal, Computed, Effect
-
-# Multiple independent data sources
-user_name = Signal("Alice")
-user_age = Signal(30)
-system_status = Signal("online")
-
-# Fine-grained computed values - each only depends on specific signals
-greeting = Computed(lambda: f"Hello, {user_name()}!")
-age_category = Computed(lambda: "adult" if user_age() >= 18 else "minor")
-status_display = Computed(lambda: f"System: {system_status}")
-
-# Effects run once at creation, then only when their specific dependencies change
-greeting_effect = Effect(lambda: print(f"Greeting updated: {greeting()}"))
-# Prints immediately: "Greeting updated: Hello, Alice!"
-age_effect = Effect(lambda: print(f"Age category: {age_category()}"))
-# Prints immediately: "Age category: adult"
-status_effect = Effect(lambda: print(f"Status: {status_display()}"))
-# Prints immediately: "Status: System: online"
-
-# Only greeting_effect runs - age and status effects are unaffected
-user_name.set("Bob")  # Only prints: "Greeting updated: Hello, Bob!"
-
-# Only age_effect runs - greeting and status effects are unaffected  
-user_age.set(25)      # Only prints: "Age category: adult"
-```
-
-### Lazy Evaluation & Memoization
-
-Computed values in `reaktiv` are **lazily evaluated** and **automatically memoized**:
-
-- **Lazy**: Computed values are only calculated when actually accessed
-- **Memoized**: Results are cached until dependencies change
-- **Efficient**: No unnecessary recalculations
-
-```python
-from reaktiv import Signal, Computed
-import time
-
-base_data = Signal([1, 2, 3, 4, 5])
-
-# This expensive computation is only done when the result is actually needed
-expensive_computation = Computed(lambda: [
-    x ** 2 for x in base_data() 
-    if (time.sleep(0.1) or True)  # Simulate expensive work
-])
-
-print("Computed created - no calculation yet!")
-
-# First access: calculation happens
-print(f"First access: {expensive_computation()}")  # Takes ~0.5s
-
-# Second access: memoized result returned instantly
-print(f"Second access: {expensive_computation()}")  # Instant!
-
-# Only recalculates when dependency changes
-base_data.set([1, 2, 3])
-print(f"After change: {expensive_computation()}")   # Recalculates once
-```
-
-This means your application only does the work it actually needs, when it needs it, and caches results intelligently.
 
 The reactive pattern is particularly valuable in Python applications for:
 - Configuration management with cascading overrides

@@ -51,11 +51,12 @@ def batch():
     """Batch multiple signal updates together, deferring computations and effects until completion."""
     global _batch_depth, _current_update_cycle
     _batch_depth += 1
-    # is_outermost_batch = _batch_depth == 1 # Check if this is the start of the outermost batch (useful for debugging)
+    debug_log(f"Batch started, depth now: {_batch_depth}")
     try:
         yield
     finally:
         _batch_depth -= 1
+        debug_log(f"Batch ending, depth now: {_batch_depth}")
         if _batch_depth == 0:
             # Increment the update cycle counter ONLY when the outermost batch completes
             _current_update_cycle += 1
@@ -64,10 +65,12 @@ def batch():
             global _processing_batch
             _processing_batch = True
             try:
-                # Process all deferred notifications
+                # Process all deferred operations in the correct order for glitch-free behavior
+                debug_log("Processing batch completion - starting deferred operations")
                 _process_deferred_notifications()
                 _process_deferred_computed()
                 _process_sync_effects()
+                debug_log("Batch completion finished")
             finally:
                 _processing_batch = False
 
@@ -97,16 +100,70 @@ def _process_deferred_computed() -> None:
     if _batch_depth > 0:
         return
     
-    # Collect all unique subscribers from all computed signals to avoid duplicate notifications
-    unique_subscribers = set()
+    # Track all non-computed subscribers that need notification at the end
+    final_subscribers_to_notify = set()
+    
+    # Process computed signals level by level until queue is empty
     while _deferred_computed_queue:
+        # Take one computed signal at a time to ensure proper ordering
         computed = _deferred_computed_queue.popleft()
         debug_log(f"Processing deferred computed signal: {computed} with {len(computed._subscribers)} subscribers")
-        for subscriber in computed._subscribers:
-            unique_subscribers.add(subscriber)
+        
+        # Only process if there are subscribers and not currently computing
+        if computed._subscribers and not computed._computing:
+            # Check if any dependencies have actually changed
+            # If the signal is not dirty, we don't need to recompute it
+            if computed._dirty:
+                old_value = computed._value
+                
+                try:
+                    new_value = computed.get()  # This will trigger _compute() if dirty
+                    
+                    # Use proper equality checking (respecting custom equality functions)
+                    has_changed = True  # Default to assume changed
+                    if computed._equal is not None:
+                        # Use custom equality function if provided
+                        try:
+                            has_changed = not computed._equal(old_value, new_value) if old_value is not None and new_value is not None else True
+                        except Exception as e:
+                            debug_log(f"Error in custom equality check during batch processing: {e}")
+                            # Default to changed on error
+                    else:
+                        # Default to identity comparison
+                        has_changed = old_value is not new_value
+                    
+                    if has_changed:
+                        debug_log(f"Deferred computed signal {computed} value changed, notifying subscribers")
+                        # Notify subscribers immediately - computed signals will re-queue themselves
+                        for subscriber in computed._subscribers:
+                            debug_log(f"Notifying subscriber: {subscriber}")
+                            # Use isinstance for robust type checking instead of hasattr
+                            if isinstance(subscriber, ComputeSignal):
+                                # Computed signals get immediate notification (may re-queue)
+                                subscriber.notify()
+                            else:
+                                # Non-computed subscribers (effects, etc.) get deferred
+                                final_subscribers_to_notify.add(subscriber)
+                    else:
+                        debug_log(f"Deferred computed signal {computed} value unchanged by equality function, no notifications")
+                        
+                except Exception as e:
+                    debug_log(f"Exception during deferred computed processing: {e}")
+                    # On error, only notify if we were previously in a valid state
+                    # This maintains consistency with normal computation error handling
+                    for subscriber in computed._subscribers:
+                        if isinstance(subscriber, ComputeSignal):
+                            subscriber.notify()
+                        else:
+                            final_subscribers_to_notify.add(subscriber)
+            else:
+                # Signal is not dirty, which means none of its dependencies changed
+                # No need to notify subscribers
+                debug_log(f"Deferred computed signal {computed} is not dirty, no need to recompute or notify")
     
-    # Notify each subscriber only once
-    for subscriber in unique_subscribers:
+    # Notify all non-computed subscribers exactly once at the end
+    for subscriber in final_subscribers_to_notify:
+        debug_log(f"Notifying final subscriber: {subscriber}")
         subscriber.notify()
 
 def _process_sync_effects() -> None:
@@ -411,63 +468,20 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         was_dirty = self._dirty
         self._dirty = True
         
-        # Only notify subscribers if we have a custom equality function and need to check equality
-        # or if we're transitioning from an error state
+        # For glitch-free behavior, defer notifications when:
+        # 1. We're in a batch (as before)
+        # 2. We have a custom equality function that might prevent unnecessary updates
+        debug_log(f"ComputeSignal notify() has {len(self._subscribers)} subscribers")
         if self._subscribers:
-            if self._equal is not None:
-                # We need to compute now to check if the value changed according to our custom equality
-                old_value = self._value
-                
-                # Temporarily clear the dirty flag for computation
-                self._dirty = False
-                self._computing = True
-                try:
-                    # Try to compute the new value
-                    new_value = self._compute_fn()
-                    
-                    # Always update the internal value
-                    self._value = new_value
-                    
-                    # Check if the values are considered equal by our custom equality function
-                    should_notify = True
-                    try:
-                        if old_value is not None and new_value is not None:
-                            if self._equal(old_value, new_value):
-                                debug_log("ComputeSignal values equal according to custom equality, suppressing notification")
-                                should_notify = False
-                    except Exception as e:
-                        debug_log(f"Error in custom equality check: {e}")
-                    
-                    # Only notify if values are not considered equal
-                    if should_notify:
-                        debug_log("ComputeSignal values differ or error in equality check, will notify subscribers")
-                        if _batch_depth > 0 or _processing_batch:
-                            debug_log("ComputeSignal deferring notifications until batch completion")
-                            _deferred_computed_queue.append(self)
-                        else:
-                            self._notify_subscribers()
-                    else:
-                        # Don't reset dirty flag if we have error, so we recompute next time
-                        self._dirty = False
-                except Exception:
-                    # An exception occurred during computation, restore dirty state
-                    debug_log("Exception occurred during ComputeSignal notification check")
-                    self._dirty = True
-                    # Always notify when transitioning to or from error state
-                    if _batch_depth > 0 or _processing_batch:
-                        debug_log("ComputeSignal deferring notifications until batch completion")
-                        _deferred_computed_queue.append(self)
-                    else:
-                        self._notify_subscribers()
-                finally:
-                    self._computing = False
+            if _batch_depth > 0 or _processing_batch:
+                debug_log("ComputeSignal deferring notifications until batch completion")
+                _deferred_computed_queue.append(self)
+            elif self._equal is not None:
+                debug_log("ComputeSignal deferring notifications for custom equality check")
+                _deferred_computed_queue.append(self)
             else:
-                # No custom equality function, always notify
-                if _batch_depth > 0 or _processing_batch:
-                    debug_log("ComputeSignal deferring notifications until batch completion")
-                    _deferred_computed_queue.append(self)
-                else:
-                    self._notify_subscribers()
+                debug_log("ComputeSignal notifying subscribers immediately")
+                self._notify_subscribers()
 
     def set(self, new_value: T) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal - update dependencies instead")

@@ -8,12 +8,12 @@ theme:
     primary: indigo
     accent: indigo
   features:
-    - navigation.tabs
     - navigation.sections
     - navigation.expand
     - navigation.top
     - search.suggest
     - search.highlight
+    - toc.integrate
 
 repo_url: https://github.com/buiapp/reaktiv
 repo_name: buiapp/reaktiv
@@ -41,17 +41,14 @@ plugins:
 
 nav:
   - Home: index.md
-  - Getting Started:
-    - Installation: installation.md
-    - Quick Start: quickstart.md
-    - Why reaktiv?: why-reaktiv.md
+  - Installation: installation.md
+  - Quick Start: quickstart.md
+  - Why reaktiv?: why-reaktiv.md
   - Core Concepts: core-concepts.md
   - API Reference:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
     - Utils: api/utils.md
-  - Advanced:
-    - Advanced Features: advanced-features.md
-  - Examples:
-    - Examples: examples/index.md
+  - Advanced Features: advanced-features.md
+  - Examples: examples/index.md

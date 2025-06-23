@@ -20,7 +20,7 @@ async def test_signal_custom_equality():
         data.get()
         effect_runs += 1
     
-    effect = Effect(effect_fn)
+    _effect = Effect(effect_fn)
     await asyncio.sleep(0)
     
     # Initial run
@@ -50,7 +50,7 @@ async def test_signal_default_equality():
         data.get()
         effect_runs += 1
     
-    effect = Effect(effect_fn)
+    _effect = Effect(effect_fn)
     await asyncio.sleep(0)
     
     # Initial run
@@ -137,7 +137,7 @@ async def test_deep_equality_example():
         data.get()
         effect_runs += 1
     
-    effect = Effect(effect_fn)
+    _effect = Effect(effect_fn)
     await asyncio.sleep(0)
     
     # Initial run
@@ -167,7 +167,7 @@ async def test_deep_equality_example():
         user_data.get()
         profile_updates += 1
     
-    profile_monitor = Effect(profile_effect)
+    _profile_monitor = Effect(profile_effect)
     await asyncio.sleep(0)
     
     # Initial run

@@ -1,4 +1,3 @@
-import pytest
 from reaktiv import Signal, Computed, Effect, filter_signal, pairwise_signal
 
 def test_computed_filter_pairwise_chain():
@@ -23,7 +22,7 @@ def test_computed_filter_pairwise_chain():
         print("Filtered signal:", filtered_signal())
         print("Pairwise output:", pairwise_output())
 
-    log_eff = Effect(log_results)
+    _log_eff = Effect(log_results)
 
     # Effect to collect results
     results = []

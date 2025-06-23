@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 from reaktiv import Signal, ComputeSignal, Effect, batch
 
 
@@ -93,9 +93,9 @@ class TestBatchPerformance:
             computed_z.get()
             effect_all_mock()
         
-        effect1 = Effect(effect_xy)
-        effect2 = Effect(effect_z)
-        effect3 = Effect(effect_all)
+        _effect1 = Effect(effect_xy)
+        _effect2 = Effect(effect_z)
+        _effect3 = Effect(effect_all)
         
         # Wait for initial effect runs
         await asyncio.sleep(0)
@@ -141,7 +141,7 @@ class TestBatchPerformance:
             combined.get()
             effect_mock()
         
-        effect = Effect(diamond_effect)
+        _effect = Effect(diamond_effect)
         
         # Wait for initial effect run
         await asyncio.sleep(0)
@@ -181,7 +181,7 @@ class TestBatchPerformance:
             computed_with_equality.get()
             effect_mock()
         
-        effect = Effect(tracking_effect)
+        _effect = Effect(tracking_effect)
         
         # Wait for initial effect run
         await asyncio.sleep(0)
@@ -304,7 +304,7 @@ class TestBatchPerformance:
             # This test specifically targets the problematic code path in _process_deferred_computed()
             # by manually adding computed signals to the deferred queue
 
-            from reaktiv.core import _deferred_computed_queue, _process_deferred_computed
+            from reaktiv.core import _deferred_computed_queue
 
             # Create signals
             a = Signal(1)
@@ -340,9 +340,9 @@ class TestBatchPerformance:
                 independent_computed.get()
                 effect_independent_mock()
 
-            effect1 = Effect(effect_changing)
-            effect2 = Effect(effect_stable)
-            effect3 = Effect(effect_independent)
+            _effect1 = Effect(effect_changing)
+            _effect2 = Effect(effect_stable)
+            _effect3 = Effect(effect_independent)
 
             # Wait for initial effect runs
             await asyncio.sleep(0)

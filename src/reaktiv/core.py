@@ -386,7 +386,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 # Store any dependency that gets tracked during the computation, even if it fails
                 new_value = self._compute_fn()
                 debug_log(f"ComputeSignal new computed value: {new_value}")
-            except Exception as e:
+            except Exception:
                 # Remember that an exception occurred, but don't handle it here
                 exception_occurred = True
                 # Re-raise the exception after dependency tracking is complete
@@ -412,10 +412,10 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                     has_changed = old_value is not new_value
 
                 if has_changed:
-                    debug_log(f"ComputeSignal value considered changed, queuing subscriber notifications.")
+                    debug_log("ComputeSignal value considered changed, queuing subscriber notifications.")
                     self._queue_notifications()
                 else:
-                    debug_log(f"ComputeSignal value not considered changed, no subscriber notifications.")
+                    debug_log("ComputeSignal value not considered changed, no subscriber notifications.")
 
             # Update dependencies
             for signal in old_deps - self._dependencies:
@@ -465,7 +465,6 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             return
             
         # Mark as dirty so we recompute on next access
-        was_dirty = self._dirty
         self._dirty = True
         
         # For glitch-free behavior, defer notifications when:
@@ -624,8 +623,10 @@ class Effect(DependencyTracker, Subscriber):
                  debug_log("Async effect task cancelled.")
                  # Run new cleanups immediately if cancelled
                  for cleanup in current_cleanups:
-                     try: cleanup()
-                     except Exception: traceback.print_exc()
+                     try:
+                        cleanup()
+                     except Exception:
+                        traceback.print_exc()
                  raise # Re-raise CancelledError
             except Exception:
                 exception_occurred = True
@@ -639,8 +640,10 @@ class Effect(DependencyTracker, Subscriber):
                  debug_log("Effect disposed during async execution, skipping dependency update.")
                  # Run new cleanups immediately if disposed during execution
                  for cleanup in current_cleanups:
-                     try: cleanup()
-                     except Exception: traceback.print_exc()
+                     try:
+                        cleanup()
+                     except Exception:
+                        traceback.print_exc()
                  return # Skip dependency management and storing cleanups
 
             self._cleanups = current_cleanups
@@ -736,8 +739,10 @@ class Effect(DependencyTracker, Subscriber):
                  debug_log("Effect disposed during sync execution, skipping dependency update.")
                  # Run new cleanups immediately if disposed during execution
                  for cleanup in current_cleanups:
-                     try: cleanup()
-                     except Exception: traceback.print_exc()
+                     try:
+                        cleanup()
+                     except Exception:
+                        traceback.print_exc()
                  return # Skip dependency management and storing cleanups
 
             self._cleanups = current_cleanups

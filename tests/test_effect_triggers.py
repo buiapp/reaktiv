@@ -1,7 +1,5 @@
-import pytest
 from typing import List
 from reaktiv import Signal, Computed, Effect, batch
-from reaktiv.core import set_debug
 
 
 def test_effect_trigger_count():
@@ -63,8 +61,8 @@ def test_complex_dependency_chain():
         nonlocal trigger_count
         trigger_count += 1
         # Access both computed signals to establish dependencies
-        d_val = d()
-        e_val = e()
+        _d_val = d()
+        _e_val = e()
     
     # Act
     eff = Effect(track_effect)

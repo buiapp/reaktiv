@@ -1,7 +1,7 @@
 import asyncio
 import time
 import warnings
-from typing import TypeVar, Callable, Generic, Optional, Union, Set, List, Tuple, Any
+from typing import TypeVar, Callable, Generic, Optional, Union, Tuple, Any
 from weakref import WeakSet
 from .core import (
     Signal, ComputeSignal, Effect, _current_effect, Subscriber, debug_log,
@@ -138,7 +138,7 @@ class _OperatorSignal(Generic[T]):
     def notify(self) -> None:
         """Satisfies Subscriber protocol via duck typing. No-op for OperatorSignal."""
         # This signal is notified by its internal Effect, not directly by its sources.
-        debug_log(f"OperatorSignal.notify called (likely NO-OP needed)")
+        debug_log("OperatorSignal.notify called (likely NO-OP needed)")
         pass
 
     # --- Cleanup --- 
@@ -391,11 +391,11 @@ def throttle_signal(
                 throttled_sig._update_value(value)
                 # Check if the value actually changed before updating last_emit_time
                 if not throttled_sig._equal(value_before_update, throttled_sig._value):
-                    debug_log(f"Throttle: Leading value caused update, updating last_emit_time")
+                    debug_log("Throttle: Leading value caused update, updating last_emit_time")
                     last_emit_time = current_time
                     has_trailing_value = False # Leading emit consumed the value
                 else:
-                    debug_log(f"Throttle: Leading value did not cause update, last_emit_time unchanged")
+                    debug_log("Throttle: Leading value did not cause update, last_emit_time unchanged")
 
             elif trailing:
                  debug_log(f"Throttle: interval passed, leading=False, scheduling trailing timer for {interval_seconds}s")
@@ -484,7 +484,8 @@ def pairwise_signal(
         current_value = source.get()
 
         # Get the source's equality function
-        default_equal = lambda a, b: a is b
+        def default_equal(a: Any, b: Any) -> bool:
+            return a == b if a is not None and b is not None else a is b
         source_equal = getattr(source, '_equal', default_equal)
         
         if source_equal is None:

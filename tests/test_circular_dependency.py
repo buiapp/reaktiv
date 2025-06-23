@@ -1,6 +1,5 @@
 import pytest
 from reaktiv import Signal, Computed, Effect
-from reaktiv.core import set_debug
 
 def test_simple_circular_dependency():
     """Test detection of a simple circular dependency between two computed signals."""

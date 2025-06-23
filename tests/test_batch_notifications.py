@@ -19,7 +19,7 @@ async def test_batch_effect_notifications():
         effect_calls.append((sum_xy(), product_xy()))
     
     # Register effect
-    tracker = Effect(track_changes)
+    _tracker = Effect(track_changes)
     
     # Wait for initial effect to complete
     await asyncio.sleep(0.01)
@@ -74,7 +74,7 @@ async def test_batch_sync_effect_notifications():
         effect_calls.append((sum_ab(), diff_ab()))
     
     # Register sync effect
-    tracker = Effect(track_changes_sync)
+    _tracker = Effect(track_changes_sync)
     
     # Verify initial call
     assert len(effect_calls) == 1

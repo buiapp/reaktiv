@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 from typing import List, Any, Callable, Coroutine # Added Callable, Coroutine
-from reaktiv.core import Signal, Effect, set_debug
+from reaktiv.core import Signal, Effect
 from reaktiv.operators import filter_signal, debounce_signal, throttle_signal
 
 # Enable debug logging for tests if helpful

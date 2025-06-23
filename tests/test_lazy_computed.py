@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import Mock, call
-from reaktiv import Signal, ComputeSignal, Effect
+from unittest.mock import Mock
+from reaktiv import Signal, ComputeSignal
 
 import reaktiv.core as rc
 

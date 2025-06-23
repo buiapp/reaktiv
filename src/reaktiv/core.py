@@ -33,6 +33,7 @@ def debug_log(msg: str) -> None:
 _batch_depth = 0
 _processing_batch = False  # Flag to track when we're processing batch notifications
 _sync_effect_queue: Set['Effect'] = set()
+_async_effect_queue: Set['Effect'] = set()
 _deferred_computed_queue: Deque['ComputeSignal'] = deque()
 _deferred_signal_notifications: List[Tuple['Signal', List['Subscriber']]] = []
 _computation_stack: contextvars.ContextVar[List['ComputeSignal']] = contextvars.ContextVar(
@@ -70,6 +71,7 @@ def batch():
                 _process_deferred_notifications()
                 _process_deferred_computed()
                 _process_sync_effects()
+                _process_async_effects()
                 debug_log("Batch completion finished")
             finally:
                 _processing_batch = False
@@ -176,6 +178,21 @@ def _process_sync_effects() -> None:
         for effect in effects:
             if not effect._disposed and effect._dirty:
                 effect._execute_sync()
+
+def _process_async_effects() -> None:
+    """Process async effects by creating tasks for each unique effect in the queue."""
+    global _async_effect_queue
+    if _batch_depth > 0:
+        return
+    
+    # Create tasks for all queued async effects
+    async_effects = list(_async_effect_queue)
+    _async_effect_queue.clear()
+    
+    for effect in async_effects:
+        if not effect._disposed and not effect._executing:
+            debug_log(f"Creating async task for batched effect: {effect}")
+            effect._async_task = asyncio.create_task(effect._run_effect_func_async())
 
 # --------------------------------------------------
 # Reactive Core
@@ -319,6 +336,7 @@ class Signal(Generic[T]):
             debug_log("Signal set() is top-level trigger, processing deferred computed and sync effects.")
             _process_deferred_computed() # Process any computed signals dirtied by this set
             _process_sync_effects()      # Process any effects dirtied by this set or computed signals
+            _process_async_effects()
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         """Update the signal's value using a function that receives the current value."""
@@ -562,12 +580,12 @@ class Effect(DependencyTracker, Subscriber):
             return
 
         if self._is_async:
-            # Schedule the async task to run if not already executing
+            # Queue async effect for batched processing
             if not self._executing:
-                debug_log("Scheduling async effect execution via notify.")
-                self._async_task = asyncio.create_task(self._run_effect_func_async())
+                debug_log("Queueing async effect for batched processing.")
+                _async_effect_queue.add(self)
             else:
-                debug_log("Async effect already running, notify() skipped task creation.")
+                debug_log("Async effect already running, notify() skipped queueing.")
         else:
             # Mark sync effect as dirty for processing later
             self._mark_dirty()

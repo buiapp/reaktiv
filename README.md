@@ -504,6 +504,8 @@ async def async_effect():
 my_async_effect = Effect(async_effect)
 ```
 
+**Note:** Async effects are "fire and forget" - they run asynchronously without blocking signal updates. In contrast to synchronous effects (where we wait for the effect to finish running after setting a signal), async effects are triggered but don't block the signal update process. This means signal updates complete immediately while async effects run in the background.
+
 ### Untracked Reads
 Use `untracked()` to read signals without creating dependencies:
 

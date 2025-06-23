@@ -1,6 +1,6 @@
 import asyncio
 import random
-from reaktiv import Signal, Computed, Effect
+from reaktiv import Signal, Computed, Effect, batch
 
 
 async def main():
@@ -60,9 +60,10 @@ async def main():
     # Simulate periodic sensor updates.
     for _ in range(15):
         await asyncio.sleep(2)
-        update_sensor(sensor1, "Sensor1")
-        update_sensor(sensor2, "Sensor2")
-        update_sensor(sensor3, "Sensor3")
+        with batch():
+            update_sensor(sensor1, "Sensor1")
+            update_sensor(sensor2, "Sensor2")
+            update_sensor(sensor3, "Sensor3")
 
     # Allow any pending effects to process.
     await asyncio.sleep(1)

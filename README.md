@@ -556,6 +556,47 @@ def update_person():
 batch(update_person)  # Only prints once: "Charlie, 35, Chicago"
 ```
 
+### Error Handling
+
+Proper error handling is crucial to prevent cascading failures:
+
+```python
+from reaktiv import Signal, Computed, Effect
+
+# Example: Division computation that can fail
+numerator = Signal(10)
+denominator = Signal(2)
+
+# Unsafe computation - can throw ZeroDivisionError
+unsafe_division = Computed(lambda: numerator() / denominator())
+
+# Safe computation with error handling
+def safe_divide():
+    try:
+        return numerator() / denominator()
+    except ZeroDivisionError:
+        return float('inf')  # or return 0, or handle as needed
+
+safe_division = Computed(safe_divide)
+
+# Error handling in effects
+def safe_print():
+    try:
+        unsafe_result = unsafe_division()
+        print(f"Unsafe result: {unsafe_result}")
+    except ZeroDivisionError:
+        print("Error: Division by zero!")
+    
+    safe_result = safe_division()
+    print(f"Safe result: {safe_result}")
+
+effect = Effect(safe_print)
+
+# Test error scenarios
+denominator.set(0)  # Triggers ZeroDivisionError in unsafe computation
+# Prints: "Error: Division by zero!" and "Safe result: inf"
+```
+
 ## Important Notes
 
 ### ⚠️ Effect Retention (Critical!)

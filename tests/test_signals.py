@@ -3,18 +3,21 @@ import asyncio
 from reaktiv import Signal, Effect, ComputeSignal, batch, untracked
 import reaktiv.core as rc
 
-rc.set_debug(True) 
+rc.set_debug(True)
+
 
 @pytest.mark.asyncio
 async def test_signal_initialization():
     signal = Signal(42)
     assert signal.get() == 42
 
+
 @pytest.mark.asyncio
 async def test_signal_set_value():
     signal = Signal(0)
     signal.set(5)
     assert signal.get() == 5
+
 
 @pytest.mark.asyncio
 async def test_basic_effect_execution():
@@ -28,11 +31,12 @@ async def test_basic_effect_execution():
 
     _effect = Effect(test_effect)
     await asyncio.sleep(0)
-    
+
     signal.set(1)
     await asyncio.sleep(0)
-    
+
     assert execution_count == 2
+
 
 @pytest.mark.asyncio
 async def test_effect_dependency_tracking():
@@ -49,18 +53,19 @@ async def test_effect_dependency_tracking():
     _effect = Effect(test_effect)
     # effect is automatically scheduled now
     await asyncio.sleep(0)
-    
+
     signal2.set("new")
     await asyncio.sleep(0)
     assert execution_count == 1
-    
+
     signal1.set(1)
     await asyncio.sleep(0)
     assert execution_count == 2
-    
+
     signal2.set("another")
     await asyncio.sleep(0)
     assert execution_count == 3
+
 
 @pytest.mark.asyncio
 async def test_effect_disposal():
@@ -75,15 +80,16 @@ async def test_effect_disposal():
     effect = Effect(test_effect)
     # effect is automatically scheduled now
     await asyncio.sleep(0)
-    
+
     signal.set(1)
     await asyncio.sleep(0)
     assert execution_count == 2
-    
+
     effect.dispose()
     signal.set(2)
     await asyncio.sleep(0)
     assert execution_count == 2
+
 
 @pytest.mark.asyncio
 async def test_multiple_effects():
@@ -102,11 +108,12 @@ async def test_multiple_effects():
     _e2 = Effect(effect2)
     # effects are automatically scheduled now
     await asyncio.sleep(0)
-    
+
     signal.set(1)
     await asyncio.sleep(0)
-    
+
     assert executions == [2, 2]
+
 
 @pytest.mark.asyncio
 async def test_async_effect():
@@ -120,11 +127,12 @@ async def test_async_effect():
     _effect = Effect(async_effect)
     # effect is automatically scheduled now
     await asyncio.sleep(0.02)
-    
+
     signal.set(1)
     await asyncio.sleep(0.02)
-    
+
     assert results == [0, 1]
+
 
 @pytest.mark.asyncio
 async def test_effect_error_handling(capsys):
@@ -137,13 +145,14 @@ async def test_effect_error_handling(capsys):
     _effect = Effect(error_effect)
     # effect is automatically scheduled now
     await asyncio.sleep(0)
-    
+
     signal.set(1)
     await asyncio.sleep(0)
-    
+
     captured = capsys.readouterr()
     assert "Test error" in captured.err
     assert "ValueError" in captured.err
+
 
 @pytest.mark.asyncio
 async def test_memory_management():
@@ -155,13 +164,14 @@ async def test_memory_management():
     effect = Effect(test_effect)
     # effect is automatically scheduled now
     await asyncio.sleep(0)
-    
+
     assert len(signal._subscribers) == 1
-    
+
     effect.dispose()
     await asyncio.sleep(0)
-    
+
     assert len(signal._subscribers) == 0
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_basic():
@@ -170,6 +180,7 @@ async def test_compute_signal_basic():
     assert doubled.get() == 10
     source.set(6)
     assert doubled.get() == 12
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_dependencies():
@@ -181,6 +192,7 @@ async def test_compute_signal_dependencies():
     assert sum_signal.get() == 7
     b.set(5)
     assert sum_signal.get() == 9
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_nested():
@@ -194,15 +206,16 @@ async def test_compute_signal_nested():
     increment.set(2)
     assert doubled.get() == 44  # (20+2)*2
 
+
 @pytest.mark.asyncio
 async def test_compute_signal_effect():
     source = Signal(0)
     squared = ComputeSignal(lambda: source.get() ** 2)
     log = []
-    
+
     async def log_squared():
         log.append(squared.get())
-    
+
     _effect = Effect(log_squared)
     # effect is automatically scheduled now
     await asyncio.sleep(0)
@@ -210,23 +223,25 @@ async def test_compute_signal_effect():
     await asyncio.sleep(0)
     assert log == [0, 4]
 
+
 @pytest.mark.asyncio
 async def test_compute_dynamic_dependencies():
     switch = Signal(True)
     a = Signal(10)
     b = Signal(20)
-    
+
     dynamic = ComputeSignal(lambda: a.get() if switch.get() else b.get())
     assert dynamic.get() == 10
-    
+
     switch.set(False)
     assert dynamic.get() == 20
-    
+
     a.set(15)  # Shouldn't affect dynamic now
     assert dynamic.get() == 20
-    
+
     switch.set(True)
     assert dynamic.get() == 15
+
 
 @pytest.mark.asyncio
 async def test_diamond_dependency():
@@ -251,16 +266,15 @@ async def test_diamond_dependency():
     await asyncio.sleep(0)
     assert c.get() == 10  # (3+1) + (3*2) = 4 + 6 = 10
 
+
 @pytest.mark.asyncio
 async def test_dynamic_dependencies():
     """Test computed signals that change their dependencies dynamically"""
     switch = Signal(True)
     a = Signal(10)
     b = Signal(20)
-    
-    c = ComputeSignal(
-        lambda: a.get() if switch.get() else b.get()
-    )
+
+    c = ComputeSignal(lambda: a.get() if switch.get() else b.get())
 
     # Initial state
     assert c.get() == 10
@@ -280,6 +294,7 @@ async def test_dynamic_dependencies():
     await asyncio.sleep(0)
     assert c.get() == 25
 
+
 @pytest.mark.asyncio
 async def test_deep_nesting():
     """Test 3-level deep computed signal dependencies"""
@@ -293,6 +308,7 @@ async def test_deep_nesting():
     base.set(3)
     await asyncio.sleep(0)
     assert level3.get() == 33  # ((3*2)+5)*3
+
 
 @pytest.mark.asyncio
 async def test_overlapping_updates():
@@ -310,6 +326,7 @@ async def test_overlapping_updates():
     y.set(1)
     await asyncio.sleep(0)
     assert c.get() == 15  # (4+1) * (4-1) = 5*3
+
 
 @pytest.mark.asyncio
 async def test_signal_computed_effect_triggers_once():
@@ -330,8 +347,8 @@ async def test_signal_computed_effect_triggers_once():
 
     def my_effect():
         nonlocal effect_run_count
-        val_a = a.get()   # ensures subscription to 'a'
-        val_b = b.get()   # ensures subscription to 'b'
+        val_a = a.get()  # ensures subscription to 'a'
+        val_b = b.get()  # ensures subscription to 'b'
         effect_run_count += 1
         observed_values.append((val_a, val_b))
 
@@ -346,15 +363,20 @@ async def test_signal_computed_effect_triggers_once():
     a.set(2)
     await asyncio.sleep(0.1)
 
-    assert effect_run_count == 2, "Updating 'a' once should trigger exactly one new effect run."
+    assert effect_run_count == 2, (
+        "Updating 'a' once should trigger exactly one new effect run."
+    )
     assert observed_values[-1] == (2, 12), "Expected a=2, b=12 after first update."
 
     # 6) Update 'a' again => 'b' changes again => effect triggers once more
     a.set(5)
     await asyncio.sleep(0.1)
 
-    assert effect_run_count == 3, "Updating 'a' again should trigger exactly one new effect run."
+    assert effect_run_count == 3, (
+        "Updating 'a' again should trigger exactly one new effect run."
+    )
     assert observed_values[-1] == (5, 15), "Expected a=5, b=15 after second update."
+
 
 @pytest.mark.asyncio
 async def test_signal_computed_async_effect_triggers_once():
@@ -402,15 +424,20 @@ async def test_signal_computed_async_effect_triggers_once():
     # Wait enough time for the async effect to run
     await asyncio.sleep(0.1)
 
-    assert effect_run_count == 2, "Updating 'a' to 2 should trigger exactly one new effect run."
+    assert effect_run_count == 2, (
+        "Updating 'a' to 2 should trigger exactly one new effect run."
+    )
     assert observed_values[-1] == (2, 12), "Expected a=2, b=12 after the update."
 
     # 6) Update 'a' again => 'b' changes => effect triggers once more
     a.set(5)
     await asyncio.sleep(0.1)
 
-    assert effect_run_count == 3, "Updating 'a' to 5 should trigger exactly one new effect run."
+    assert effect_run_count == 3, (
+        "Updating 'a' to 5 should trigger exactly one new effect run."
+    )
     assert observed_values[-1] == (5, 15), "Expected a=5, b=15 after the update."
+
 
 @pytest.mark.asyncio
 async def test_no_redundant_triggers():
@@ -551,6 +578,7 @@ async def test_no_redundant_triggers():
     # when values were unchanged, and exactly one trigger happened
     # per legitimate value change.
 
+
 @pytest.mark.asyncio
 async def test_backpressure(capsys):
     """
@@ -558,7 +586,7 @@ async def test_backpressure(capsys):
     can handle multiple rapid signal updates without race conditions
     or missed updates (backpressure test).
     """
-    
+
     # Create two signals
     a = Signal(0)
     b = Signal(0)
@@ -580,7 +608,7 @@ async def test_backpressure(capsys):
 
     # Wait for initial effects to run
     await asyncio.sleep(0.1)
-    
+
     # Clear previous output
     capsys.readouterr()
 
@@ -598,17 +626,17 @@ async def test_backpressure(capsys):
         a.set(i + 1)  # Set to 1, 2, 3
         print(f"Async set: {a.get()}")
         await asyncio.sleep(0.1)  # Ensure each async effect runs before next update
-    
+
     # Wait for all async effects to complete
     await asyncio.sleep(0.2)
     print("Done.")
 
     # Capture the output and check for correctness
     captured = capsys.readouterr().out
-    
+
     # Check that the Sync effect read all values
     assert "Sync read: 1" in captured, "Missing sync read 1"
-    assert "Sync read: 2" in captured, "Missing sync read 2" 
+    assert "Sync read: 2" in captured, "Missing sync read 2"
     assert "Sync read: 3" in captured, "Missing sync read 3"
 
     # Check that the Async effect read all values
@@ -621,6 +649,7 @@ async def test_backpressure(capsys):
     assert "Async set:" in captured
     assert "Done." in captured
 
+
 @pytest.mark.asyncio
 async def test_signal_update_basic():
     """Test basic signal update functionality"""
@@ -628,47 +657,50 @@ async def test_signal_update_basic():
     signal.update(lambda x: x * 2)
     assert signal.get() == 10
 
+
 @pytest.mark.asyncio
 async def test_signal_update_effect():
     """Test that updating a signal triggers effects"""
     signal = Signal(0)
     executions = 0
-    
+
     async def effect():
         nonlocal executions
         signal.get()
         executions += 1
-    
+
     _eff = Effect(effect)
     await asyncio.sleep(0)
-    
+
     # Initial effect run
     assert executions == 1
-    
+
     signal.update(lambda x: x + 1)
     await asyncio.sleep(0)
-    
+
     # Should trigger effect again
     assert executions == 2
+
 
 @pytest.mark.asyncio
 async def test_signal_update_no_change():
     """Test no effect trigger when value doesn't change"""
     signal = Signal(5)
     executions = 0
-    
+
     async def effect():
         nonlocal executions
         signal.get()
         executions += 1
-    
+
     _eff = Effect(effect)
     await asyncio.sleep(0)
-    
+
     signal.update(lambda x: x)  # Returns same value
     await asyncio.sleep(0)
-    
+
     assert executions == 1  # No additional execution
+
 
 @pytest.mark.asyncio
 async def test_batch_basic():
@@ -677,50 +709,52 @@ async def test_batch_basic():
     b = Signal(2)
     c = ComputeSignal(lambda: a.get() + b.get())
     executions = 0
-    
+
     async def effect():
         nonlocal executions
         a.get()
         b.get()
         executions += 1
-    
+
     _eff = Effect(effect)
     await asyncio.sleep(0)
-    
+
     # Initial execution
     assert c.get() == 3
     assert executions == 1
-    
+
     with batch():
         a.set(2)
         b.set(3)
-    
+
     await asyncio.sleep(0)
     assert c.get() == 5
     assert executions == 2  # Only one additional execution
+
 
 @pytest.mark.asyncio
 async def test_batch_nested():
     """Test nested batch operations"""
     a = Signal(1)
     executions = 0
-    
+
     async def effect():
         nonlocal executions
         a.get()
         executions += 1
-    
+
     _eff = Effect(effect)
     await asyncio.sleep(0)
-    
+
     with batch():
         with batch():
             a.set(2)
             a.set(3)
         a.set(4)
-    
+
     await asyncio.sleep(0)
     assert executions == 2  # Initial + one batch update
+
 
 @pytest.mark.asyncio
 async def test_batch_with_computed():
@@ -728,22 +762,23 @@ async def test_batch_with_computed():
     a = Signal(1)
     b = ComputeSignal(lambda: a.get() * 2)
     executions = 0
-    
+
     async def effect():
         nonlocal executions
         b.get()
         executions += 1
-    
+
     _eff = Effect(effect)
     await asyncio.sleep(0)
-    
+
     with batch():
         a.set(2)
         a.set(3)
-    
+
     await asyncio.sleep(0)
     assert executions == 2  # Initial + one update after batch
     assert b.get() == 6
+
 
 @pytest.mark.asyncio
 async def test_untracked(capsys):
@@ -778,12 +813,13 @@ async def test_untracked(capsys):
     await asyncio.sleep(0)
     assert effect_count == 2  # Should remain unchanged
 
+
 def test_untracked_direct_signal():
     """Test that untracked can be called with a signal directly as an argument."""
     tracked_signal = Signal(1)
     untracked_signal = Signal(10)
     effect_count = 0
-    
+
     # Use these lists to track values instead of printing to console
     tracked_values = []
     untracked_values = []
@@ -791,20 +827,20 @@ def test_untracked_direct_signal():
     def effect_fn():
         nonlocal effect_count
         effect_count += 1
-        
+
         # Get and track values
         tracked_val = tracked_signal.get()
         tracked_values.append(tracked_val)
-        
+
         # Use the direct signal argument approach
         untracked_val = untracked(untracked_signal)  # No lambda needed
-        
+
         # Also test the original lambda approach for comparison
         untracked_val2 = untracked(lambda: untracked_signal.get())
-        
+
         # Track the untracked value
         untracked_values.append(untracked_val)
-        
+
         # Both approaches should give the same result
         assert untracked_val == untracked_val2
 
@@ -819,29 +855,35 @@ def test_untracked_direct_signal():
     tracked_signal.set(2)
     assert effect_count == 2
     assert tracked_values == [1, 2]
-    assert untracked_values == [10, 10]  # Still 10, as we haven't updated untracked_signal yet
+    assert untracked_values == [
+        10,
+        10,
+    ]  # Still 10, as we haven't updated untracked_signal yet
 
     # Update untracked signal - should not trigger effect regardless of how untracked was called
     untracked_signal.set(20)
     assert effect_count == 2  # Should remain unchanged
     assert len(tracked_values) == 2  # No additional tracked values
     assert len(untracked_values) == 2  # No additional untracked values
-    
+
     # Verify the updated value is returned by both untracked approaches
     assert untracked(untracked_signal) == 20
     assert untracked(lambda: untracked_signal.get()) == 20
+
 
 @pytest.mark.asyncio
 async def test_effect_cleanup(capsys):
     a = Signal(0)
     cleanup_called = []
-    
+
     async def effect_fn(on_cleanup):
         a.get()
         cleanup_called.append(False)
+
         def cleanup():
             cleanup_called[-1] = True
             print(f"Cleanup executed: {a.get()}")
+
         on_cleanup(cleanup)
         print(f"Effect ran: {a.get()}")
 
@@ -865,29 +907,33 @@ async def test_effect_cleanup(capsys):
     await asyncio.sleep(0)
     assert cleanup_called == [True, True]
 
+
 @pytest.mark.asyncio
 async def test_cleanup_on_dispose():
     cleanup_called = False
-    
+
     def effect_fn(on_cleanup):
         nonlocal cleanup_called
+
         def cleanup():
             nonlocal cleanup_called
             cleanup_called = True
+
         on_cleanup(cleanup)
 
     effect = Effect(effect_fn)
     await asyncio.sleep(0)
-    
+
     assert not cleanup_called
     effect.dispose()
     assert cleanup_called
+
 
 @pytest.mark.asyncio
 async def test_multiple_cleanups():
     cleanups = []
     a = Signal(0)
-    
+
     async def effect_fn(on_cleanup):
         a.get()
         on_cleanup(lambda: cleanups.append(1))
@@ -895,16 +941,17 @@ async def test_multiple_cleanups():
 
     effect = Effect(effect_fn)
     await asyncio.sleep(0)
-    
+
     assert cleanups == []
-    
+
     a.set(1)
     await asyncio.sleep(0)
     assert cleanups == [1, 2]
-    
+
     cleanups.clear()
     effect.dispose()
     assert cleanups == [1, 2]
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_exception_propagation():
@@ -913,25 +960,26 @@ async def test_compute_signal_exception_propagation():
     source = Signal(0)
     # Now using division to match expected math results: 10 divided by source value
     computed = ComputeSignal(lambda: 10 / source.get())
-    
+
     # Initially, since source is 0, trying to access the computed signal should raise an exception
     with pytest.raises(ZeroDivisionError):
         computed.get()
-    
+
     # After setting source to a valid value, should compute normally
     source.set(2)
     assert computed.get() == 5
-    
+
     # Make source a subscriber of the computed signal to ensure notification
-    source.subscribe(computed) 
-    
-    source.set(5) 
+    source.subscribe(computed)
+
+    source.set(5)
     assert computed.get() == 2
-    
+
     # Setting source back to 0 should raise an exception again
     source.set(0)
     with pytest.raises(ZeroDivisionError):
         computed.get()
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_exception_with_multiple_dependencies():
@@ -939,35 +987,38 @@ async def test_compute_signal_exception_with_multiple_dependencies():
     a = Signal(5)
     b = Signal(3)
     computed = ComputeSignal(
-        lambda: a.get() + b.get() if a.get() is not None and b.get() is not None else None
+        lambda: a.get() + b.get()
+        if a.get() is not None and b.get() is not None
+        else None
     )
-    
+
     # Initially, should compute normally
     assert computed.get() == 8  # 5 + 3
-    
+
     # Setting either signal to None should now result in None
     a.set(None)
     assert computed.get() is None
-    
+
     # Setting back to valid values should compute properly
     a.set(10)
     assert computed.get() == 13  # 10 + 3
-    
+
     # Test with exception in computation
     def problematic_compute():
         if a.get() < 0 or b.get() < 0:
             raise ValueError("Negative values not allowed")
         return a.get() + b.get()
-    
+
     computed_with_validation = ComputeSignal(problematic_compute)
-    
+
     # Should work with valid values
     assert computed_with_validation.get() == 13  # 10 + 3
-    
+
     # Should raise exception with negative values
     a.set(-5)
     with pytest.raises(ValueError, match="Negative values not allowed"):
         computed_with_validation.get()
+
 
 @pytest.mark.asyncio
 async def test_compute_signal_equality_function():
@@ -976,77 +1027,78 @@ async def test_compute_signal_equality_function():
     # that considers numbers equal if they're within 0.5 of each other
     source = Signal(1)
     computed_with_tolerance = ComputeSignal(
-        lambda: source.get() * 3.333,
-        equal=lambda a, b: abs(a - b) < 0.5
+        lambda: source.get() * 3.333, equal=lambda a, b: abs(a - b) < 0.5
     )
-    
+
     # Create a tracking mechanism for effect triggers
     effect_executions = 0
-    
+
     async def track_effect():
         nonlocal effect_executions
         computed_with_tolerance.get()
         effect_executions += 1
-    
+
     # Create and schedule the effect
     _eff = Effect(track_effect)
     await asyncio.sleep(0)
-    
+
     # Initial execution
     assert effect_executions == 1
     _initial_value = computed_with_tolerance.get()
-    
+
     # Test a small change that should be considered "equal" by our custom function
     source.set(1.1)  # 1.1 * 3.333 ≈ 3.67, which is within 0.5 of the original value
     await asyncio.sleep(0)
     # Effect should NOT have executed again
     assert effect_executions == 1
-    
+
     # Test a larger change that should NOT be considered equal
     source.set(1.5)  # 1.5 * 3.333 = 5.0, which is NOT within 0.5 of the original value
     await asyncio.sleep(0)
     # Effect should have executed again
     assert effect_executions == 2
 
+
 @pytest.mark.asyncio
 async def test_compute_signal_custom_equality():
     """Test ComputeSignal with a more complex custom equality function"""
+
     # Create a signal with object values
     class Item:
         def __init__(self, category, value):
             self.category = category
             self.value = value
-    
+
     source = Signal(Item("A", 100))
-    
+
     # Computed signal that extracts relevant data but uses an equality function
     # that only considers the category for equality
     computed_category_aware = ComputeSignal(
         lambda: {"category": source.get().category, "value": source.get().value},
-        equal=lambda a, b: a and b and a.get("category") == b.get("category")
+        equal=lambda a, b: a and b and a.get("category") == b.get("category"),
     )
-    
+
     # Track the computed value changes
     computed_updates = []
-    
+
     def track_computed_changes():
         value = computed_category_aware.get()
         computed_updates.append(dict(value))  # Make a copy
-    
+
     # Set up an effect to track changes
     _track_effect = Effect(track_computed_changes)
     await asyncio.sleep(0)
-    
+
     # Initial update recorded
     assert len(computed_updates) == 1
     assert computed_updates[0] == {"category": "A", "value": 100}
-    
+
     # Update the value but keep the category the same
     source.set(Item("A", 200))
     await asyncio.sleep(0)
     # No new update should be recorded since the category is the same
     assert len(computed_updates) == 1
-    
+
     # Update the category
     source.set(Item("B", 200))
     await asyncio.sleep(0)
@@ -1054,11 +1106,12 @@ async def test_compute_signal_custom_equality():
     assert len(computed_updates) == 2
     assert computed_updates[1] == {"category": "B", "value": 200}
 
+
 @pytest.mark.asyncio
 async def test_compute_signal_none_handling():
     """Test ComputeSignal equality handling with None values"""
     source = Signal(None)
-    
+
     # Computed signal with a custom equality function that handles None
     def safe_equal(a, b):
         if a is None and b is None:
@@ -1067,39 +1120,37 @@ async def test_compute_signal_none_handling():
             return False
         # For non-None values, consider them equal if they have the same string representation
         return str(a) == str(b)
-    
-    computed_with_safe_equality = ComputeSignal(
-        lambda: source.get(),
-        equal=safe_equal
-    )
-    
+
+    computed_with_safe_equality = ComputeSignal(lambda: source.get(), equal=safe_equal)
+
     # Track updates
     updates = []
-    
+
     def track():
         updates.append(computed_with_safe_equality.get())
-    
+
     _eff = Effect(track)
     await asyncio.sleep(0)
-    
+
     # Initial update
     assert updates == [None]
-    
+
     # Setting to None again shouldn't trigger an update
     source.set(None)
     await asyncio.sleep(0)
     assert len(updates) == 1
-    
+
     # Setting to a value should trigger an update
     source.set("test")
     await asyncio.sleep(0)
     assert len(updates) == 2
     assert updates[-1] == "test"
-    
+
     # Setting to a number that converts to the same string shouldn't trigger
     source.set("test")  # Same string, no update
     await asyncio.sleep(0)
     assert len(updates) == 2
+
 
 @pytest.mark.asyncio
 async def test_effect_with_computed_exception(capsys):
@@ -1107,10 +1158,10 @@ async def test_effect_with_computed_exception(capsys):
     source = Signal(1)
     # Create a computed signal that will throw an error when source is 0
     computed = ComputeSignal(lambda: 10 / source.get())
-    
+
     effect_runs = 0
     error_caught = False
-    
+
     def effect_fn():
         nonlocal effect_runs, error_caught
         effect_runs += 1
@@ -1120,37 +1171,38 @@ async def test_effect_with_computed_exception(capsys):
         except Exception as e:
             error_caught = True
             print(f"Effect caught exception: {e}")
-    
+
     # Create the effect
     _effect = Effect(effect_fn)
-    
+
     # Initial run - computation should succeed
     await asyncio.sleep(0)
     assert effect_runs == 1
     assert not error_caught
-    
+
     # Change source to a value that will cause exception
     source.set(0)
     await asyncio.sleep(0)
-    
+
     # Effect should have run again, and caught the exception
     assert effect_runs == 2
     assert error_caught
-    
+
     # Change source back to valid value
     error_caught = False  # Reset flag
     source.set(2)
     await asyncio.sleep(0)
-    
+
     # Effect should run again and succeed
     assert effect_runs == 3
     assert not error_caught
-    
+
     # Check console output
     captured = capsys.readouterr()
     assert "Effect got computed value: 10.0" in captured.out  # First run (10/1)
     assert "Effect caught exception: division by zero" in captured.out  # Second run
     assert "Effect got computed value: 5.0" in captured.out  # Third run (10/2)
+
 
 @pytest.mark.asyncio
 async def test_async_effect_with_computed_exception(capsys):
@@ -1158,10 +1210,10 @@ async def test_async_effect_with_computed_exception(capsys):
     source = Signal(1)
     # Create a computed signal that will throw an error when source is 0
     computed = ComputeSignal(lambda: 10 / source.get())
-    
+
     effect_runs = 0
     error_caught = False
-    
+
     async def async_effect_fn():
         nonlocal effect_runs, error_caught
         effect_runs += 1
@@ -1173,50 +1225,53 @@ async def test_async_effect_with_computed_exception(capsys):
         except Exception as e:
             error_caught = True
             print(f"Async effect caught exception: {e}")
-    
+
     # Create the async effect
     _effect = Effect(async_effect_fn)
-    
+
     # Initial run - computation should succeed
     await asyncio.sleep(0.05)
     assert effect_runs == 1
     assert not error_caught
-    
+
     # Change source to a value that will cause exception
     source.set(0)
     await asyncio.sleep(0.05)
-    
+
     # Effect should have run again, and caught the exception
     assert effect_runs == 2
     assert error_caught
-    
+
     # Change source back to valid value
     error_caught = False  # Reset flag
     source.set(2)
     await asyncio.sleep(0.05)
-    
+
     # Effect should run again and succeed
     assert effect_runs == 3
     assert not error_caught
-    
+
     # Check console output
     captured = capsys.readouterr()
     assert "Async effect got computed value: 10.0" in captured.out  # First run (10/1)
-    assert "Async effect caught exception: division by zero" in captured.out  # Second run
+    assert (
+        "Async effect caught exception: division by zero" in captured.out
+    )  # Second run
     assert "Async effect got computed value: 5.0" in captured.out  # Third run (10/2)
+
 
 def test_compute_signal_cannot_set_signals():
     """Test that a ComputeSignal cannot set another Signal."""
     from reaktiv import Signal, Computed, batch
-    
+
     # Create signals
     a = Signal(1)
     b = Signal(2)
-    
+
     # Try to create a computed signal that sets another signal
     def create_bad_computed():
         return Computed(lambda: a.get() + b.set(10))  # This should fail
-    
+
     # Check that creating such a computed signal raises RuntimeError
     try:
         c = create_bad_computed()
@@ -1226,7 +1281,7 @@ def test_compute_signal_cannot_set_signals():
     except RuntimeError as e:
         assert "Side effect detected" in str(e)
         assert "Cannot set Signal from within a ComputeSignal computation" in str(e)
-    
+
     # Also test within batch context
     try:
         with batch():

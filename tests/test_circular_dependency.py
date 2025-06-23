@@ -1,8 +1,10 @@
 import pytest
 from reaktiv import Signal, Computed, Effect
 
+
 def test_simple_circular_dependency():
     """Test detection of a simple circular dependency between two computed signals."""
+
     # Create a circular dependency: a -> b -> a
     def compute_a():
         return b() + 1
@@ -20,8 +22,10 @@ def test_simple_circular_dependency():
     with pytest.raises(RuntimeError, match="Circular dependency detected"):
         b()
 
+
 def test_three_way_circular_dependency():
     """Test detection of a three-way circular dependency."""
+
     # Create a circular dependency: a -> b -> c -> a
     def compute_a():
         return b() + 1
@@ -46,8 +50,10 @@ def test_three_way_circular_dependency():
     with pytest.raises(RuntimeError, match="Circular dependency detected"):
         c()
 
+
 def test_self_referencing_dependency():
     """Test detection of a computed signal that depends on itself."""
+
     # Create a self-referencing dependency
     def compute_self():
         return self_ref() + 1
@@ -58,15 +64,16 @@ def test_self_referencing_dependency():
     with pytest.raises(RuntimeError, match="Circular dependency detected"):
         self_ref()
 
+
 def test_indirect_circular_dependency():
     """Test detection of a more complex circular dependency with valid dependencies mixed in."""
     # Create a valid base signal
     base = Signal(10)
-    
+
     # Create some valid computed signals
     valid1 = Computed(lambda: base() * 2)
     valid2 = Computed(lambda: valid1() + 5)
-    
+
     # Create circular dependencies involving the valid signals
     def compute_circular1():
         return valid2() + circular2() + 1
@@ -88,6 +95,7 @@ def test_indirect_circular_dependency():
     with pytest.raises(RuntimeError, match="Circular dependency detected"):
         circular2()
 
+
 def test_circular_dependency_with_effect():
     """Test that effects can depend on signals with circular dependencies without issues."""
     # Create a valid signal
@@ -106,16 +114,16 @@ def test_circular_dependency_with_effect():
 
     # Create effects that depend on valid signals (should work)
     effect_calls = []
-    
+
     def valid_effect():
         effect_calls.append(valid_computed())
 
     effect = Effect(valid_effect)
-    
+
     # The effect should work with valid computed signals
     assert len(effect_calls) == 1
     assert effect_calls[0] == 10
-    
+
     # Update the source to trigger the effect
     source.set(10)
     assert len(effect_calls) == 2
@@ -127,8 +135,10 @@ def test_circular_dependency_with_effect():
 
     effect.dispose()
 
+
 def test_detect_cycle_method():
     """Test the _detect_cycle method directly."""
+
     # Create a simple circular dependency
     def compute_a():
         return b() + 1
@@ -150,6 +160,7 @@ def test_detect_cycle_method():
     # and we can test the cycle detection method
     # Note: This test might need adjustment based on implementation details
 
+
 def test_no_false_positive_cycle_detection():
     """Test that valid dependency chains don't trigger false positive cycle detection."""
     # Create a valid chain: base -> level1 -> level2 -> level3
@@ -170,8 +181,10 @@ def test_no_false_positive_cycle_detection():
     assert level2() == 7
     assert level3() == 8
 
+
 def test_circular_dependency_error_message():
     """Test that the error message for circular dependency is clear and helpful."""
+
     def compute_a():
         return b() + 1
 
@@ -184,14 +197,15 @@ def test_circular_dependency_error_message():
     # Check that the exact error message is raised
     with pytest.raises(RuntimeError) as exc_info:
         a()
-    
+
     assert str(exc_info.value) == "Circular dependency detected"
+
 
 def test_circular_dependency_with_multiple_paths():
     """Test circular dependency detection with multiple dependency paths."""
     # Create a diamond dependency with a cycle
     base = Signal(1)
-    
+
     def compute_left():
         return base() + cycle_node()
 
@@ -215,8 +229,10 @@ def test_circular_dependency_with_multiple_paths():
     with pytest.raises(RuntimeError, match="Circular dependency detected"):
         cycle_node()
 
+
 def test_deep_circular_dependency_chain():
     """Test circular dependency detection in a deeper chain."""
+
     # Create a longer circular chain: a -> b -> c -> d -> e -> a
     def compute_a():
         return b() + 1
@@ -244,16 +260,17 @@ def test_deep_circular_dependency_chain():
         with pytest.raises(RuntimeError, match="Circular dependency detected"):
             computed_signal()
 
+
 def test_circular_dependency_mixed_with_valid_dependencies():
     """Test circular dependency detection when mixed with valid signal dependencies."""
     # Create valid base signals
     x = Signal(10)
     y = Signal(20)
-    
+
     # Create valid computed signals
     sum_xy = Computed(lambda: x() + y())
     product_xy = Computed(lambda: x() * y())
-    
+
     # Create circular dependencies that also use valid signals
     def compute_circular_a():
         return sum_xy() + circular_b() + 1
@@ -278,7 +295,7 @@ def test_circular_dependency_mixed_with_valid_dependencies():
     # Updating valid signals should not affect circular dependency detection
     x.set(5)
     y.set(15)
-    
+
     assert sum_xy() == 20
     assert product_xy() == 75
 

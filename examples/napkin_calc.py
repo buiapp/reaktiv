@@ -18,16 +18,18 @@ annual_expenses = C(lambda: expenses() * months())
 savings = C(lambda: net() - annual_expenses())
 savings_rate = C(lambda: savings() / net() * 100)
 
+
 def display():
     print("\n📊 Financial Summary:")
     print(f"{'Item':<20} {'Value':>10}")
-    print(f"{'-'*20} {'-'*10}")
-    print(f"{'Income':<20} {'$'+str(income()):>10}")
-    print(f"{'Taxes':<20} {'$'+str(taxes()):>10}")
-    print(f"{'Net Income':<20} {'$'+str(net()):>10}")
-    print(f"{'Annual Expenses':<20} {'$'+str(annual_expenses()):>10}")
-    print(f"{'Savings':<20} {'$'+str(savings()):>10}")
+    print(f"{'-' * 20} {'-' * 10}")
+    print(f"{'Income':<20} {'$' + str(income()):>10}")
+    print(f"{'Taxes':<20} {'$' + str(taxes()):>10}")
+    print(f"{'Net Income':<20} {'$' + str(net()):>10}")
+    print(f"{'Annual Expenses':<20} {'$' + str(annual_expenses()):>10}")
+    print(f"{'Savings':<20} {'$' + str(savings()):>10}")
     print(f"{'Savings Rate':<20} {f'{savings_rate():.1f}%':>10}")
+
 
 table = E(display)
 

@@ -1,5 +1,6 @@
 from reaktiv import Signal, Computed, Effect, filter_signal, pairwise_signal
 
+
 def test_computed_filter_pairwise_chain():
     """Tests chaining computed -> filter -> pairwise."""
     # Base signal
@@ -54,7 +55,7 @@ def test_computed_filter_pairwise_chain():
     # Filter blocks the value, pairwise does not emit
     base_signal.set(3)
     assert results == [(None, None), (None, 12), (12, 14)]
-    assert pairwise_output() == (12, 14) # Remains the last emitted value
+    assert pairwise_output() == (12, 14)  # Remains the last emitted value
 
     # Update base signal -> doubled=20 -> filtered=20
     # Pairwise emits (previous=14, current=20)

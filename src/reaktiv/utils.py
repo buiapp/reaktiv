@@ -1,6 +1,4 @@
-"""
-Utility functions for the reaktiv library.
-"""
+"""Utility functions for the reaktiv library."""
 
 import asyncio
 from typing import AsyncIterator, TypeVar
@@ -11,8 +9,7 @@ T = TypeVar("T")
 
 
 async def to_async_iter(signal: Signal[T], initial: bool = True) -> AsyncIterator[T]:
-    """
-    Convert a signal to an async iterator that yields each time the signal changes.
+    """Convert a signal to an async iterator that yields each time the signal changes.
 
     Args:
         signal: The signal to convert into an async iterator
@@ -21,7 +18,6 @@ async def to_async_iter(signal: Signal[T], initial: bool = True) -> AsyncIterato
     Returns:
         An async iterator that yields the signal's value on each change
     """
-
     queue = asyncio.Queue()
 
     # Create an effect that pushes new values to the queue

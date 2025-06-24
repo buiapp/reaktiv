@@ -1,6 +1,4 @@
-"""
-Reactive signals for Python with first-class async support
-"""
+"""Reactive signals for Python with first-class async support."""
 
 from .core import (
     Signal,

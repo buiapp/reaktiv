@@ -1,3 +1,4 @@
+"""Reaktiv Core Module."""
 import asyncio
 import contextvars
 import traceback
@@ -29,11 +30,13 @@ _suppress_debug = False  # When True, debug logging is suppressed
 
 
 def set_debug(enabled: bool) -> None:
+    """Enable or disable debug logging."""
     global _debug_enabled
     _debug_enabled = enabled
 
 
 def debug_log(msg: str) -> None:
+    """Log a debug message if debugging is enabled and not suppressed."""
     if _debug_enabled and not _suppress_debug:
         print(f"[REAKTIV DEBUG] {msg}")
 
@@ -238,11 +241,18 @@ T = TypeVar("T")
 
 
 class DependencyTracker(Protocol):
-    def add_dependency(self, signal: "Signal") -> None: ...
+    """Protocol for objects that can track dependencies on signals."""
+    def add_dependency(self, signal: "Signal") -> None:
+        """Add a dependency on a signal, subscribing to it if not already subscribed."""
+        ...
 
 
 class Subscriber(Protocol):
-    def notify(self) -> None: ...
+    """Protocol for objects that can subscribe to signals and receive notifications."""
+    
+    def notify(self) -> None:
+        """Notify the subscriber of a change in dependencies or signal value."""
+        ...
 
 
 _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = (
@@ -251,9 +261,8 @@ _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = (
 
 
 def untracked(func_or_signal: Union[Callable[[], T], "Signal[T]"]) -> T:
-    """Execute a function without creating dependencies on accessed signals,
-    or get a signal's value without creating a dependency.
-
+    """Execute a function without creating dependencies on accessed signals, or get a signal's value without creating a dependency.
+    
     Args:
         func_or_signal: Either a function to execute or a signal to read.
 
@@ -284,6 +293,7 @@ class Signal(Generic[T]):
     """Reactive signal container that tracks dependent effects and computed signals."""
 
     def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
+        """Initialize a Signal with an initial value and an optional custom equality function."""
         self._value = value
         self._subscribers: WeakSet[Subscriber] = WeakSet()
         self._equal = equal  # Store the custom equality function
@@ -301,6 +311,7 @@ class Signal(Generic[T]):
         return self.get()
 
     def get(self) -> T:
+        """Get the current value of the signal, adding a dependency if in an effect context."""
         tracker = _current_effect.get(None)
         if tracker is not None:
             tracker.add_dependency(self)
@@ -309,6 +320,7 @@ class Signal(Generic[T]):
         return self._value
 
     def set(self, new_value: T) -> None:
+        """Set a new value for the signal, notifying subscribers if the value has changed."""
         global _current_update_cycle, _deferred_signal_notifications
         debug_log(
             f"Signal set() called with new_value: {new_value} (old_value: {self._value})"
@@ -399,10 +411,12 @@ class Signal(Generic[T]):
         self.set(update_fn(self._value))
 
     def subscribe(self, subscriber: Subscriber) -> None:
+        """Subscribe a subscriber to this signal."""
         self._subscribers.add(subscriber)
         debug_log(f"Subscriber {subscriber} added to Signal.")
 
     def unsubscribe(self, subscriber: Subscriber) -> None:
+        """Unsubscribe a subscriber from this signal."""
         self._subscribers.discard(subscriber)
         debug_log(f"Subscriber {subscriber} removed from Signal.")
 
@@ -416,6 +430,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
         *,
         equal: Optional[Callable[[T, T], bool]] = None,
     ):
+        """Initialize a ComputeSignal with a computation function."""
         self._compute_fn = compute_fn
         self._dependencies: Set[Signal] = set()
         self._computing = False
@@ -440,6 +455,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             return f"Computed(error_displaying_value: {str(e)})"
 
     def get(self) -> T:
+        """Get the computed value, computing it if necessary."""
         if self._dirty or not self._initialized:
             debug_log(
                 "ComputeSignal get() - First access or dirty state, computing value."
@@ -524,7 +540,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             debug_log("ComputeSignal _compute() completed.")
 
     def _queue_notifications(self):
-        """Queue notifications to be processed after batch completion"""
+        """Queue notifications to be processed after batch completion."""
         if self._notifying or self._computing:
             debug_log(
                 "ComputeSignal avoiding notification while computing or in notification loop"
@@ -538,7 +554,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             self._notify_subscribers()
 
     def _notify_subscribers(self):
-        """Immediately notify subscribers"""
+        """Notify all subscribers of this ComputeSignal."""
         debug_log(f"ComputeSignal notifying {len(self._subscribers)} subscribers")
         self._notifying = True
         try:
@@ -548,10 +564,12 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
             self._notifying = False
 
     def add_dependency(self, signal: Signal) -> None:
+        """Add a dependency on a signal, subscribing to it if not already subscribed."""
         self._dependencies.add(signal)
         debug_log(f"ComputeSignal add_dependency() called with signal: {signal}")
 
     def notify(self) -> None:
+        """Notify the ComputeSignal of a change in dependencies."""
         debug_log("ComputeSignal notify() received. Marking as dirty.")
         if self._computing:
             debug_log(
@@ -582,6 +600,7 @@ class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
                 self._notify_subscribers()
 
     def set(self, new_value: T) -> None:
+        """Attempting to set a value on a ComputeSignal is not allowed."""
         raise AttributeError(
             "Cannot manually set value of ComputeSignal - update dependencies instead"
         )
@@ -610,6 +629,7 @@ class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies."""
 
     def __init__(self, func: Callable[..., Union[None, Coroutine[None, None, None]]]):
+        """Initialize the effect with a function to run when dependencies change."""
         self._func = func
         self._dependencies: Set[Signal] = set()
         self._disposed = False
@@ -639,8 +659,7 @@ class Effect(DependencyTracker, Subscriber):
                 _process_sync_effects()
 
     def schedule(self) -> None:
-        """
-        DEPRECATED: Effects are now automatically scheduled when created.
+        """DEPRECATED: Effects are now automatically scheduled when created.
 
         This method is kept for backward compatibility and will be removed in a future version.
         """
@@ -651,6 +670,7 @@ class Effect(DependencyTracker, Subscriber):
         )
 
     def add_dependency(self, signal: Signal) -> None:
+        """Add a dependency on a signal, subscribing to it if not already subscribed."""
         if self._disposed:
             return
         if self._new_dependencies is None:
@@ -662,6 +682,7 @@ class Effect(DependencyTracker, Subscriber):
         debug_log(f"Effect add_dependency() called, signal: {signal}")
 
     def notify(self) -> None:
+        """Notify the effect of a change in dependencies."""
         global _current_update_cycle
         debug_log(
             f"Effect notify() called during update cycle {_current_update_cycle}."
@@ -915,6 +936,7 @@ class Effect(DependencyTracker, Subscriber):
             debug_log("Sync effect execution finished.")
 
     def dispose(self) -> None:
+        """Dispose of the effect, cleaning up resources and unsubscribing from dependencies."""
         debug_log("Effect dispose() called.")
         if self._disposed:
             return

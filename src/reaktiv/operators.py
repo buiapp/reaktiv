@@ -1,3 +1,4 @@
+"""DEPRECATED: Operators module for reaktiv signals."""
 import asyncio
 import time
 import warnings
@@ -45,8 +46,7 @@ reactive state without temporal concerns.
 
 
 class _OperatorSignal(Generic[T]):
-    """
-    DEPRECATED: A read-only signal produced by an operator.
+    """DEPRECATED: A read-only signal produced by an operator.
 
     This class is deprecated along with all operators as they introduce temporal
     behavior that doesn't align with signal-based state management principles.
@@ -202,8 +202,7 @@ def filter_signal(
     source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]],
     predicate: Callable[[T], bool],
 ) -> _OperatorSignal[Optional[T]]:
-    """
-    DEPRECATED: This function is deprecated and will be removed in a future version.
+    """DEPRECATED: This function is deprecated and will be removed in a future version.
 
     Signal-based state management should not have temporal/filtering behavior.
     Consider using a ComputeSignal with conditional logic instead:
@@ -268,8 +267,7 @@ def filter_signal(
 def debounce_signal(
     source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]], delay_seconds: float
 ) -> _OperatorSignal[T]:
-    """
-    DEPRECATED: This function is deprecated and will be removed in a future version.
+    """DEPRECATED: This function is deprecated and will be removed in a future version.
 
     Signal-based state management should not have temporal behavior like debouncing.
     Consider using asyncio utilities in an Effect instead.
@@ -349,8 +347,7 @@ def throttle_signal(
     leading: bool = True,
     trailing: bool = False,
 ) -> _OperatorSignal[T]:
-    """
-    DEPRECATED: This function is deprecated and will be removed in a future version.
+    """DEPRECATED: This function is deprecated and will be removed in a future version.
 
     Signal-based state management should not have temporal behavior like throttling.
     Consider using asyncio utilities in an Effect instead.
@@ -483,8 +480,7 @@ def pairwise_signal(
     source: Union[Signal[T], ComputeSignal[T], _OperatorSignal[T]],
     emit_on_first: bool = False,
 ) -> _OperatorSignal[Optional[Tuple[Optional[T], T]]]:
-    """
-    DEPRECATED: This function is deprecated and will be removed in a future version.
+    """DEPRECATED: This function is deprecated and will be removed in a future version.
 
     Signal-based state management should not have temporal/stateful behavior like pairwise.
     Consider maintaining previous state explicitly in a Signal or using a ComputeSignal.

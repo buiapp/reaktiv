@@ -550,12 +550,11 @@ age.set(25)
 city.set("Boston")
 
 # With batch - prints only once at the end
-def update_person():
+with batch()
     name.set("Charlie")
     age.set(35)
     city.set("Chicago")
-
-batch(update_person)  # Only prints once: "Charlie, 35, Chicago"
+# Only prints once: "Charlie, 35, Chicago"
 ```
 
 ### Error Handling

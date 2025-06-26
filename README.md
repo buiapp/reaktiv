@@ -550,7 +550,7 @@ age.set(25)
 city.set("Boston")
 
 # With batch - prints only once at the end
-with batch()
+with batch():
     name.set("Charlie")
     age.set(35)
     city.set("Chicago")

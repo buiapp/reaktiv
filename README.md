@@ -493,6 +493,34 @@ counter.update(lambda x: x + 1)  # Increment based on current value
 ```
 
 ### Async Effects
+
+**Recommendation: Use synchronous effects** - they provide better control and predictable behavior:
+
+```python
+import asyncio
+
+my_signal = Signal("initial")
+
+# ✅ RECOMMENDED: Synchronous effect with async task spawning
+def sync_effect():
+    # Signal values captured at this moment - guaranteed consistency
+    current_value = my_signal()
+    
+    # Spawn async task if needed
+    async def background_work():
+        await asyncio.sleep(0.1)
+        print(f"Processing: {current_value}")
+    
+    asyncio.create_task(background_work())
+
+# MUST assign to variable!
+my_effect = Effect(sync_effect)
+```
+
+**Experimental: Direct async effects**
+
+Async effects are experimental and should be used with caution:
+
 ```python
 import asyncio
 
@@ -504,7 +532,11 @@ async def async_effect():
 my_async_effect = Effect(async_effect)
 ```
 
-**Note:** Async effects are "fire and forget" - they run asynchronously without blocking signal updates. In contrast to synchronous effects (where we wait for the effect to finish running after setting a signal), async effects are triggered but don't block the signal update process. This means signal updates complete immediately while async effects run in the background.
+**Key differences:**
+- **Synchronous effects**: Block the signal update until complete, ensuring signal values don't change during effect execution
+- **Async effects** (experimental): Allow signal updates to complete immediately, but signal values may change while the async effect is running
+- 
+**Note:** Most applications should use synchronous effects for predictable behavior.
 
 ### Untracked Reads
 Use `untracked()` to read signals without creating dependencies:

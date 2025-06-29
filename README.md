@@ -535,7 +535,7 @@ my_async_effect = Effect(async_effect)
 **Key differences:**
 - **Synchronous effects**: Block the signal update until complete, ensuring signal values don't change during effect execution
 - **Async effects** (experimental): Allow signal updates to complete immediately, but signal values may change while the async effect is running
-- 
+
 **Note:** Most applications should use synchronous effects for predictable behavior.
 
 ### Untracked Reads

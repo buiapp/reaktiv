@@ -560,6 +560,46 @@ debug_mode.set(True)   # Won't trigger recomputation
 user_id.set(2)         # Will trigger recomputation
 ```
 
+**Context Manager Usage**
+
+You can also use `untracked` as a context manager to read multiple signals without creating dependencies. This is useful for logging or conditional logic inside an effect without adding extra dependencies.
+
+```python
+from reaktiv import Signal, Computed, Effect, untracked
+
+name = Signal("Alice")
+is_logging_enabled = Signal(False)
+greeting = Computed(lambda: f"Hello, {name()}!")
+
+# An effect that depends on `greeting`, but reads `is_logging_enabled` untracked
+def display_greeting():
+    current_greeting = greeting()
+    
+    # Read `is_logging_enabled` without creating a dependency
+    with untracked():
+        if is_logging_enabled():
+            print(f"LOG: Greeting updated to '{current_greeting}'")
+    
+    print(current_greeting)
+
+
+greeting_effect = Effect(display_greeting)
+# Initial run prints: "Hello, Alice"
+
+name.set("Bob")
+# Prints: "Hello, Bob"
+
+is_logging_enabled.set(True)
+# Prints nothing
+
+name.set("Charlie")
+# Prints:
+# LOG: Greeting updated to 'Hello, Charlie'
+# Hello, Charlie
+```
+
+The context manager approach is particularly useful when you need to read multiple signals for logging, debugging, or conditional logic without creating reactive dependencies.
+
 ### Batch Updates
 Use `batch()` to group multiple updates and trigger effects only once:
 

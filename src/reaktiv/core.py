@@ -1,4 +1,5 @@
 """Reaktiv Core Module."""
+
 import asyncio
 import contextvars
 import traceback
@@ -16,6 +17,7 @@ from typing import (
     Deque,
     List,
     Tuple,
+    ContextManager,
 )
 from weakref import WeakSet
 from collections import deque
@@ -242,6 +244,7 @@ T = TypeVar("T")
 
 class DependencyTracker(Protocol):
     """Protocol for objects that can track dependencies on signals."""
+
     def add_dependency(self, signal: "Signal") -> None:
         """Add a dependency on a signal, subscribing to it if not already subscribed."""
         ...
@@ -249,7 +252,7 @@ class DependencyTracker(Protocol):
 
 class Subscriber(Protocol):
     """Protocol for objects that can subscribe to signals and receive notifications."""
-    
+
     def notify(self) -> None:
         """Notify the subscriber of a change in dependencies or signal value."""
         ...
@@ -260,11 +263,13 @@ _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = (
 )
 
 
-def untracked(func_or_signal: Union[Callable[[], T], "Signal[T]"]) -> T:
-    """Execute a function without creating dependencies on accessed signals, or get a signal's value without creating a dependency.
-    
+def untracked(
+    func_or_signal: Union[Callable[[], T], "Signal[T]", None] = None,
+) -> Union[T, ContextManager[None]]:
+    """Execute a function without creating dependencies on accessed signals, get a signal's value without creating a dependency, or create an untracked context.
+
     Args:
-        func_or_signal: Either a function to execute or a signal to read.
+        func_or_signal: Either a function to execute, a signal to read, or None for context manager usage.
 
     Examples:
         # Using with a signal directly
@@ -274,9 +279,26 @@ def untracked(func_or_signal: Union[Callable[[], T], "Signal[T]"]) -> T:
         # Using with a function
         value = untracked(lambda: counter() * 2)  # Execute without tracking
 
+        # Using as a context manager
+        with untracked():
+            value = counter()  # Read without tracking
+            other_value = other_signal()  # Also read without tracking
+
     Returns:
-        The result of the function or the signal's value.
+        The result of the function, the signal's value, or a context manager.
     """
+    if func_or_signal is None:
+        # Return a context manager
+        @contextmanager
+        def untracked_context():
+            token = _current_effect.set(None)
+            try:
+                yield
+            finally:
+                _current_effect.reset(token)
+
+        return untracked_context()
+
     token = _current_effect.set(None)
     try:
         if isinstance(func_or_signal, Signal):

@@ -542,7 +542,7 @@ my_async_effect = Effect(async_effect)
 Use `untracked()` to read signals without creating dependencies:
 
 ```python
-from reaktiv import Signal, Computed, untracked
+from reaktiv import Signal, Computed, Effect
 
 user_id = Signal(1)
 debug_mode = Signal(False)
@@ -569,20 +569,25 @@ from reaktiv import Signal, Computed, Effect, untracked
 
 name = Signal("Alice")
 is_logging_enabled = Signal(False)
+log_level = Signal("INFO")
+
 greeting = Computed(lambda: f"Hello, {name()}!")
 
-# An effect that depends on `greeting`, but reads `is_logging_enabled` untracked
+# An effect that depends on `greeting`, but reads other signals untracked
 def display_greeting():
+    # Create a dependency on `greeting`
     current_greeting = greeting()
     
-    # Read `is_logging_enabled` without creating a dependency
+    # Read multiple signals without creating dependencies
     with untracked():
-        if is_logging_enabled():
-            print(f"LOG: Greeting updated to '{current_greeting}'")
+        logging_active = is_logging_enabled()
+        current_log_level = log_level()
+        if logging_active:
+            print(f"LOG [{current_log_level}]: Greeting updated to '{current_greeting}'")
     
     print(current_greeting)
 
-
+# MUST assign to variable!
 greeting_effect = Effect(display_greeting)
 # Initial run prints: "Hello, Alice"
 
@@ -590,11 +595,12 @@ name.set("Bob")
 # Prints: "Hello, Bob"
 
 is_logging_enabled.set(True)
-# Prints nothing
+log_level.set("DEBUG")
+# Prints nothing, because these are not dependencies of the effect.
 
 name.set("Charlie")
 # Prints:
-# LOG: Greeting updated to 'Hello, Charlie'
+# LOG [DEBUG]: Greeting updated to 'Hello, Charlie'
 # Hello, Charlie
 ```
 

@@ -92,16 +92,20 @@ class ConnectionManager:
         self.active_connections.remove(websocket)
         active_users.set(len(self.active_connections))
 
-    async def _broadcast_state(self):
+    def _broadcast_state(self):
         """Effect that broadcasts state when it changes"""
         current_state = state()
-        if self.active_connections:
-            data = json.dumps(current_state)
-            # Create tasks for each connection to avoid blocking
-            await asyncio.gather(
-                *[ws.send_text(data) for ws in self.active_connections],
-                return_exceptions=True,
-            )
+
+        async def _broadcast_state(self):
+            if self.active_connections:
+                data = json.dumps(current_state)
+                # Create tasks for each connection to avoid blocking
+                await asyncio.gather(
+                    *[ws.send_text(data) for ws in self.active_connections],
+                    return_exceptions=True,
+                )
+        
+        asyncio.create_task(_broadcast_state(self))
 
     async def _send_state(self, websocket: WebSocket):
         """Send current state to a specific client"""
@@ -234,4 +238,4 @@ if __name__ == "__main__":
     # Make sure app runs with appropriate host and port
     print("Starting the FastAPI app with uvicorn...")
     print("Access the demo at http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

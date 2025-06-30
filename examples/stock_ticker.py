@@ -16,11 +16,19 @@ async def main():
     )
 
     # Price alert system
-    async def check_alerts():
-        if apple_price() > 200:
-            print("📈 AAPL alert: Above $200!")
-        if google_price() < 2700:
-            print("📉 GOOGL alert: Below $2700!")
+    def check_alerts():
+        # create a snapshot of the signal values
+        apple_price_value = apple_price()
+        google_price_value = google_price()
+
+        async def print_alert():
+            if apple_price_value > 200:
+                print("📈 AAPL alert: Above $200!")
+            if google_price_value < 2700:
+                print("📉 GOOGL alert: Below $2700!")
+        
+        # print the alert asynchronously
+        asyncio.create_task(print_alert())
 
     # Automatic updates
     async def live_updates():
@@ -34,7 +42,7 @@ async def main():
             print(f"🍏 AAPL: ${apple_price():,.2f}  🌐 GOOGL: ${google_price():,.2f}")
 
     # Track portfolio value
-    async def monitor_portfolio():
+    def monitor_portfolio():
         print(f"💰 Current value: ${portfolio_value():,.2f}")
 
     # Set up effects

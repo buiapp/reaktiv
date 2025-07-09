@@ -19,6 +19,7 @@ from typing import (
     Tuple,
     ContextManager,
 )
+from typing import overload
 from weakref import WeakSet
 from collections import deque
 from contextlib import contextmanager
@@ -262,6 +263,13 @@ _current_effect: contextvars.ContextVar[Optional[DependencyTracker]] = (
     contextvars.ContextVar("_current_effect", default=None)
 )
 
+
+@overload
+def untracked(func_or_signal: Callable[[], T]) -> T: ...
+@overload
+def untracked(func_or_signal: "Signal[T]") -> T: ...
+@overload
+def untracked(func_or_signal: None = None) -> ContextManager[None]: ...
 
 def untracked(
     func_or_signal: Union[Callable[[], T], "Signal[T]", None] = None,
@@ -1054,6 +1062,9 @@ def effect(func: Callable[..., Union[None, Coroutine[None, None, None]]]) -> Eff
     #     "The effect() function is deprecated. Use Effect class directly instead: Effect(func)",
     #     DeprecationWarning,
     #     stacklevel=2
+    # )
+    effect_instance = Effect(func)
+    return effect_instance
     # )
     effect_instance = Effect(func)
     return effect_instance

@@ -271,6 +271,7 @@ def untracked(func_or_signal: "Signal[T]") -> T: ...
 @overload
 def untracked(func_or_signal: None = None) -> ContextManager[None]: ...
 
+
 def untracked(
     func_or_signal: Union[Callable[[], T], "Signal[T]", None] = None,
 ) -> Union[T, ContextManager[None]]:

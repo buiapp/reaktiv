@@ -26,7 +26,7 @@ async def main():
                 print("📈 AAPL alert: Above $200!")
             if google_price_value < 2700:
                 print("📉 GOOGL alert: Below $2700!")
-        
+
         # print the alert asynchronously
         asyncio.create_task(print_alert())
 

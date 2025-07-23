@@ -17,18 +17,18 @@ E1 = Computed(lambda: (A1() + B1() + C1()) / 3)
 # F1 simulates "=PRODUCT(A1, B1, C1)"
 F1 = Computed(lambda: A1() * B1() * C1())
 
+
 # Effect to print a simple spreadsheet view whenever any cell changes.
 def print_spreadsheet():
     print("\n📊 Reactive Excel Simulation")
     print("+------+------+------+-------+----------+------------+")
     print("| Cell |   A  |   B  |   C   |    D     |    E       |")
     print("+------+------+------+-------+----------+------------+")
-    print(
-        f"|  1   | {A1():^4} | {B1():^4} | {C1():^4} | {D1():^6} | {E1():^8.2f} |"
-    )
+    print(f"|  1   | {A1():^4} | {B1():^4} | {C1():^4} | {D1():^6} | {E1():^8.2f} |")
     print("+------+------+------+-------+----------+------------+")
     print(f"| F1 (Product) = {F1()}")
     print("+-----------------------------------------+\n")
+
 
 # Schedule the spreadsheet printing effect.
 # (Assigning it to a variable ensures it won't be garbage collected.)

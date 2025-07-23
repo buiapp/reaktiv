@@ -104,7 +104,7 @@ class ConnectionManager:
                     *[ws.send_text(data) for ws in self.active_connections],
                     return_exceptions=True,
                 )
-        
+
         asyncio.create_task(_broadcast_state(self))
 
     async def _send_state(self, websocket: WebSocket):

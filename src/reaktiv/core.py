@@ -322,6 +322,8 @@ def untracked(
 class Signal(Generic[T]):
     """Reactive signal container that tracks dependent effects and computed signals."""
 
+    __slots__ = ("_value", "_subscribers", "_equal")
+
     def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
         """Initialize a Signal with an initial value and an optional custom equality function."""
         self._value = value
@@ -453,6 +455,16 @@ class Signal(Generic[T]):
 
 class ComputeSignal(Signal[T], DependencyTracker, Subscriber):
     """Computed signal that derives value from other signals."""
+
+    __slots__ = (
+        "_compute_fn",
+        "_dependencies",
+        "_computing",
+        "_dirty",
+        "_initialized",
+        "_notifying",
+        "_last_error",
+    )
 
     def __init__(
         self,
@@ -657,6 +669,18 @@ Computed = ComputeSignal
 
 class Effect(DependencyTracker, Subscriber):
     """Reactive effect that tracks signal dependencies."""
+
+    __slots__ = (
+        "_func",
+        "_dependencies",
+        "_disposed",
+        "_new_dependencies",
+        "_is_async",
+        "_dirty",
+        "_cleanups",
+        "_executing",
+        "_async_task",
+    )
 
     def __init__(self, func: Callable[..., Union[None, Coroutine[None, None, None]]]):
         """Initialize the effect with a function to run when dependencies change."""

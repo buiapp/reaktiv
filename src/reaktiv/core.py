@@ -323,13 +323,16 @@ def untracked(
 class Signal(Generic[T]):
     """Reactive signal container that tracks dependent effects and computed signals."""
 
-    __slots__ = ("_value", "_subscribers", "_equal")
+    __slots__ = ("_value", "_subscribers", "_equal", "_readonly_cache")
 
     def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
         """Initialize a Signal with an initial value and an optional custom equality function."""
         self._value = value
         self._subscribers: WeakSet[Subscriber] = WeakSet()
         self._equal = equal  # Store the custom equality function
+        self._readonly_cache: Optional[ReadonlySignal[T]] = (
+            None  # Cache for readonly wrapper
+        )
         debug_log(f"Signal initialized with value: {value}")
 
     def __repr__(self) -> str:
@@ -452,6 +455,49 @@ class Signal(Generic[T]):
         """Unsubscribe a subscriber from this signal."""
         self._subscribers.discard(subscriber)
         debug_log(f"Subscriber {subscriber} removed from Signal.")
+
+    def as_readonly(self) -> "ReadonlySignal[T]":
+        """Return a readonly wrapper of this signal.
+
+        Multiple calls return the same cached ReadonlySignal instance.
+        The readonly signal maintains reactive behavior but cannot be modified.
+
+        Returns:
+            ReadonlySignal[T]: A readonly wrapper that tracks this signal's value.
+        """
+        if self._readonly_cache is None:
+            self._readonly_cache = ReadonlySignal(self)
+            debug_log(f"Created new ReadonlySignal cache for signal: {self}")
+        else:
+            debug_log(f"Returning cached ReadonlySignal for signal: {self}")
+        return self._readonly_cache
+
+
+class ReadonlySignal(Generic[T]):
+    """A readonly wrapper around a Signal that prevents modification."""
+
+    __slots__ = ("_signal",)
+
+    def __init__(self, signal: Signal[T]):
+        """Initialize a ReadonlySignal wrapping the given Signal."""
+        self._signal = signal
+        debug_log(f"ReadonlySignal created wrapping signal: {signal}")
+
+    def __repr__(self) -> str:
+        """Provide a useful representation that shows it's readonly."""
+        try:
+            return f"ReadonlySignal(value={repr(self._signal._value)})"
+        except Exception as e:
+            return f"ReadonlySignal(error_displaying_value: {str(e)})"
+
+    def __call__(self) -> T:
+        """Allow readonly signals to be called directly to get their value."""
+        return self.get()
+
+    def get(self) -> T:
+        """Get the current value of the wrapped signal, adding a dependency if in an effect context."""
+        # Delegate to the wrapped signal's get method to maintain dependency tracking
+        return self._signal.get()
 
 
 class ComputeSignal(Signal[T], DependencyTracker, Subscriber):

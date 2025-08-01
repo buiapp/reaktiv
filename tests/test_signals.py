@@ -1290,3 +1290,290 @@ def test_compute_signal_cannot_set_signals():
         assert False, "Should have raised RuntimeError"
     except RuntimeError as e:
         assert "Side effect detected" in str(e)
+
+
+# --------------------------------------------------
+# ReadonlySignal Tests
+# --------------------------------------------------
+
+
+def test_readonly_signal_basic():
+    """Test basic ReadonlySignal functionality"""
+    signal = Signal(42)
+    readonly = signal.as_readonly()
+
+    # Should be able to read the value
+    assert readonly() == 42
+    assert readonly.get() == 42
+
+    # Should update when source signal changes
+    signal.set(100)
+    assert readonly() == 100
+    assert readonly.get() == 100
+
+
+def test_readonly_signal_caching():
+    """Test that as_readonly() returns the same instance"""
+    signal = Signal(42)
+    readonly1 = signal.as_readonly()
+    readonly2 = signal.as_readonly()
+
+    # Should be the same instance
+    assert readonly1 is readonly2
+
+
+def test_readonly_signal_with_computed():
+    """Test ReadonlySignal works with ComputeSignal"""
+    signal = Signal(10)
+    readonly = signal.as_readonly()
+
+    # Create computed signal that depends on readonly
+    doubled = ComputeSignal(lambda: readonly() * 2)
+
+    assert doubled.get() == 20
+
+    # Update source signal
+    signal.set(15)
+    assert doubled.get() == 30
+
+
+def test_readonly_signal_with_sync_effect():
+    """Test ReadonlySignal works with synchronous effects"""
+    signal = Signal(0)
+    readonly = signal.as_readonly()
+    executions = []
+
+    def effect_fn():
+        executions.append(readonly())
+
+    _effect = Effect(effect_fn)
+
+    # Initial execution
+    assert executions == [0]
+
+    # Update source signal
+    signal.set(1)
+    assert executions == [0, 1]
+
+    signal.set(2)
+    assert executions == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_readonly_signal_with_async_effect():
+    """Test ReadonlySignal works with asynchronous effects"""
+    signal = Signal(0)
+    readonly = signal.as_readonly()
+    executions = []
+
+    async def async_effect_fn():
+        await asyncio.sleep(0.01)
+        executions.append(readonly())
+
+    _effect = Effect(async_effect_fn)
+    await asyncio.sleep(0.05)
+
+    # Initial execution
+    assert executions == [0]
+
+    # Update source signal
+    signal.set(1)
+    await asyncio.sleep(0.05)
+    assert executions == [0, 1]
+
+    signal.set(2)
+    await asyncio.sleep(0.05)
+    assert executions == [0, 1, 2]
+
+
+def test_readonly_signal_dependency_tracking():
+    """Test that ReadonlySignal properly tracks dependencies"""
+    signal = Signal(0)
+    readonly = signal.as_readonly()
+    effect_runs = 0
+
+    def effect_fn():
+        nonlocal effect_runs
+        readonly()  # Access readonly signal
+        effect_runs += 1
+
+    _effect = Effect(effect_fn)
+
+    # Initial run
+    assert effect_runs == 1
+
+    # Update source - should trigger effect
+    signal.set(1)
+    assert effect_runs == 2
+
+    # Update again - should trigger effect again
+    signal.set(2)
+    assert effect_runs == 3
+
+
+def test_readonly_signal_with_batching():
+    """Test ReadonlySignal works correctly with batching"""
+    signal = Signal(0)
+    readonly = signal.as_readonly()
+    effect_runs = 0
+    final_values = []
+
+    def effect_fn():
+        nonlocal effect_runs
+        effect_runs += 1
+        final_values.append(readonly())
+
+    _effect = Effect(effect_fn)
+
+    # Initial run
+    assert effect_runs == 1
+    assert final_values == [0]
+
+    # Batch multiple updates
+    with batch():
+        signal.set(1)
+        signal.set(2)
+        signal.set(3)
+
+    # Should only trigger effect once after batch
+    assert effect_runs == 2
+    assert final_values == [0, 3]
+
+
+def test_readonly_signal_with_untracked():
+    """Test ReadonlySignal works with untracked context"""
+    signal = Signal(0)
+    readonly = signal.as_readonly()
+    effect_runs = 0
+
+    def effect_fn():
+        nonlocal effect_runs
+        effect_runs += 1
+
+        # Access readonly signal normally (should create dependency)
+        tracked_value = readonly()
+
+        # Access readonly signal in untracked context (should not create dependency)
+        untracked_value = untracked(readonly)
+
+        assert tracked_value == untracked_value
+
+    _effect = Effect(effect_fn)
+
+    # Initial run
+    assert effect_runs == 1
+
+    # Update source - should trigger effect because of tracked access
+    signal.set(1)
+    assert effect_runs == 2
+
+
+def test_readonly_signal_multiple_dependents():
+    """Test ReadonlySignal with multiple dependent computations and effects"""
+    signal = Signal(5)
+    readonly = signal.as_readonly()
+
+    # Multiple computed signals depending on readonly
+    doubled = ComputeSignal(lambda: readonly() * 2)
+    tripled = ComputeSignal(lambda: readonly() * 3)
+    combined = ComputeSignal(lambda: doubled() + tripled())
+
+    assert doubled.get() == 10
+    assert tripled.get() == 15
+    assert combined.get() == 25
+
+    # Multiple effects
+    effect1_runs = []
+    effect2_runs = []
+
+    def effect1():
+        effect1_runs.append(readonly())
+
+    def effect2():
+        effect2_runs.append(doubled())
+
+    _eff1 = Effect(effect1)
+    _eff2 = Effect(effect2)
+
+    # Initial runs
+    assert effect1_runs == [5]
+    assert effect2_runs == [10]
+
+    # Update source
+    signal.set(7)
+
+    assert doubled.get() == 14
+    assert tripled.get() == 21
+    assert combined.get() == 35
+    assert effect1_runs == [5, 7]
+    assert effect2_runs == [10, 14]
+
+
+def test_readonly_signal_equality_function():
+    """Test ReadonlySignal respects the source signal's equality function"""
+    # Signal with custom equality function
+    signal = Signal(1.0, equal=lambda a, b: abs(a - b) < 0.1)
+    readonly = signal.as_readonly()
+
+    effect_runs = 0
+
+    def effect_fn():
+        nonlocal effect_runs
+        readonly()
+        effect_runs += 1
+
+    _effect = Effect(effect_fn)
+
+    # Initial run
+    assert effect_runs == 1
+
+    # Small change that should be considered equal
+    signal.set(1.05)
+    assert effect_runs == 1  # Should not trigger effect
+
+    # Large change that should be considered different
+    signal.set(1.2)
+    assert effect_runs == 2  # Should trigger effect
+
+
+def test_readonly_signal_repr():
+    """Test ReadonlySignal __repr__ method"""
+    signal = Signal(42)
+    readonly = signal.as_readonly()
+
+    repr_str = repr(readonly)
+    assert "ReadonlySignal" in repr_str
+    assert "42" in repr_str
+
+
+@pytest.mark.asyncio
+async def test_readonly_signal_complex_dependency_chain():
+    """Test ReadonlySignal in a complex dependency chain"""
+    # Create a chain: signal -> readonly -> computed -> effect
+    signal = Signal(1)
+    readonly = signal.as_readonly()
+    computed = ComputeSignal(lambda: readonly() * 10)
+
+    effect_values = []
+
+    async def effect_fn():
+        effect_values.append(computed())
+
+    _effect = Effect(effect_fn)
+    await asyncio.sleep(0.01)
+
+    # Initial value
+    assert effect_values == [10]
+
+    # Update signal
+    signal.set(2)
+    await asyncio.sleep(0.01)
+    assert effect_values == [10, 20]
+
+    # Batch update
+    with batch():
+        signal.set(3)
+        signal.set(4)
+
+    await asyncio.sleep(0.01)
+    assert effect_values == [10, 20, 40]  # Only final value from batch

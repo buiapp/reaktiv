@@ -14,7 +14,7 @@ from .core import (
 from .utils import to_async_iter
 from .operators import filter_signal, debounce_signal, throttle_signal, pairwise_signal
 
-__version__ = "0.15.1"
+__version__ = "0.16.0"
 __all__ = [
     "Signal",
     "ComputeSignal",

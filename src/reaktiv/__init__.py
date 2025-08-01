@@ -1,4 +1,4 @@
-"""Reactive signals for Python with first-class async support."""
+"""Signals for Python - inspired by Angular Signals / SolidJS. Reactive Declarative State Management Library for Python - automatic dependency tracking and reactive updates for your application state."""
 
 from .core import (
     Signal,

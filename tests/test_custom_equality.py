@@ -99,25 +99,24 @@ async def test_computed_signal_custom_equality():
     # Verify initial value
     assert computed.get() == 10.0
 
-    # Setup notification tracking
+    # Setup notification tracking via Effect (no subscribe API)
     notifications = []
 
-    class TestSubscriber:
-        def notify(self):
-            notifications.append(computed.get())
+    async def tracker():
+        notifications.append(computed.get())
 
-    # Add our subscriber
-    subscriber = TestSubscriber()
-    computed.subscribe(subscriber)
+    _tracker = Effect(tracker)
+    await asyncio.sleep(0)
+    # Clear the initial snapshot emitted by the tracker effect
+    notifications.clear()
 
     # Small change within tolerance (100 -> 101) => 10.0 -> 10.1
     base.set(101)
     # Computed value should update internally
     assert computed.get() == 10.1
-    # Check if notifications were sent - should be empty
-    assert len(notifications) == 0 or notifications == [10.1], (
-        "Either no notification or a single notification with the new value"
-    )
+    await asyncio.sleep(0)
+    # No effect notification due to custom equality within tolerance
+    assert notifications == []
 
     # Reset notifications list for clarity
     notifications.clear()
@@ -126,11 +125,10 @@ async def test_computed_signal_custom_equality():
     base.set(112)
     # Computed value should update
     assert computed.get() == 11.2
-    # And a notification should be sent
-    assert len(notifications) > 0, (
-        "At least one notification should be received for value outside tolerance"
-    )
-    assert notifications[-1] == 11.2, "The notification should contain the latest value"
+    await asyncio.sleep(0)
+    # Now a notification should be sent (outside tolerance)
+    assert len(notifications) > 0
+    assert notifications[-1] == 11.2
 
 
 @pytest.mark.asyncio

@@ -3,7 +3,8 @@
 import asyncio
 from typing import AsyncIterator, TypeVar
 
-from .core import Signal, Effect
+from .signal import Signal
+from .effect import Effect
 
 T = TypeVar("T")
 

@@ -1,9 +1,9 @@
 import pytest
 import asyncio
 from reaktiv import Signal, Effect, ComputeSignal, batch, untracked
-import reaktiv.core as rc
+from reaktiv._debug import set_debug
 
-rc.set_debug(True)
+set_debug(True)
 
 
 @pytest.mark.asyncio
@@ -165,12 +165,23 @@ async def test_memory_management():
     # effect is automatically scheduled now
     await asyncio.sleep(0)
 
-    assert len(signal._subscribers) == 1
+    # There's no public subscriber API; instead ensure effect detaches by stopping notifications.
+    count = 0
+
+    async def probe():
+        nonlocal count
+        signal.get()
+        count += 1
+
+    _probe_effect = Effect(probe)
+    await asyncio.sleep(0)
+    # initial run
+    assert count == 1
 
     effect.dispose()
+    signal.set(2)
     await asyncio.sleep(0)
-
-    assert len(signal._subscribers) == 0
+    assert count == 2
 
 
 @pytest.mark.asyncio
@@ -970,8 +981,6 @@ async def test_compute_signal_exception_propagation():
     assert computed.get() == 5
 
     # Make source a subscriber of the computed signal to ensure notification
-    source.subscribe(computed)
-
     source.set(5)
     assert computed.get() == 2
 

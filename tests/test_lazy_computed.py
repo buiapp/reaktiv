@@ -1,10 +1,9 @@
 import pytest
 from unittest.mock import Mock
 from reaktiv import Signal, ComputeSignal
+from reaktiv._debug import set_debug
 
-import reaktiv.core as rc
-
-rc.set_debug(True)
+set_debug(True)
 
 
 @pytest.mark.asyncio

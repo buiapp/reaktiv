@@ -5,7 +5,6 @@ This example demonstrates how reaktiv can be used to create a reactive system
 that responds to hardware sensor changes running in a separate thread.
 
 Key concepts demonstrated:
-- Thread-safe reactivity with hardware sensors
 - Automatic recalculation of derived values as sensor readings change
 - Reactive effects for monitoring, alerting, and taking action on sensor data
 - Clean separation between sensor data acquisition and business logic

@@ -7,7 +7,7 @@ license-files = []
 
 [project]
 name = "reaktiv"
-version = "0.17.0"
+version = "0.18.0"
 description = "Signals for Python - inspired by Angular Signals / SolidJS. Reactive Declarative State Management Library for Python - automatic dependency tracking and reactive updates for your application state."
 readme = "README.md"
 authors = [{name = "Tuan Anh Bui", email = "mail@bui.app"}]

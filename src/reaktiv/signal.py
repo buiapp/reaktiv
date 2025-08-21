@@ -5,12 +5,14 @@ Migrated to Edge-based dependency tracking and minimal scheduler.
 
 from __future__ import annotations
 
+import threading
 from typing import Callable, Generic, Optional, TypeVar, cast
 
 from ._debug import debug_log
 from . import graph
 from .scheduler import start_batch, end_batch
 from . import scheduler as _sched
+from .thread_safety import is_thread_safety_enabled
 
 T = TypeVar("T")
 
@@ -25,6 +27,7 @@ class Signal(Generic[T]):
         "_version",
         "_targets",
         "_node",
+        "_lock",
     )
 
     def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
@@ -34,6 +37,8 @@ class Signal(Generic[T]):
         self._version: int = 0
         self._targets: Optional[graph.Edge] = None
         self._node: Optional[graph.Edge] = None
+        # RLock for thread-safe operations - only when thread safety is enabled
+        self._lock = threading.RLock() if is_thread_safety_enabled() else None
         debug_log(f"Signal initialized with value: {value}")
 
     def __repr__(self) -> str:
@@ -72,11 +77,20 @@ class Signal(Generic[T]):
         return True
 
     def get(self) -> T:
-        edge = graph.add_dependency(self)
-        if edge is not None:
-            edge.version = self._version
-        debug_log(f"Signal get() returning value: {self._value}")
-        return self._value
+        # Use lock to protect the read operation only when thread safety is enabled
+        if self._lock is not None:
+            with self._lock:
+                edge = graph.add_dependency(self)
+                if edge is not None:
+                    edge.version = self._version
+                debug_log(f"Signal get() returning value: {self._value}")
+                return self._value
+        else:
+            edge = graph.add_dependency(self)
+            if edge is not None:
+                edge.version = self._version
+            debug_log(f"Signal get() returning value: {self._value}")
+            return self._value
 
     def set(self, new_value: T) -> None:
         debug_log(
@@ -90,6 +104,15 @@ class Signal(Generic[T]):
                     "Side effect detected: Cannot set Signal from within a ComputeSignal computation"
                 )
 
+        # Use lock to protect the entire set operation when thread safety is enabled
+        if self._lock is not None:
+            with self._lock:
+                self._set_internal(new_value)
+        else:
+            self._set_internal(new_value)
+
+    def _set_internal(self, new_value: T) -> None:
+        """Internal set method that does the actual work without locking."""
         should_update = True
         if self._equal is not None:
             try:
@@ -117,7 +140,15 @@ class Signal(Generic[T]):
             end_batch()
 
     def update(self, update_fn: Callable[[T], T]) -> None:
-        self.set(update_fn(self._value))
+        """Atomically update the signal using a function."""
+        # Use lock to protect the read-modify-write operation when thread safety is enabled
+        if self._lock is not None:
+            with self._lock:
+                new_value = update_fn(self._value)
+                self._set_internal(new_value)
+        else:
+            new_value = update_fn(self._value)
+            self._set_internal(new_value)
 
     def as_readonly(self) -> "ReadonlySignal[T]":
         if self._readonly_cache is None:
@@ -156,6 +187,8 @@ class ComputeSignal(Signal[T]):
         "_flags",
         "_last_error",
         "_dependencies",
+        "_thread_local",
+        "_computation_lock",
     ) + Signal.__slots__
 
     def __init__(
@@ -172,7 +205,23 @@ class ComputeSignal(Signal[T]):
         self._flags: int = graph.OUTDATED
         self._last_error: Optional[BaseException] = None
         self._dependencies: set[object] = set()
-        debug_log(f"ComputeSignal initialized with compute_fn: {compute_fn}")
+        # Thread-local storage for tracking running state per thread
+        self._thread_local = threading.local()
+        # RLock for thread-safe computation - only when thread safety is enabled
+        self._computation_lock = (
+            threading.RLock() if is_thread_safety_enabled() else None
+        )
+
+    def _is_running_in_current_thread(self) -> bool:
+        """Check if this signal is currently being computed in the current thread."""
+        try:
+            return getattr(self._thread_local, "is_running", False)
+        except AttributeError:
+            return False
+
+    def _set_running_in_current_thread(self, running: bool) -> None:
+        """Set the running state for the current thread."""
+        self._thread_local.is_running = running
 
     # Producer API (override to detect first/last subscriber)
     def _subscribe_edge(self, edge: graph.Edge) -> None:
@@ -202,7 +251,8 @@ class ComputeSignal(Signal[T]):
         # clear NOTIFIED
         self._flags &= ~graph.NOTIFIED
 
-        if self._flags & graph.RUNNING:
+        # Thread-safe cycle detection
+        if self._is_running_in_current_thread():
             return False  # cycle guard: appear stale to caller
 
         force = bool(self._flags & graph.HAS_ERROR)
@@ -220,12 +270,12 @@ class ComputeSignal(Signal[T]):
             return True
         self._global_version_seen = graph.global_version
 
-        # mark running
-        self._flags |= graph.RUNNING
+        # Thread-safe running tracking
+        self._set_running_in_current_thread(True)
 
         # Skip recompute if nothing changed in sources
         if not force and self._version > 0 and not graph.needs_to_recompute(self):
-            self._flags &= ~graph.RUNNING
+            self._set_running_in_current_thread(False)
             return True
 
         prev = graph.set_active_consumer(self)
@@ -278,7 +328,8 @@ class ComputeSignal(Signal[T]):
         finally:
             graph.cleanup_sources(self)
             graph.set_active_consumer(prev)
-            self._flags &= ~graph.RUNNING
+            # Remove current thread from running state (thread-safe cleanup)
+            self._set_running_in_current_thread(False)
         # After recompute, capture current sources as dependencies for tests
         deps = set()
         node = self._sources
@@ -295,9 +346,17 @@ class ComputeSignal(Signal[T]):
             _sched.enqueue_computed(self)
 
     def get(self) -> T:
-        if self._flags & graph.RUNNING:
+        # Thread-safe circular dependency detection
+        if self._is_running_in_current_thread():
             raise RuntimeError("Circular dependency detected")
-        self._refresh()
+
+        # Use lock to protect the refresh operation only when thread safety is enabled
+        if self._computation_lock is not None:
+            with self._computation_lock:
+                self._refresh()
+        else:
+            self._refresh()
+
         # participate as producer if someone depends on us
         edge = graph.add_dependency(self)
         if edge is not None:

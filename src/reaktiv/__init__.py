@@ -3,6 +3,7 @@
 from .context import untracked
 from .scheduler import batch
 from .signal import Signal, Computed, ComputeSignal, ReadonlySignal
+from .linked import LinkedSignal, PreviousState
 from .effect import Effect
 from .utils import to_async_iter
 from .thread_safety import set_thread_safety, is_thread_safety_enabled
@@ -19,6 +20,8 @@ __all__ = [
     "ComputeSignal",
     "Computed",
     "Effect",
+    "LinkedSignal",
+    "PreviousState",
     "batch",
     "untracked",
     "to_async_iter",

@@ -7,7 +7,10 @@ import pytest
 
 # Global per-test timeout (seconds). Override with PYTEST_TEST_TIMEOUT or PYTEST_TIMEOUT.
 _DEFAULT = "5.0"
-_TIMEOUT = float(os.environ.get("PYTEST_TEST_TIMEOUT", os.environ.get("PYTEST_TIMEOUT", _DEFAULT)))
+_TIMEOUT = float(
+    os.environ.get("PYTEST_TEST_TIMEOUT", os.environ.get("PYTEST_TIMEOUT", _DEFAULT))
+)
+
 
 @pytest.fixture(autouse=True)
 def _per_test_timeout():

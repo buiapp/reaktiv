@@ -1,4 +1,5 @@
 """LinkedSignal."""
+
 from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any
 from .signal import Signal, ComputeSignal, debug_log
 from .context import untracked

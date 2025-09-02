@@ -2,7 +2,7 @@
 
 from .context import untracked
 from .scheduler import batch
-from .signal import Signal, Computed, ComputeSignal
+from .signal import Signal, Computed, ComputeSignal, ReadonlySignal
 from .effect import Effect
 from .utils import to_async_iter
 from .thread_safety import set_thread_safety, is_thread_safety_enabled
@@ -15,6 +15,7 @@ T = TypeVar("T")
 __version__ = "0.18.0"
 __all__ = [
     "Signal",
+    "ReadonlySignal",
     "ComputeSignal",
     "Computed",
     "Effect",

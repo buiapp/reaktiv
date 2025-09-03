@@ -10,7 +10,6 @@ Use it when you want a value that normally follows from other signals, but can b
 - Auto-reset: when the source changes, it recomputes and overwrites manual overrides
 - Previous state awareness: your computation receives the previous linked value and previous source value
 - Works with effects and other computed values
-- Can be disposed when no longer needed
 
 ## Initialization patterns
 

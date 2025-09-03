@@ -215,7 +215,7 @@ first_name.set("Jane")  # Effect runs
 
 The dependency tracking works by:
 
-1. When a signal is accessed by calling it (e.g., `Signal()`), it checks if there's a currently active effect or computation
+1. When a signal is accessed by calling it (e.g., `my_signal()`), it checks if there's a currently active effect or computation
 2. If found, the signal adds itself as a dependency of that effect or computation
 3. When the signal's value changes, it notifies all its dependents
 4. Dependents then update or re-execute as needed

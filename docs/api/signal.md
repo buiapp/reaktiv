@@ -110,7 +110,7 @@ Adds a subscriber to be notified when the signal's value changes.
 **Parameters**:
 - `subscriber`: An object implementing the `Subscriber` protocol with a `notify()` method.
 
-**Note**: This is typically used internally by the library. Most applications should use `effect()` or `compute()` instead.
+**Note**: This is typically used internally by the library. Most applications should use `Effect` or `Computed` instead.
 
 ### unsubscribe
 
@@ -146,20 +146,4 @@ user.set({"name": "Alice", "age": 30})
 
 # This will trigger updates because the "age" value differs
 user.set({"name": "Alice", "age": 31})
-```
-
-## Note on Signal vs signal()
-
-While reaktiv provides both the `Signal` class and `signal()` shortcut function, the recommended approach is to use the `Signal` class directly for a more consistent API.
-
-The `signal()` function is deprecated and will be removed in a future version. It currently emits a deprecation warning:
-
-```python
-# Deprecated approach (will show warning):
-from reaktiv import signal
-counter = signal(0)
-
-# Recommended approach:
-from reaktiv import Signal
-counter = Signal(0)
 ```

@@ -15,9 +15,9 @@
 
 ## Links
 
-- **Live Playground**: https://reaktiv.bui.app/#playground
+- **Live Playground**: [https://reaktiv.bui.app/#playground](https://reaktiv.bui.app/#playground)
 - **Documentation**: [https://reaktiv.readthedocs.io/](https://reaktiv.readthedocs.io/)
-- **Deep Dive Article**: https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/
+- **Deep Dive Article**: [https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
 - **GitHub**: [https://github.com/buiapp/reaktiv](https://github.com/buiapp/reaktiv)
 
 ## What is reaktiv?

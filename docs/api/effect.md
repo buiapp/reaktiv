@@ -168,21 +168,3 @@ with batch():
 # After batch completes: Effect runs once with new values
 # Prints: "x: 10, y: 20"
 ```
-
-## Note on Effect vs effect()
-
-While reaktiv provides both the `Effect` class and `effect()` shortcut function, the recommended approach is to use the `Effect` class directly for a more consistent API.
-
-The `effect()` function is deprecated and will be removed in a future version. It currently emits a deprecation warning:
-
-```python
-# Deprecated approach (will show warning):
-from reaktiv import signal, effect
-count = signal(0)
-count_effect = effect(lambda: print(f"Count: {count()}"))
-
-# Recommended approach:
-from reaktiv import Signal, Effect
-count = Signal(0)
-count_effect = Effect(lambda: print(f"Count: {count()}"))
-```

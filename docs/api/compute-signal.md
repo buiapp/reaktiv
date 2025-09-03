@@ -131,21 +131,3 @@ x.set(5)
 # Now accessing will recompute
 print(result())  # Prints: "Computing..." then "100"
 ```
-
-## Note on ComputeSignal vs computed()
-
-While reaktiv provides both the `Computed` class (alias for `ComputeSignal`) and `computed()` shortcut function, the recommended approach is to use the `Computed` class directly for a more consistent API.
-
-The `computed()` function is deprecated and will be removed in a future version. It currently emits a deprecation warning:
-
-```python
-# Deprecated approach (will show warning):
-from reaktiv import signal, computed
-x = signal(10)
-doubled = computed(lambda: x() * 2)
-
-# Recommended approach:
-from reaktiv import Signal, Computed
-x = Signal(10)
-doubled = Computed(lambda: x() * 2)
-```

@@ -13,16 +13,16 @@ A context manager that batches multiple signal updates together, deferring compu
 ### Usage
 
 ```python
-from reaktiv import signal, computed, effect, batch
+from reaktiv import Signal, Computed, Effect, batch
 
-x = signal(5)
-y = signal(10)
-sum_xy = computed(lambda: x() + y())
+x = Signal(5)
+y = Signal(10)
+sum_xy = Computed(lambda: x() + y())
 
 def log_sum():
     print(f"Sum: {sum_xy()}")
 
-logger = effect(log_sum)  # Prints: "Sum: 15"
+logger = Effect(log_sum)  # Prints: "Sum: 15"
 
 # Without batching, this would trigger two separate updates:
 # x.set(10)  # Triggers recomputation & effect
@@ -62,10 +62,10 @@ Executes a function without creating dependencies on any signals accessed within
 ### Usage
 
 ```python
-from reaktiv import signal, effect, untracked
+from reaktiv import Signal, Effect, untracked
 
-name = signal("Alice")
-greeting = signal("Hello")
+name = Signal("Alice")
+greeting = Signal("Hello")
 
 def log_message():
     # This creates a dependency on the 'name' signal
@@ -84,7 +84,7 @@ def log_message():
     
     print(f"{prefix1}, {person}!")
 
-logger = effect(log_message)  # Prints: "Hello, Alice!"
+logger = Effect(log_message)  # Prints: "Hello, Alice!"
 
 # This will trigger the effect because 'name' is a dependency
 name.set("Bob")  # Prints: "Hello, Bob!"
@@ -120,10 +120,10 @@ Converts a signal into an async iterator that yields values whenever the signal 
 
 ```python
 import asyncio
-from reaktiv import signal, to_async_iter
+from reaktiv import Signal, to_async_iter
 
 async def main():
-    counter = signal(0)
+    counter = Signal(0)
     
     # Create a task that increments the counter
     async def increment_counter():

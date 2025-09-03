@@ -50,32 +50,33 @@ Disposes of the effect, removing all dependencies and preventing it from running
 
 **Note**: You should call `dispose()` when an effect is no longer needed to prevent memory leaks.
 
-## Asynchronous Effects
+## Async usage (optional)
 
-reaktiv has first-class support for asynchronous effects:
+Recommendation: Prefer synchronous effects for predictable behavior. If you need to integrate with asyncio, spawn background tasks from a sync effect, or (advanced) use an async effect.
 
 ```python
 import asyncio
 from reaktiv import Signal, Effect
 
-async def main():
-    counter = Signal(0)
-    
-    async def log_counter():
-        print(f"Counter value: {counter()}")
-    
-    # Create and schedule the async effect
-    logger = Effect(log_counter)  # Prints: "Counter value: 0"
-    
-    # Update the signal and wait for the effect to run
-    counter.set(1)
-    await asyncio.sleep(0)  # Gives the effect time to execute
-    # Prints: "Counter value: 1"
-    
-    # Clean up
-    logger.dispose()
+counter = Signal(0)
 
-asyncio.run(main())
+# Recommended: synchronous effect that kicks off async work
+def log_counter():
+    value = counter()
+    async def background():
+        await asyncio.sleep(0)
+        print(f"Counter value: {value}")
+    asyncio.create_task(background())
+
+logger = Effect(log_counter)  # Prints immediately for initial run
+
+counter.set(1)
+
+# Advanced: direct async effect (use with care)
+# async def log_counter_async():
+#     await asyncio.sleep(0)
+#     print(f"Counter value: {counter()}")
+# logger = Effect(log_counter_async)
 ```
 
 ## Cleanup Functions

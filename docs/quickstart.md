@@ -25,29 +25,21 @@ uv pip install reaktiv
 Here's a simple example showing the core functionality:
 
 ```python
-import asyncio
-from reaktiv import Signal, Effect
+from reaktiv import Signal, Computed, Effect
 
-async def main():
-    # Create a signal with initial value
-    name = Signal("Alice")
-    
-    # Create an effect that depends on the signal
-    async def greet():
-        print(f"Hello, {name()}!")
-    
-    # Create and schedule the effect (important: keep a reference to prevent garbage collection)
-    greeter = Effect(greet)
-    
-    # Prints: "Hello, Alice!"
-    
-    # Update the signal value
-    name.set("Bob")  # Will trigger the effect to run again
-    
-    # Give the effect time to process
-    await asyncio.sleep(0)  # Prints: "Hello, Bob!"
+# Create a signal with initial value
+name = Signal("Alice")
 
-asyncio.run(main())
+# A computed value that stays in sync automatically
+greeting = Computed(lambda: f"Hello, {name()}!")
+
+# Keep a reference to the effect to prevent garbage collection
+greeter = Effect(lambda: print(greeting()))
+
+# Prints: "Hello, Alice!"
+
+# Update the signal value — everything reacts automatically
+name.set("Bob")  # Prints: "Hello, Bob!"
 ```
 
 ## Solving Real Problems
@@ -167,31 +159,34 @@ name.set("alice")
 name.set("Bob")
 ```
 
-## Asynchronous Effects
+## Optional: Async usage
 
-reaktiv has first-class support for async functions:
+Recommendation: Prefer synchronous effects for predictable behavior. If you need to integrate with asyncio, either spawn a background task from a sync effect, or (advanced) use an async effect.
 
 ```python
 import asyncio
 from reaktiv import Signal, Effect
 
-async def main():
-    counter = Signal(0)
-    
-    async def print_counter():
-        print(f"Counter value is: {counter()}")
-    
-    # Keep a reference to prevent garbage collection
-    counter_effect = Effect(print_counter)
-    
-    for i in range(1, 4):
-        await asyncio.sleep(1)
-        counter.set(i)
-    
-    # Cleaning up when done
-    counter_effect.dispose()
+counter = Signal(0)
 
-asyncio.run(main())
+# Recommended: sync effect that spawns async work
+def on_counter():
+    value = counter()
+    async def background():
+        await asyncio.sleep(0.1)
+        print(f"Counter value is: {value}")
+    asyncio.create_task(background())
+
+counter_effect = Effect(on_counter)
+
+# Advanced: direct async effect (use with care)
+# async def on_counter_async():
+#     await asyncio.sleep(0.1)
+#     print(f"Counter value is: {counter()}")
+# counter_effect = Effect(on_counter_async)
+
+for i in range(1, 3):
+    counter.set(i)
 ```
 
 ## Next Steps

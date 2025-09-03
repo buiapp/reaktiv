@@ -1,5 +1,5 @@
 site_name: reaktiv
-site_description: Reactive Computation Graphs for Python with first-class async support
+site_description: Reactive declarative state management for Python
 site_url: https://reaktiv.readthedocs.io/
 
 theme:
@@ -49,6 +49,7 @@ nav:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
-    - Utils: api/utils.md
+  - LinkedSignal: api/linked-signal.md
+  - Utils: api/utils.md
   - Advanced Features: advanced-features.md
   - Examples: examples/index.md

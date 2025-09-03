@@ -484,6 +484,70 @@ cpu_usage.set(95)  # Reactive system automatically prints: "System status: criti
 
 ## Advanced Features
 
+### LinkedSignal (Writable derived state)
+
+`LinkedSignal` is a writable computed signal that can be manually set by users but will automatically reset when its source context changes. Use it for “user overrides with sane defaults” that should survive some changes but reset on others.
+
+Common use cases:
+- Pagination: selection resets when page changes
+- Wizard flows: step-specific state resets when the step changes
+- Filters & search: user-picked value persists across pagination, resets when query changes
+- Forms: default values computed from context but user can override temporarily
+
+Simple pattern (auto-reset to default when any dependency used inside lambda changes):
+
+```python
+from reaktiv import Signal, LinkedSignal
+
+page = Signal(1)
+
+# Writable derived state that resets whenever page changes
+selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+
+selection.set("custom-choice")   # user override
+print(selection())                # "custom-choice"
+
+page.set(2)                       # context changes → resets
+print(selection())                # "default-for-page-2"
+```
+
+Advanced pattern (explicit source and previous-state aware computation):
+
+```python
+from reaktiv import Signal, LinkedSignal, PreviousState
+
+# Source contains (query, page). We want selection to persist across page changes
+# but reset when the query string changes.
+query = Signal("shoes")
+page = Signal(1)
+
+def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
+    current_query, _ = src
+    # If only the page changed, keep previous selection
+    if prev is not None and isinstance(prev.source, tuple) and prev.source[0] == current_query:
+        return prev.value
+    # Otherwise, provide a new default for the new query
+    return f"default-for-{current_query}"
+
+selection = LinkedSignal(source=lambda: (query(), page()), computation=compute_selection)
+
+print(selection())  # "default-for-shoes"
+selection.set("red-sneakers")
+
+page.set(2)         # page changed, same query → keep user override
+print(selection())  # "red-sneakers"
+
+query.set("boots")  # query changed → reset to new default
+print(selection())  # "default-for-boots"
+```
+
+Notes:
+- It’s writable: call `selection.set(...)` or `selection.update(...)` to override.
+- It auto-resets based on the dependencies you read (simple pattern) or your custom `source` logic (advanced pattern).
+- You can stop tracking and freeze the current value with `selection.dispose()`.
+
+See details and more patterns in the LinkedSignal docs: [docs/api/linked-signal.md](docs/api/linked-signal.md).
+
 ### Custom Equality
 ```python
 # For objects where you want value-based comparison

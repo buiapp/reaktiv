@@ -276,7 +276,7 @@ processor.update_data([10, 20, 30])  # Everything recalculates automatically
 | **Focus** | Fine-grained state management | Event streams and operations |
 | **Conceptual Model** | Signal-based (value over time) | Observable streams (collections over time) |
 | **Learning Curve** | Gentle, minimal API | Steeper, many operators to learn |
-| **Async Integration** | First-class Python `asyncio` support | Separate scheduler system |
+| **Async Integration** | Works with Python `asyncio` patterns | Separate scheduler system |
 | **Dependencies** | Zero external dependencies | Has external dependencies |
 | **Granularity** | Value-level reactivity | Stream-level operations |
 | **Execution Model** | Pull-based (lazy) | Push-based (eager) |

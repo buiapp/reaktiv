@@ -49,6 +49,28 @@ Returns the current value of the signal. When called within an active effect or 
 
 **Returns**: The current value of the signal.
 
+### as_readonly
+
+```python
+as_readonly() -> ReadonlySignal[T]
+```
+
+Returns a readonly wrapper that exposes only `get()`/call access. Useful for encapsulation when you want to share a value but prevent external code from mutating it.
+
+```python
+from reaktiv import Signal
+
+_counter = Signal(0)
+counter = _counter.as_readonly()  # expose read-only view
+
+def increment():
+    _counter.update(lambda x: x + 1)
+
+print(counter())  # 0
+increment()
+print(counter())  # 1
+```
+
 ### set
 
 ```python

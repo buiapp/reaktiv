@@ -28,6 +28,24 @@ def test_linked_signal_basic():
     assert linked() == "CHANGED"  # Reset, not "MANUAL"
 
 
+def test_linked_signal_eager_initial_compute_behavior():
+    """LinkedSignal should reset after source change even if set() happened before first read.
+
+    This matches Angular's linkedSignal behavior and relies on an initial internal compute
+    at construction time to capture dependencies.
+    """
+    page = Signal(1)
+    selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+
+    # Manual override before any read
+    selection.set("custom-choice")
+    assert selection() == "custom-choice"
+
+    # Changing the source should reset to computed default
+    page.set(2)
+    assert selection() == "default-for-page-2"
+
+
 def test_linked_signal_advanced_pattern():
     """Test LinkedSignal with explicit source and computation"""
     options = Signal(["A", "B", "C"])

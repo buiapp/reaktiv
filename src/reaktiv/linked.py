@@ -31,7 +31,6 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         "_computation",
         "_previous_source",
         "_simple_pattern",
-        "_disposed",
     )
 
     def __init__(
@@ -42,9 +41,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
     ):
-        self._disposed = False
-
         # Determine pattern
+        
         if source is not None and computation is not None:
             # Advanced pattern
             self._simple_pattern = False
@@ -123,29 +121,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         return self.get()
 
     def set(self, new_value: T) -> None:
-        if self._disposed:
-            debug_log("LinkedSignal is disposed, ignoring set() call")
-            return
         debug_log(f"LinkedSignal manual set() called with value: {new_value}")
         super()._set_internal(new_value)
 
     def update(self, update_fn: Callable[[T], T]) -> None:
-        if self._disposed:
-            debug_log("LinkedSignal is disposed, ignoring update() call")
-            return
         self.set(update_fn(cast(T, self._value)))
-
-    def dispose(self) -> None:
-        debug_log("LinkedSignal dispose() called")
-        if self._disposed:
-            return
-        self._disposed = True
-        # Freeze compute function so it no longer tracks dependencies
-        self._fn = lambda: cast(T, self._value)
-        # Unsubscribe from current sources
-        node = self._sources
-        while node is not None:
-            node.source._unsubscribe_edge(node)
-            node = node.next_source
-        self._sources = None
-        debug_log("LinkedSignal disposed")

@@ -403,27 +403,6 @@ def test_linked_signal_with_custom_equality():
     assert effect_runs >= 2  # Should definitely trigger
 
 
-def test_linked_signal_dispose():
-    """Test LinkedSignal disposal and cleanup"""
-    source = Signal(1)
-    linked = LinkedSignal(lambda: source() * 2)
-
-    # Before disposal, LinkedSignal should react to source updates
-    assert linked() == 2
-    source.set(2)
-    assert linked() == 4
-
-    # Dispose the LinkedSignal
-    linked.dispose()
-
-    # Operations after disposal should be ignored
-    linked.set(99)  # Should be ignored
-    linked.update(lambda x: x + 1)  # Should be ignored
-
-    # Source changes should not affect disposed LinkedSignal
-    old_value = linked()
-    source.set(10)
-    assert linked() == old_value  # Should not change
 
 
 def test_linked_signal_with_untracked():

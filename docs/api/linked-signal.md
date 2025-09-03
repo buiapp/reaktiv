@@ -86,7 +86,6 @@ Methods:
 - `__call__() -> T` / `get() -> T`: read the current value
 - `set(new_value: T) -> None`: manually override the value
 - `update(fn: Callable[[T], T]) -> None`: update based on current value
-- `dispose() -> None`: stop reacting to source changes and freeze current value
 
 ## Integration with effects and computed values
 
@@ -171,20 +170,6 @@ lnk = LinkedSignal(lambda: src() * 3.0, equal=lambda a, b: abs(a - b) < 0.1)
 
 src.set(1.02)  # small change may be ignored due to equality
 src.set(1.5)   # larger change triggers update
-```
-
-## Disposal
-
-```python
-from reaktiv import Signal, LinkedSignal
-
-src = Signal(1)
-lnk = LinkedSignal(lambda: src() * 2)
-
-lnk.dispose()
-
-lnk.set(99)     # ignored after dispose
-src.set(10)     # source updates no longer affect lnk
 ```
 
 ## Notes

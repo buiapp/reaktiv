@@ -544,9 +544,6 @@ print(selection())  # "default-for-boots"
 Notes:
 - It’s writable: call `selection.set(...)` or `selection.update(...)` to override.
 - It auto-resets based on the dependencies you read (simple pattern) or your custom `source` logic (advanced pattern).
-- You can stop tracking and freeze the current value with `selection.dispose()`.
-
-See details and more patterns in the LinkedSignal docs: [docs/api/linked-signal.md](docs/api/linked-signal.md).
 
 ### Custom Equality
 ```python

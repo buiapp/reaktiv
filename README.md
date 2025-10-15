@@ -876,6 +876,10 @@ Including integration examples with:
 - [NumPy Matplotlib - Reactive Plotting](./examples/numpy_plotting.py)
 - [IoT Sensor Agent Thread - Reactive Hardware](./examples/iot_sensor_agent_thread.py)
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=buiapp/reaktiv&type=Date)](https://star-history.com/#buiapp/reaktiv&Date)
+
 ---
 
 **Inspired by** Angular Signals and SolidJS reactivity • **Built for** Python developers who want fewer state management bugs • **Made in** Hamburg

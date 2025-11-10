@@ -99,15 +99,6 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         super().__init__(_compute, equal=equal)
         debug_log(f"LinkedSignal created with simple_pattern={self._simple_pattern}")
 
-        # Eagerly compute once to establish dependencies and a baseline value.
-        try:
-            # Perform initial compute without creating external dependencies
-            # (this only tracks internal sources for change detection).
-            super()._refresh()
-        except Exception:
-            # Defer error surfacing to the first public get(); keep behavior lazy.
-            pass
-
     def __repr__(self) -> str:
         try:
             # Compute/display value lazily without capturing dependencies
@@ -122,6 +113,9 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
 
     def set(self, new_value: T) -> None:
         debug_log(f"LinkedSignal manual set() called with value: {new_value}")
+        # If never computed, trigger initial computation to establish dependencies
+        if self._version == 0:
+            super()._refresh()
         super()._set_internal(new_value)
 
     def update(self, update_fn: Callable[[T], T]) -> None:

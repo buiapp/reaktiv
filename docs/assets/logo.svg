@@ -1,0 +1,41 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <!-- Single Neutral Gradient for all elements -->
+        <linearGradient id="grad_neutral" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#ffffff" />
+            <stop offset="100%" stop-color="#a3a3a3" />
+        </linearGradient>
+
+        <!-- Subtle Glow -->
+        <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+            <feComposite in="coloredBlur" in2="SourceGraphic" operator="out" result="glow"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- 1. The Signal Core (Solid Circle) -->
+    <circle cx="256" cy="256" r="48" fill="url(#grad_neutral)" />
+
+    <!-- 2. The Computed Orbit (Inner Arc) -->
+    <path d="M 366 256 A 110 110 0 1 1 256 146" 
+          stroke="url(#grad_neutral)" 
+          stroke-width="32" 
+          stroke-linecap="round" 
+          fill="none" 
+          transform="rotate(45 256 256)" 
+          opacity="0.9" />
+
+    <!-- 3. The Effect Orbit (Outer Arc) -->
+    <path d="M 256 66 A 190 190 0 0 0 256 446" 
+          stroke="url(#grad_neutral)" 
+          stroke-width="32" 
+          stroke-linecap="round" 
+          fill="none" 
+          transform="rotate(-30 256 256)"
+          opacity="0.9" />
+          
+</svg>

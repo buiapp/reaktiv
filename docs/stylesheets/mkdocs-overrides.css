@@ -1,0 +1,433 @@
+/* MkDocs Material Theme Overrides */
+
+[data-md-color-scheme="slate"] {
+    --md-default-bg-color: #050505;
+    --md-default-fg-color: #e5e5e5;
+    --md-code-bg-color: #121212;
+    --md-code-fg-color: #e5e5e5;
+    --md-primary-fg-color: #22c55e;
+    --md-accent-fg-color: #4ade80;
+    --md-typeset-a-color: #e5e5e5;
+}
+
+
+html,
+body {
+    background-color: #050505 !important;
+    background-image: radial-gradient(circle, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+    background-attachment: fixed;
+}
+
+/* Header with glass effect */
+.md-header {
+    background: rgba(20, 20, 20, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: none !important;
+}
+
+/* Tabs with glass effect */
+.md-tabs {
+    background: rgba(20, 20, 20, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Footer with glass effect */
+.md-footer {
+    background: rgba(20, 20, 20, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.md-footer-meta {
+    background-color: transparent !important;
+}
+
+/* Main content area - transparent background */
+.md-main,
+.md-main__inner,
+.md-content,
+.md-content__inner {
+    background-color: transparent !important;
+}
+
+/* Ensure all text is properly colored */
+.md-typeset,
+.md-typeset p,
+.md-typeset li,
+.md-typeset td,
+.md-typeset th {
+    color: #e5e5e5 !important;
+}
+
+/* Headers */
+.md-typeset h1 {
+    background: linear-gradient(to right, #4ade80, #22c55e) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 0.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+    color: #fff !important;
+}
+
+/* Code styling to match landing page */
+.md-typeset code {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #4ade80 !important;
+    border: none !important;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-size: 0.875em;
+}
+
+.md-typeset pre {
+    background-color: #121212 !important;
+    border: 1px solid #2a2a2a !important;
+    border-radius: 8px;
+    padding: 1.5rem !important;
+}
+
+.md-typeset pre code {
+    background-color: transparent !important;
+    color: #e5e5e5 !important;
+    padding: 0 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* Links - Elegant white/gray scheme */
+.md-typeset a {
+    color: #e5e5e5 !important;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.3);
+    text-underline-offset: 2px;
+    transition: all 0.2s ease;
+}
+
+.md-typeset a:hover {
+    color: #4ade80 !important;
+    text-decoration-color: #4ade80;
+}
+
+/* Navigation links */
+.md-nav__link {
+    color: #bbb !important;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+}
+
+.md-nav__link:hover {
+    color: #fff !important;
+    background-color: rgba(255, 255, 255, 0.05);
+    transform: translateX(2px);
+}
+
+.md-nav__link--active,
+.md-nav__link--passed {
+    color: #4ade80 !important;
+    font-weight: 600;
+    background-color: rgba(74, 222, 128, 0.1);
+    border-left: 2px solid #4ade80;
+    padding-left: calc(1.2rem - 2px);
+}
+
+/* Tables */
+.md-typeset table:not([class]) {
+    background-color: transparent !important;
+    border: 1px solid #2a2a2a !important;
+}
+
+.md-typeset table:not([class]) thead {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.md-typeset table:not([class]) th {
+    color: #fff !important;
+    border-bottom: 2px solid #2a2a2a !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.md-typeset table:not([class]) td {
+    border-top: 1px solid #2a2a2a !important;
+    color: #e5e5e5 !important;
+}
+
+.md-typeset table:not([class]) tr:hover {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Admonitions */
+.md-typeset .admonition,
+.md-typeset details {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-left: 4px solid #444;
+    border-radius: 4px;
+}
+
+.md-typeset .admonition.note {
+    border-left-color: #22c55e !important;
+}
+
+.md-typeset .admonition.tip {
+    border-left-color: #4ade80 !important;
+}
+
+.md-typeset .admonition.warning {
+    border-left-color: #fbbf24 !important;
+}
+
+.md-typeset .admonition.danger {
+    border-left-color: #ef4444 !important;
+}
+
+.md-typeset .admonition.info {
+    border-left-color: #a855f7 !important;
+}
+
+/* Search bar styling */
+.md-search__input {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #e5e5e5 !important;
+}
+
+.md-search__input::placeholder {
+    color: #888 !important;
+}
+
+/* Blockquotes */
+.md-typeset blockquote {
+    border-left: 4px solid #22c55e;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #d1d1d1;
+}
+
+/* Horizontal rules */
+.md-typeset hr {
+    border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Keyboard keys */
+.md-typeset kbd {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #e5e5e5 !important;
+}
+
+/* Mark/Highlight text */
+.md-typeset mark {
+    background-color: rgba(251, 191, 36, 0.3) !important;
+    color: #fbbf24 !important;
+}
+
+/* Tabbed content */
+.md-typeset .tabbed-set>input:checked+label {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: white !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Task lists */
+.md-typeset .task-list-control {
+    margin-right: 0.5rem;
+}
+
+/* Footnotes */
+.md-typeset .footnote {
+    color: #888 !important;
+}
+
+.md-typeset .footnote-ref {
+    color: #4ade80 !important;
+}
+
+/* Definition lists */
+.md-typeset dt {
+    color: #fff !important;
+}
+
+.md-typeset dd {
+    color: #d1d1d1 !important;
+}
+
+/* Navigation title */
+.md-nav__title {
+    color: #fff !important;
+    font-weight: 700;
+}
+
+/* Source/repo link */
+.md-source {
+    color: #e5e5e5 !important;
+}
+
+.md-nav--primary .md-nav__title .md-nav__button {
+    color: #4ade80 !important;
+}
+
+/* Mobile header */
+@media screen and (max-width: 76.1875em) {
+    .md-header {
+        background: rgba(20, 20, 20, 0.95) !important;
+    }
+
+    .md-header__button {
+        color: #4ade80 !important;
+    }
+
+    .md-nav--primary {
+        background: rgba(10, 10, 10, 0.98) !important;
+    }
+}
+
+/* Scrollbars */
+.md-sidebar__scrollwrap::-webkit-scrollbar,
+.md-content__inner::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-track,
+.md-content__inner::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb,
+.md-content__inner::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 4px;
+}
+
+.md-sidebar__scrollwrap::-webkit-scrollbar-thumb:hover,
+.md-content__inner::-webkit-scrollbar-thumb:hover {
+    background: #444;
+}
+
+/* Top navigation tabs */
+.md-tabs__link {
+    color: #bbb !important;
+}
+
+.md-tabs__link:hover,
+.md-tabs__link--active {
+    color: #4ade80 !important;
+}
+
+/* Button styling */
+.md-button {
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+}
+
+.md-button--primary {
+    background-color: #22c55e !important;
+    border-color: #22c55e !important;
+    color: #fff !important;
+}
+
+.md-button--primary:hover {
+    background-color: #16a34a !important;
+    border-color: #16a34a !important;
+}
+
+/* Announcement bar if present */
+.md-announce {
+    background: rgba(20, 20, 20, 0.7) !important;
+    backdrop-filter: blur(12px) !important;
+}
+
+/* Version selector if present */
+.md-version__list {
+    background-color: #121212 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Code copy button */
+.md-clipboard {
+    color: #888 !important;
+}
+
+.md-clipboard:hover {
+    color: #fff !important;
+}
+
+/* Progress bar */
+.md-progress {
+    background-color: #22c55e !important;
+}
+
+/* Smooth scroll behavior */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Enhanced focus states for accessibility */
+a:focus,
+button:focus,
+input:focus {
+    outline: 2px solid #4ade80;
+    outline-offset: 2px;
+}
+
+/* Enhanced code block container */
+.md-typeset .highlight {
+    position: relative;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Top tabs enhancement */
+.md-tabs__link {
+    color: #bbb !important;
+    transition: all 0.2s ease;
+}
+
+.md-tabs__link:hover,
+.md-tabs__link--active {
+    color: #4ade80 !important;
+    text-shadow: 0 0 8px rgba(74, 222, 128, 0.3);
+}
+
+/* Enhanced search styling */
+.md-search__input {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #e5e5e5 !important;
+    transition: all 0.2s ease;
+}
+
+.md-search__input:focus {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    border-color: #4ade80 !important;
+    box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.2);
+}
+
+/* Gradient border effect for main content */
+.md-content {
+    position: relative;
+}
+
+/* Enhanced table styling */
+.md-typeset table:not([class]) {
+    background-color: transparent !important;
+    border: 1px solid #2a2a2a !important;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.md-typeset table:not([class]) tr:hover {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    transition: background-color 0.2s ease;
+}

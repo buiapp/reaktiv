@@ -4,52 +4,82 @@ site_url: https://reaktiv.readthedocs.io/
 
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  icon:
+    repo: fontawesome/brands/github
   palette:
-    primary: indigo
-    accent: indigo
+    scheme: slate
+    primary: green
+    accent: green
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
+    - navigation.instant
+    - navigation.tracking
     - navigation.sections
-    - navigation.expand
+    - navigation.tabs
     - navigation.top
+    - navigation.expand
     - search.suggest
     - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
     - toc.integrate
+
+extra_css:
+  - stylesheets/mkdocs-overrides.css
+  - https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css
 
 repo_url: https://github.com/buiapp/reaktiv
 repo_name: buiapp/reaktiv
 
 markdown_extensions:
-  - pymdownx.highlight
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      pygments_style: monokai
+      use_pygments: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
   - admonition
+  - pymdownx.details
   - toc:
       permalink: true
 
 plugins:
   - search
-  - mermaid2
   - mkdocstrings:
       default_handler: python
       handlers:
         python:
           options:
             show_source: true
+            show_root_heading: true
 
 nav:
   - Home: index.md
-  - Installation: installation.md
-  - Quick Start: quickstart.md
-  - Why reaktiv?: why-reaktiv.md
-  - Core Concepts: core-concepts.md
+  - User Guide:
+    - Installation: installation.md
+    - Quick Start: quickstart.md
+    - Why reaktiv?: why-reaktiv.md
+    - Core Concepts: core-concepts.md
+    - Advanced Features: advanced-features.md
   - API Reference:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
-  - LinkedSignal: api/linked-signal.md
-  - Utils: api/utils.md
-  - Advanced Features: advanced-features.md
+    - LinkedSignal: api/linked-signal.md
+    - Utils: api/utils.md
   - Examples: examples/index.md
+
+watch:
+  - docs

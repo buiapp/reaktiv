@@ -10,7 +10,7 @@
 
 ![reaktiv](assets/logo_3.png)
 
-[Live Playground](https://reaktiv.bui.app/#playground) | [Documentation](https://reaktiv.readthedocs.io/) | [Deep Dive Article](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
+[Live Playground](https://reaktiv.bui.app/#playground) | [Documentation](https://reaktiv.bui.app/) | [Deep Dive Article](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
 </p>
 
 ## Installation

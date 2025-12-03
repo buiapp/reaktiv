@@ -3,13 +3,13 @@
 import asyncio
 from typing import AsyncIterator, TypeVar
 
-from .signal import Signal
+from .protocols import ReadableSignal
 from .effect import Effect
 
 T = TypeVar("T")
 
 
-async def to_async_iter(signal: Signal[T], initial: bool = True) -> AsyncIterator[T]:
+async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> AsyncIterator[T]:
     """Convert a signal to an async iterator that yields each time the signal changes.
 
     Args:

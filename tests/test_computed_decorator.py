@@ -1,6 +1,4 @@
 """Tests for Computed decorator with proper type inference."""
-
-import pytest
 from reaktiv import Signal, Computed, Effect
 
 

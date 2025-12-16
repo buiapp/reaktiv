@@ -3,7 +3,7 @@
 from .context import untracked
 from .scheduler import batch
 from .signal import Signal, Computed, ComputeSignal, ReadonlySignal
-from .linked import LinkedSignal, PreviousState
+from .linked import LinkedSignal, Linked, PreviousState
 from .effect import Effect
 from .utils import to_async_iter
 from .thread_safety import set_thread_safety, is_thread_safety_enabled
@@ -22,6 +22,7 @@ __all__ = [
     "Computed",
     "Effect",
     "LinkedSignal",
+    "Linked",
     "PreviousState",
     "ReadableSignal",
     "WritableSignal",

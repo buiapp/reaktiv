@@ -113,7 +113,7 @@ def test_decorator_with_effect() -> None:
     def track_double() -> None:
         effect_values.append(double())
 
-    Effect(track_double)
+    _eff = Effect(track_double)
 
     assert effect_values == [10]
     count.set(10)

@@ -1,6 +1,6 @@
 """LinkedSignal."""
 
-from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any
+from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any, overload
 from .signal import Signal, ComputeSignal, debug_log
 from .context import untracked
 
@@ -120,3 +120,66 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         self.set(update_fn(cast(T, self._value)))
+
+
+# Decorator factory function for LinkedSignal
+@overload
+def Linked(func: Callable[[], T], /) -> LinkedSignal[T]: ...
+
+
+@overload
+def Linked(
+    func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
+) -> LinkedSignal[T]: ...
+
+
+@overload
+def Linked(
+    *, equal: Callable[[T, T], bool]
+) -> Callable[[Callable[[], T]], LinkedSignal[T]]: ...
+
+
+def Linked(
+    func: Optional[Callable[[], T]] = None,
+    /,
+    *,
+    equal: Optional[Callable[[T, T], bool]] = None,
+) -> Union[LinkedSignal[T], Callable[[Callable[[], T]], LinkedSignal[T]]]:
+    """
+    Create a linked signal that can be both computed and manually set.
+
+    Can be used as a direct factory or as a decorator:
+
+    Usage as factory:
+        source = Signal(0)
+        linked = Linked(lambda: source() * 2)
+
+    Usage as decorator (without parameters):
+        source = Signal(0)
+        @Linked
+        def linked() -> int:
+            return source() * 2
+
+    Usage as decorator (with equality parameter):
+        source = Signal(0)
+        @Linked(equal=lambda a, b: a == b)
+        def linked() -> int:
+            return source() * 2
+
+    Args:
+        func: The computation function (when used as factory or decorator
+            without parens)
+        equal: Optional custom equality function for change detection
+
+    Returns:
+        A LinkedSignal instance or a decorator function
+    """
+    if func is not None:
+        # Direct call: Linked(lambda: ...) or @Linked decorator
+        return LinkedSignal(func, equal=equal)
+    else:
+        # Parameterized decorator: @Linked(equal=...)
+        def decorator(f: Callable[[], T]) -> LinkedSignal[T]:
+            return LinkedSignal(f, equal=equal)
+
+        return decorator

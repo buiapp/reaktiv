@@ -13,15 +13,16 @@ Use it when you want a value that normally follows from other signals, but can b
 
 ## Initialization patterns
 
-LinkedSignal supports two patterns:
-
-1) Simple computation pattern
+The simplest way to create a linked signal is using the `@Linked` decorator:
 
 ```python
-from reaktiv import Signal, LinkedSignal
+from reaktiv import Signal, Linked
 
 source = Signal("initial")
-linked = LinkedSignal(lambda: source().upper())
+
+@Linked
+def linked() -> str:
+    return source().upper()
 
 print(linked())  # INITIAL
 
@@ -33,6 +34,18 @@ print(linked())  # MANUAL
 source.set("changed")
 print(linked())  # CHANGED
 ```
+
+**Alternative: factory function style**
+```python
+# Still supported
+linked = LinkedSignal(lambda: source().upper())
+```
+
+## Initialization patterns
+
+LinkedSignal supports two patterns:
+
+1) Simple computation pattern (using decorator or factory)
 
 2) Advanced pattern with explicit source and computation
 

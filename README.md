@@ -518,21 +518,29 @@ Common use cases:
 - Filters & search: user-picked value persists across pagination, resets when query changes
 - Forms: default values computed from context but user can override temporarily
 
-Simple pattern (auto-reset to default when any dependency used inside lambda changes):
+**Using the @Linked decorator:**
 
 ```python
-from reaktiv import Signal, LinkedSignal
+from reaktiv import Signal, Linked
 
 page = Signal(1)
 
 # Writable derived state that resets whenever page changes
-selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+@Linked
+def selection() -> str:
+    return f"default-for-page-{page()}"
 
 selection.set("custom-choice")   # user override
 print(selection())                # "custom-choice"
 
 page.set(2)                       # context changes → resets
 print(selection())                # "default-for-page-2"
+```
+
+**Alternative: factory function style:**
+```python
+# Still supported
+selection = LinkedSignal(lambda: f"default-for-page-{page()}")
 ```
 
 Advanced pattern (explicit source and previous-state aware computation):

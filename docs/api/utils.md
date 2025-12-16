@@ -17,7 +17,10 @@ from reaktiv import Signal, Computed, Effect, batch
 
 x = Signal(5)
 y = Signal(10)
-sum_xy = Computed(lambda: x() + y())
+
+@Computed
+def sum_xy():
+    return x() + y()
 
 def log_sum():
     print(f"Sum: {sum_xy()}")
@@ -45,19 +48,10 @@ with batch():
 ## untracked
 
 ```python
-untracked(func_or_signal: Union[Callable[[], T], Signal[T]]) -> T
+untracked() -> ContextManager
 ```
 
-Executes a function without creating dependencies on any signals accessed within it, or gets a signal's value without creating a dependency.
-
-### Parameters
-
-- `func_or_signal`: Either a function to execute without tracking signal dependencies, or a signal whose value should be read without creating a dependency.
-
-### Returns
-
-- If a function is provided: The return value of the executed function.
-- If a signal is provided: The current value of the signal.
+A context manager that executes code without creating dependencies on any signals accessed within it.
 
 ### Usage
 
@@ -71,25 +65,19 @@ def log_message():
     # This creates a dependency on the 'name' signal
     person = name()
     
-    # Method 1: Using a lambda function (original approach)
-    # This does NOT create a dependency on the 'greeting' signal
-    prefix1 = untracked(lambda: greeting())
+    # Use context manager to read signals without tracking
+    with untracked():
+        # This does NOT create a dependency on the 'greeting' signal
+        prefix = greeting()
     
-    # Method 2: Passing the signal directly (new approach)
-    # This also does NOT create a dependency on the 'greeting' signal
-    prefix2 = untracked(greeting)
-    
-    # Both methods produce the same result
-    assert prefix1 == prefix2
-    
-    print(f"{prefix1}, {person}!")
+    print(f"{prefix}, {person}!")
 
 logger = Effect(log_message)  # Prints: "Hello, Alice!"
 
 # This will trigger the effect because 'name' is a dependency
 name.set("Bob")  # Prints: "Hello, Bob!"
 
-# This will NOT trigger the effect because 'greeting' is accessed via untracked()
+# This will NOT trigger the effect because 'greeting' was accessed inside untracked()
 greeting.set("Hi")  # No effect execution
 ```
 

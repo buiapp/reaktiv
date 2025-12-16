@@ -8,7 +8,7 @@
 
 <p align="center">
 
-![reaktiv](assets/logo_3.png)
+![reaktiv](./docs/assets/logo.svg)
 
 [Website](https://reaktiv.bui.app/) | [Live Playground](https://reaktiv.bui.app/#playground) | [Documentation](https://reaktiv.bui.app/docs) | [Deep Dive Article](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
 </p>

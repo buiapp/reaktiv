@@ -11,78 +11,47 @@ Reactive programming is a declarative programming paradigm concerned with data s
 reaktiv provides three main primitives for reactive programming:
 
 ```mermaid
-graph TD
+graph LR
     %% Define node subgraphs for better organization
-    subgraph "Data Sources"
+    subgraph "Reactive State"
         S1[Signal A]
         S2[Signal B]
-        S3[Signal C]
     end
     
-    subgraph "Derived Values"
-        C1[Computed X]
-        C2[Computed Y]
-    end
-    
-    subgraph "Side Effects"
-        E1[Effect 1]
-        E2[Effect 2]
-    end
-    
-    subgraph "External Systems"
-        EXT1[UI Update]
-        EXT2[API Call]
-        EXT3[Database Write]
+    subgraph "Derived State"
+        C1[Computed Sum]
     end
     
     %% Define relationships between nodes
     S1 -->|"get()"| C1
     S2 -->|"get()"| C1
-    S2 -->|"get()"| C2
-    S3 -->|"get()"| C2
-    
-    C1 -->|"get()"| E1
-    C2 -->|"get()"| E1
-    S3 -->|"get()"| E2
-    C2 -->|"get()"| E2
-    
-    E1 --> EXT1
-    E1 --> EXT2
-    E2 --> EXT3
     
     %% Change propagation path
-    S1 -.-> |"1\. set()"| C1
-    C1 -.->|"2\. recompute"| E1
-    E1 -.->|"3\. execute"| EXT1
+    S1 -.-> |"1. set()"| C1
     
     %% Style nodes by type
     classDef signal fill:#4CAF50,color:white,stroke:#388E3C,stroke-width:1px
     classDef computed fill:#2196F3,color:white,stroke:#1976D2,stroke-width:1px
-    classDef effect fill:#FF9800,color:white,stroke:#F57C00,stroke-width:1px
     
     %% Apply styles to nodes
-    class S1,S2,S3 signal
-    class C1,C2 computed
-    class E1,E2 effect
+    class S1,S2 signal
+    class C1 computed
     
     %% Legend node
     LEGEND[" Legend:
-    • Signal: Stores a value, notifies dependents
-    • Computed: Derives value from dependencies
-    • Effect: Runs side effects when dependencies change
-    • → Data flow / Dependency (read)
-    • ⟿ Change propagation (update)
+    • Signal: Stores value
+    • Computed: Derives value
+    • → Pull (read value)
+    • ⟿ Push (notify change)
     "]
     classDef legend fill:none,stroke:none,text-align:left
     class LEGEND legend
 ```
 
-The diagram above illustrates how reaktiv's primitives interact:
+The diagram above illustrates the core **Push-Pull** pattern:
 
-- **Signals** (green) store values and form the foundation of your reactive system
-- **Computed values** (blue) derive data from signals and other computed values
-- **Effects** (orange) perform side effects when their dependencies change
-- Arrows show both data flow (solid) and change propagation (dotted)
+1.  **Push**: When `Signal A` changes, it *pushes* a notification to `Computed Sum`.
+2.  **Pull**: When `Computed Sum` is accessed, it *pulls* the new values from `Signal A` and `Signal B` to recompute.
 
 ### 1. Signals
 
@@ -189,17 +158,69 @@ counter = Signal(0)
 sync_effect = Effect(lambda: print(f"Counter: {counter()}"))  # Runs immediately
 
 counter.set(1)  # Effect runs synchronously
+```
+Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
 
-# Asynchronous effect (requires asyncio)
-import asyncio
+### 4. Linked Signals
 
-async def async_logger():
-    print(f"Async counter: {counter()}")
+`LinkedSignal` is a writable computed signal that can be manually set by users but will automatically reset when its source context changes. Use it for "user overrides with sane defaults" that should survive some changes but reset on others.
 
-async_effect = Effect(async_logger)  # Schedules the effect in the event loop
+Common use cases:
+- Pagination: selection resets when page changes
+- Wizard flows: step-specific state resets when the step changes
+- Filters & search: user-picked value persists across pagination, resets when query changes
+- Forms: default values computed from context but user can override temporarily
+
+**Simple pattern** (auto-reset to default when any dependency used inside lambda changes):
+
+```python
+from reaktiv import Signal, LinkedSignal
+
+page = Signal(1)
+
+# Writable derived state that resets whenever page changes
+selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+
+selection.set("custom-choice")   # user override
+print(selection())                # "custom-choice"
+
+page.set(2)                       # context changes → resets
+print(selection())                # "default-for-page-2"
 ```
 
-Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
+**Advanced pattern** (explicit source and previous-state aware computation):
+
+```python
+from reaktiv import Signal, LinkedSignal, PreviousState
+
+# Source contains (query, page). We want selection to persist across page changes
+# but reset when the query string changes.
+query = Signal("shoes")
+page = Signal(1)
+
+def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
+    current_query, _ = src
+    # If only the page changed, keep previous selection
+    if prev is not None and isinstance(prev.source, tuple) and prev.source[0] == current_query:
+        return prev.value
+    # Otherwise, provide a new default for the new query
+    return f"default-for-{current_query}"
+
+selection = LinkedSignal(source=lambda: (query(), page()), computation=compute_selection)
+
+print(selection())  # "default-for-shoes"
+selection.set("red-sneakers")
+
+page.set(2)         # page changed, same query → keep user override
+print(selection())  # "red-sneakers"
+
+query.set("boots")  # query changed → reset to new default
+print(selection())  # "default-for-boots"
+```
+
+Notes:
+- It's writable: call `selection.set(...)` or `selection.update(...)` to override.
+- It auto-resets based on the dependencies you read (simple pattern) or your custom `source` logic (advanced pattern).
 
 ## Dependency Tracking
 
@@ -293,6 +314,52 @@ class TemperatureMonitor:
         # Assign Effect to self._effect to prevent garbage collection
         self._effect = Effect(_handle_temperature_change)
 ```
+
+## Untracked Reads
+
+Use `untracked()` as a context manager to read signals without creating dependencies. This is useful for logging, debugging, or conditional logic inside an effect without adding extra dependencies.
+
+```python
+from reaktiv import Signal, Computed, Effect, untracked
+
+name = Signal("Alice")
+is_logging_enabled = Signal(False)
+log_level = Signal("INFO")
+
+greeting = Computed(lambda: f"Hello, {name()}!")
+
+# An effect that depends on `greeting`, but reads other signals untracked
+def display_greeting():
+    # Create a dependency on `greeting`
+    current_greeting = greeting()
+    
+    # Read multiple signals without creating dependencies
+    with untracked():
+        logging_active = is_logging_enabled()
+        current_log_level = log_level()
+        if logging_active:
+            print(f"LOG [{current_log_level}]: Greeting updated to '{current_greeting}'")
+    
+    print(current_greeting)
+
+# MUST assign to variable!
+greeting_effect = Effect(display_greeting)
+# Initial run prints: "Hello, Alice"
+
+name.set("Bob")
+# Prints: "Hello, Bob"
+
+is_logging_enabled.set(True)
+log_level.set("DEBUG")
+# Prints nothing, because these are not dependencies of the effect.
+
+name.set("Charlie")
+# Prints:
+# LOG [DEBUG]: Greeting updated to 'Hello, Charlie'
+# Hello, Charlie
+```
+
+The context manager approach is particularly useful when you need to read multiple signals for logging, debugging, or conditional logic without creating reactive dependencies.
 
 ## Custom Equality
 

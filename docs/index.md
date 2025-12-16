@@ -1,22 +1,23 @@
 # reaktiv: Reactive Signals for Python
 
 <div align="center">
-  <img src="assets/logo_3.png" alt="reaktiv logo" width="300">
+  <img src="assets/logo.svg" alt="reaktiv logo" width="300">
 </div>
 
 **Reactive declarative state management for Python** — automatic dependency tracking and reactive updates for your application state.
 
-![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
-[![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/)
-[![PyPI Downloads](https://static.pepy.tech/badge/reaktiv/month)](https://pepy.tech/projects/reaktiv)
-![Documentation Status](https://readthedocs.org/projects/reaktiv/badge/)
-![License](https://img.shields.io/badge/license-MIT-green)
-[![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
+<div class="badge-container flex flex-wrap justify-center gap-2">
+  <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python Version">
+  <a href="https://pypi.org/project/reaktiv/"><img src="https://img.shields.io/pypi/v/reaktiv.svg" alt="PyPI Version"></a>
+  <a href="https://pepy.tech/projects/reaktiv"><img src="https://static.pepy.tech/badge/reaktiv/month" alt="PyPI Downloads"></a>
+  <img src="https://readthedocs.org/projects/reaktiv/badge/" alt="Documentation Status">
+  <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  <a href="https://microsoft.github.io/pyright/"><img src="https://microsoft.github.io/pyright/img/pyright_badge.svg" alt="Checked with pyright"></a>
+</div>
 
 ## Links
 
 - **Website**: [https://reaktiv.bui.app/](https://reaktiv.bui.app/)
-- **Documentation**: [https://reaktiv.bui.app/docs/](https://reaktiv.bui.app/docs/)
 - **Live Playground**: [https://reaktiv.bui.app/#playground](https://reaktiv.bui.app/#playground)
 - **Deep Dive Article**: [https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
 - **GitHub**: [https://github.com/buiapp/reaktiv](https://github.com/buiapp/reaktiv)
@@ -48,7 +49,7 @@ reaktiv solves common pain points in state management:
 
 ## Quick Start
 
-reaktiv is built around three core primitives:
+reaktiv is built around core primitives for reactive programming:
 
 1. **Signals**: Store values and notify dependents when they change
 2. **Computed Signals**: Derive values that automatically update when dependencies change
@@ -74,11 +75,15 @@ age.set(31)       # Prints: Updated: Hello, Bob! You are 31 years old.
 
 ## Documentation
 
-* [Installation](installation.md) - How to install the library
-* [Quick Start](quickstart.md) - Get up and running quickly
-* [Why reaktiv?](why-reaktiv.md) - When and why to use reaktiv
-* [Core Concepts](core-concepts.md) - Understanding the fundamentals
-* [API Reference](api/signal.md) - Detailed API documentation
-  - [LinkedSignal](api/linked-signal.md) - Writable derived signal with auto-reset
-* [Advanced Features](advanced-features.md) - More powerful capabilities
-* [Real-World Examples](examples/index.md) - Practical applications
+* [Installation](./installation.md) - How to install the library
+* [Quick Start](./quickstart.md) - Get up and running quickly
+* [Why reaktiv?](./why-reaktiv.md) - When and why to use reaktiv
+* [Core Concepts](./core-concepts.md) - Understanding the fundamentals
+* [API Reference](./api/signal.md) - Detailed API documentation
+  * [Signal](./api/signal.md) - Writable reactive values
+  * [Computed](./api/compute-signal.md) - Derived reactive values
+  * [Effect](./api/effect.md) - Reactive side effects
+  * [LinkedSignal](./api/linked-signal.md) - Writable derived signal with auto-reset
+
+* [Advanced Features](./advanced-features.md) - More powerful capabilities
+* [Real-World Examples](./examples/index.md) - Practical applications

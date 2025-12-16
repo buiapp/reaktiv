@@ -51,7 +51,9 @@ name = Signal("Alice")
 age = Signal(30)
 
 # Reactive derived data - automatically stays in sync
-greeting = Computed(lambda: f"Hello, {name()}! You are {age()} years old.")
+@Computed
+def greeting():
+    return f"Hello, {name()}! You are {age()} years old."
 
 # Reactive side effects - automatically run when data changes
 # IMPORTANT: Must assign to variable to prevent garbage collection
@@ -60,32 +62,6 @@ greeting_effect = Effect(lambda: print(f"Updated: {greeting()}"))
 # Just change your base data - everything reacts automatically
 name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 age.set(31)      # Prints: "Updated: Hello, Bob! You are 31 years old."
-```
-
-### Using Named Functions
-
-You can use named functions instead of lambdas for better readability and debugging in your reactive system:
-
-```python
-from reaktiv import Signal, Computed, Effect
-
-# Your reactive data sources
-name = Signal("Alice")
-age = Signal(30)
-
-# Named functions for reactive computations
-def create_greeting():
-    return f"Hello, {name()}! You are {age()} years old."
-
-def print_greeting():
-    print(f"Updated: {greeting()}")
-
-# Build your reactive system with named functions
-greeting = Computed(create_greeting)
-greeting_effect = Effect(print_greeting)
-
-# Works exactly the same as lambdas - everything reacts automatically
-name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 ```
 
 ## Core Concepts
@@ -101,10 +77,9 @@ name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 counter = Signal(0)
 
 # Computed: derives from other reactive values (like Excel cell B1 = A1 * 2)
-def calculate_doubled():
+@Computed
+def doubled():
     return counter() * 2
-
-doubled = Computed(calculate_doubled)
 
 # Effect: reactive side effects (like Excel chart that updates when cells change)
 def print_values():
@@ -129,9 +104,15 @@ When you change A1 in Excel, B1 and C1 automatically recalculate. That's exactly
 
 ```python
 # Excel-style reactive programming in Python
-a1 = Signal(5)                           # A1 = 5
-b1 = Computed(lambda: a1() * 2)         # B1 = A1 * 2
-c1 = Computed(lambda: a1() + b1())      # C1 = A1 + B1
+a1 = Signal(5)  # A1 = 5
+
+@Computed  # B1 = A1 * 2
+def b1() -> int:
+    return a1() * 2
+
+@Computed  # C1 = A1 + B1
+def c1() -> int:
+    return a1() + b1()
 
 # Display effect (like Excel showing the values)
 display_effect = Effect(lambda: print(f"A1={a1()}, B1={b1()}, C1={c1()}"))
@@ -214,7 +195,10 @@ graph TD
 **Lazy Evaluation** - Computations only happen when results are actually needed:
 ```python
 # This expensive computation isn't calculated until you access it
-expensive_calc = Computed(lambda: sum(range(1000000)))  # Not calculated yet!
+@Computed
+def expensive_calc():
+    return sum(range(1000000))  # Not calculated yet!
+
 print(expensive_calc())  # NOW it calculates when you need the result
 print(expensive_calc())  # Instant! (cached result)
 ```
@@ -223,7 +207,10 @@ print(expensive_calc())  # Instant! (cached result)
 ```python
 # Results are automatically cached for efficiency
 a1 = Signal(5)
-b1 = Computed(lambda: a1() * 2)  # Define the computation
+
+@Computed
+def b1():
+    return a1() * 2  # Define the computation
 
 result1 = b1()  # Calculates: 5 * 2 = 10
 result2 = b1()  # Cached! No recalculation needed
@@ -238,9 +225,17 @@ result3 = b1()  # Recalculates: 6 * 2 = 12
 a1 = Signal(5)    # Independent signal
 d2 = Signal(100)  # Another independent signal
 
-b1 = Computed(lambda: a1() * 2)        # Depends only on a1
-c1 = Computed(lambda: a1() + b1())     # Depends on a1 and b1
-e2 = Computed(lambda: d2() / 10)       # Depends only on d2
+@Computed  # Depends only on a1
+def b1():
+    return a1() * 2
+
+@Computed  # Depends on a1 and b1
+def c1():
+    return a1() + b1()
+
+@Computed  # Depends only on d2
+def e2():
+    return d2() / 10
 
 a1.set(10)  # Only b1 and c1 recalculate, e2 stays cached
 d2.set(200) # Only e2 recalculates, b1 and c1 stay cached
@@ -289,9 +284,17 @@ quantity = Signal(2)       # A2
 tax_rate = Signal(0.1)     # A3
 
 # Formulas (like Excel computed cells)
-subtotal = Computed(lambda: price() * quantity())           # B1 = A1 * A2
-tax = Computed(lambda: subtotal() * tax_rate())            # B2 = B1 * A3
-total = Computed(lambda: subtotal() + tax())               # B3 = B1 + B2
+@Computed  # B1 = A1 * A2
+def subtotal():
+    return price() * quantity()
+
+@Computed  # B2 = B1 * A3
+def tax():
+    return subtotal() * tax_rate()
+
+@Computed  # B3 = B1 + B2
+def total():
+    return subtotal() + tax()
 
 # Auto-display (like Excel chart that updates automatically)
 total_effect = Effect(lambda: print(f"Order total: ${total():.2f}"))
@@ -307,9 +310,9 @@ Benefits:
 - ✅ State relationships are explicit and centralized
 - ✅ Side effects are guaranteed to run
 
-## Type Safety
+## Type Safety & Decorator Benefits
 
-`reaktiv` provides full type hint support, making it compatible with static type checkers like mypy and pyright. This enables better IDE autocompletion, early error detection, and improved code maintainability.
+`reaktiv` provides full type hint support, making it compatible with static type checkers like ruff, mypy and pyright. This enables better IDE autocompletion, early error detection, and improved code maintainability.
 
 ```python
 from reaktiv import Signal, Computed, Effect
@@ -324,9 +327,17 @@ score = Signal(100.0)  # Inferred as Signal[float]
 items = Signal([1, 2, 3])  # Inferred as Signal[list[int]]
 
 # Computed values preserve and infer types
-name_length: Computed[int] = Computed(lambda: len(name()))
-greeting = Computed(lambda: f"Hello, {name()}!")  # Inferred as Computed[str]
-total_score = Computed(lambda: score() * 1.5)  # Inferred as Computed[float]
+@Computed
+def name_length():  # Type is automatically ComputeSignal[int]
+    return len(name())
+
+@Computed
+def greeting():  # Type is automatically ComputeSignal[str]
+    return f"Hello, {name()}!"
+
+@Computed
+def total_score():  # Type is automatically ComputeSignal[float]
+    return score() * 1.5
 
 # Type-safe update functions
 def increment_age(current: int) -> int:
@@ -389,11 +400,13 @@ user_prefs = Signal({"timeout": 60})
 feature_flags = Signal({"new_retry_logic": True})
 
 # Automatically reactive merged config
-config = Computed(lambda: {
-    **defaults(),
-    **user_prefs(),
-    **feature_flags()
-})
+@Computed
+def config():
+    return {
+        **defaults(),
+        **user_prefs(),
+        **feature_flags()
+    }
 
 print(config())  # {'timeout': 60, 'retries': 3, 'new_retry_logic': True}
 
@@ -411,13 +424,22 @@ from reaktiv import Signal, Computed, Effect
 raw_data = Signal([])
 
 # Reactive processing pipeline
-filtered_data = Computed(lambda: [x for x in raw_data() if x > 0])
-processed_data = Computed(lambda: [x * 2 for x in filtered_data()])
-summary = Computed(lambda: {
-    "count": len(processed_data()),
-    "sum": sum(processed_data()),
-    "avg": sum(processed_data()) / len(processed_data()) if processed_data() else 0
-})
+@Computed
+def filtered_data():
+    return [x for x in raw_data() if x > 0]
+
+@Computed
+def processed_data():
+    return [x * 2 for x in filtered_data()]
+
+@Computed
+def summary():
+    data = processed_data()
+    return {
+        "count": len(data),
+        "sum": sum(data),
+        "avg": sum(data) / len(data) if data else 0
+    }
 
 # Reactive monitoring - MUST assign to variable!
 summary_effect = Effect(lambda: print(f"Summary: {summary()}"))

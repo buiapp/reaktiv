@@ -122,8 +122,10 @@ from reaktiv import Signal, Computed
 x = Signal(10)
 y = Signal(20)
 
-# Computed signal
-sum_xy = Computed(lambda: x() + y())
+# Computed signal using decorator
+@Computed
+def sum_xy():
+    return x() + y()
 
 print(sum_xy())  # 30
 
@@ -132,6 +134,12 @@ x.set(15)
 
 # Computed value updates automatically
 print(sum_xy())  # 35
+```
+
+You can also use the factory function style:
+```python
+# Alternative: factory function style
+sum_xy = Computed(lambda: x() + y())
 ```
 
 Key characteristics of computed signals:
@@ -204,7 +212,9 @@ first_name = Signal("John")
 last_name = Signal("Doe")
 
 # This computed signal depends on both first_name and last_name
-full_name = Computed(lambda: f"{first_name()} {last_name()}")
+@Computed
+def full_name():
+    return f"{first_name()} {last_name()}"
 
 # This effect depends on full_name (and indirectly on first_name and last_name)
 display = Effect(lambda: print(f"Full name: {full_name()}"))
@@ -229,7 +239,10 @@ from reaktiv import Signal, Computed, batch, Effect
 
 x = Signal(10)
 y = Signal(20)
-sum_xy = Computed(lambda: x() + y())
+
+@Computed
+def sum_xy():
+    return x() + y()
 
 def log_sum():
     print(f"Sum: {sum_xy()}")

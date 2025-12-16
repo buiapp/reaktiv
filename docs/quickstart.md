@@ -31,7 +31,9 @@ from reaktiv import Signal, Computed, Effect
 name = Signal("Alice")
 
 # A computed value that stays in sync automatically
-greeting = Computed(lambda: f"Hello, {name()}!")
+@Computed
+def greeting():
+    return f"Hello, {name()}!"
 
 # Keep a reference to the effect to prevent garbage collection
 greeter = Effect(lambda: print(greeting()))
@@ -55,9 +57,17 @@ quantity = Signal(2)
 tax_rate = Signal(0.1)  # 10% tax
 
 # Create computed values that automatically update when dependencies change
-subtotal = Computed(lambda: price() * quantity())
-tax = Computed(lambda: subtotal() * tax_rate())
-total = Computed(lambda: subtotal() + tax())
+@Computed
+def subtotal():
+    return price() * quantity()
+
+@Computed
+def tax():
+    return subtotal() * tax_rate()
+
+@Computed
+def total():
+    return subtotal() + tax()
 
 # Create an effect to display the total (will run initially and when dependencies change)
 display = Effect(lambda: print(f"Order total: ${total():.2f}"))
@@ -77,7 +87,7 @@ Notice how we never needed to manually recalculate the total! reaktiv automatica
 
 ## Computed Values
 
-Computed signals let you derive values from other signals:
+Computed signals let you derive values from other signals using the `@Computed` decorator:
 
 ```python
 from reaktiv import Signal, Computed
@@ -87,7 +97,9 @@ price = Signal(100)
 tax_rate = Signal(0.2)
 
 # Create a computed signal that depends on price and tax_rate
-total = Computed(lambda: price() * (1 + tax_rate()))
+@Computed
+def total():
+    return price() * (1 + tax_rate())
 
 print(total())  # 120.0
 
@@ -96,6 +108,12 @@ tax_rate.set(0.25)
 
 # The computed value updates automatically
 print(total())  # 125.0
+```
+
+You can also use the factory function style if you prefer:
+```python
+# Alternative: factory function style
+total = Computed(lambda: price() * (1 + tax_rate()))
 ```
 
 ## Working with Updates

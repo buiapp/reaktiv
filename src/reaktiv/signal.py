@@ -6,7 +6,7 @@ Migrated to Edge-based dependency tracking and minimal scheduler.
 from __future__ import annotations
 
 import threading
-from typing import Callable, Generic, Optional, TypeVar, cast
+from typing import Callable, Generic, Optional, TypeVar, Union, cast, overload
 
 from ._debug import debug_log
 from . import graph
@@ -370,4 +370,68 @@ class ComputeSignal(Signal[T]):
         raise AttributeError("Cannot manually set value of ComputeSignal")
 
 
-Computed = ComputeSignal
+# Decorator overloads for Computed
+@overload
+def Computed(func: Callable[[], T], /) -> ComputeSignal[T]: ...
+
+
+@overload
+def Computed(
+    func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
+) -> ComputeSignal[T]: ...
+
+
+@overload
+def Computed(
+    *, equal: Callable[[T, T], bool]
+) -> Callable[[Callable[[], T]], ComputeSignal[T]]: ...
+
+
+def Computed(
+    func: Optional[Callable[[], T]] = None,
+    /,
+    *,
+    equal: Optional[Callable[[T, T], bool]] = None,
+) -> Union[ComputeSignal[T], Callable[[Callable[[], T]], ComputeSignal[T]]]:
+    """
+    Create a computed signal that derives its value from other signals.
+
+    Can be used as a direct factory or as a decorator:
+
+    Usage as factory:
+        count = Signal(1)
+        double = Computed(lambda: count() * 2)
+
+    Usage as factory with equality:
+        count = Signal(1)
+        double = Computed(lambda: count() * 2, equal=lambda a, b: a == b)
+
+    Usage as decorator (without parameters):
+        count = Signal(1)
+        @Computed
+        def double() -> int:
+            return count() * 2
+
+    Usage as decorator (with equality parameter):
+        count = Signal(1)
+        @Computed(equal=lambda a, b: a == b)
+        def double() -> int:
+            return count() * 2
+
+    Args:
+        func: The computation function (when used as factory or decorator
+            without parens)
+        equal: Optional custom equality function for change detection
+
+    Returns:
+        A ComputeSignal instance or a decorator function
+    """
+    if func is not None:
+        # Direct call: Computed(lambda: ...) or @Computed decorator
+        return ComputeSignal(func, equal=equal)
+    else:
+        # Parameterized decorator: @Computed(equal=...)
+        def decorator(f: Callable[[], T]) -> ComputeSignal[T]:
+            return ComputeSignal(f, equal=equal)
+
+        return decorator

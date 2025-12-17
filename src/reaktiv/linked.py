@@ -102,17 +102,20 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
     ) -> Union[Self, Callable[[Callable[[], T]], Self]]:
-        if computation_or_source is not None or (
-            source is not None and computation is not None
+        if (
+            equal is not None
+            and computation_or_source is None
+            and source is None
+            and computation is None
         ):
-            # Direct call: Linked(lambda: ...) or @Linked decorator
-            return super().__new__(cls)
+            # Parameterized decorator: @Linked(equal=...)
+            def decorator(f: Callable[[], T]) -> Self:
+                return cls(f, equal=equal)
 
-        # Parameterized decorator: @Linked(equal=...)
-        def decorator(f: Callable[[], T]) -> Self:
-            return cls(f, source=source, computation=computation, equal=equal)
+            return decorator
 
-        return decorator
+        # Direct call: Linked(lambda: ...) or @Linked decorator
+        return super().__new__(cls)
 
     def __init__(
         self,

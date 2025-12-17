@@ -42,7 +42,6 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         equal: Optional[Callable[[T, T], bool]] = None,
     ):
         # Determine pattern
-        
         if source is not None and computation is not None:
             # Advanced pattern
             self._simple_pattern = False
@@ -122,31 +121,10 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         self.set(update_fn(cast(T, self._value)))
 
 
-# Decorator factory function for LinkedSignal
-@overload
-def Linked(func: Callable[[], T], /) -> LinkedSignal[T]: ...
-
-
-@overload
-def Linked(
-    func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
-) -> LinkedSignal[T]: ...
-
-
-@overload
-def Linked(
-    *, equal: Callable[[T, T], bool]
-) -> Callable[[Callable[[], T]], LinkedSignal[T]]: ...
-
-
-def Linked(
-    func: Optional[Callable[[], T]] = None,
-    /,
-    *,
-    equal: Optional[Callable[[T, T], bool]] = None,
-) -> Union[LinkedSignal[T], Callable[[Callable[[], T]], LinkedSignal[T]]]:
+# Decorator factory for LinkedSignal
+class Linked(LinkedSignal[T]):
     """
-    Create a linked signal that can be both computed and manually set.
+    Factory class for creating linked signals that can be both computed and manually set.
 
     Can be used as a direct factory or as a decorator:
 
@@ -162,7 +140,7 @@ def Linked(
 
     Usage as decorator (with equality parameter):
         source = Signal(0)
-        @Linked(equal=lambda a, b: a == b)
+        @Linked[int](equal=lambda a, b: a == b)
         def linked() -> int:
             return source() * 2
 
@@ -174,12 +152,44 @@ def Linked(
     Returns:
         A LinkedSignal instance or a decorator function
     """
-    if func is not None:
-        # Direct call: Linked(lambda: ...) or @Linked decorator
-        return LinkedSignal(func, equal=equal)
-    else:
-        # Parameterized decorator: @Linked(equal=...)
-        def decorator(f: Callable[[], T]) -> LinkedSignal[T]:
-            return LinkedSignal(f, equal=equal)
 
-        return decorator
+    @overload
+    def __new__(
+        cls,
+        func: Callable[[], T],
+        /,
+    ) -> LinkedSignal[T]: ...
+
+    @overload
+    def __new__(
+        cls,
+        func: Callable[[], T],
+        /,
+        *,
+        equal: Callable[[T, T], bool],
+    ) -> LinkedSignal[T]: ...
+
+    @overload
+    def __new__(
+        cls,
+        /,
+        *,
+        equal: Callable[[T, T], bool],
+    ) -> Callable[[Callable[[], T]], LinkedSignal[T]]: ...
+
+    def __new__(
+        cls,
+        func: Optional[Callable[[], T]] = None,
+        /,
+        *,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Union[LinkedSignal[T], Callable[[Callable[[], T]], LinkedSignal[T]]]:
+        if func is not None:
+            # Direct call: Linked(lambda: ...) or @Linked decorator
+            return LinkedSignal(func, equal=equal)
+        else:
+            # Parameterized decorator: @Linked(equal=...)
+            def decorator(f: Callable[[], T]) -> LinkedSignal[T]:
+                return LinkedSignal(f, equal=equal)
+
+            return decorator

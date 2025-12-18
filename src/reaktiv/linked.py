@@ -1,6 +1,11 @@
 """LinkedSignal."""
 
+from __future__ import annotations
+
 from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any, overload
+
+from typing_extensions import Self
+
 from .signal import Signal, ComputeSignal, debug_log
 from .context import untracked
 
@@ -22,7 +27,30 @@ class PreviousState(Generic[T]):
 class LinkedSignal(ComputeSignal[T], Generic[T]):
     """A writable signal that automatically resets when source signals change.
 
-    Implementation based on ComputeSignal.
+    Implementation based on ComputeSignal. Can be used as a direct factory or as a decorator:
+
+    Usage as factory:
+        source = Signal(0)
+        linked = Linked(lambda: source() * 2)
+
+    Usage as decorator (without parameters):
+        source = Signal(0)
+        @Linked
+        def linked() -> int:
+            return source() * 2
+
+    Usage as decorator (with equality parameter):
+        source = Signal(0)
+        @Linked[int](equal=lambda a, b: a == b)
+        def linked() -> int:
+            return source() * 2
+
+    Args:
+        computation_or_source: The computation function (when used as factory or decorator
+            without parens)
+        source: Optional source signal or callable
+        computation: Optional computation function for advanced pattern
+        equal: Optional custom equality function for change detection
     """
 
     __slots__ = (
@@ -33,6 +61,62 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         "_simple_pattern",
     )
 
+    @overload
+    def __new__(
+        cls,
+        func: Callable[[], T],
+        /,
+    ) -> Self: ...
+
+    @overload
+    def __new__(
+        cls,
+        func: Callable[[], T],
+        /,
+        *,
+        equal: Callable[[T, T], bool],
+    ) -> Self: ...
+
+    @overload
+    def __new__(
+        cls,
+        /,
+        *,
+        equal: Callable[[T, T], bool],
+    ) -> Callable[[Callable[[], T]], Self]: ...  # Decorator factory
+
+    @overload
+    def __new__(
+        cls,
+        computation_or_source: Union[Callable[[], T], Signal[U], None] = None,
+        *,
+        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Self: ...
+
+    def __new__(
+        cls,
+        computation_or_source: Union[Callable[[], T], Signal[U], None] = None,
+        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Union[Self, Callable[[Callable[[], T]], Self]]:
+        if (
+            equal is not None
+            and computation_or_source is None
+            and source is None
+            and computation is None
+        ):
+            # Parameterized decorator: @Linked(equal=...)
+            def decorator(f: Callable[[], T]) -> Self:
+                return cls(f, equal=equal)
+
+            return decorator
+
+        # Direct call: Linked(lambda: ...) or @Linked decorator
+        return super().__new__(cls)
+
     def __init__(
         self,
         computation_or_source: Union[Callable[[], T], Signal[U], None] = None,
@@ -42,7 +126,6 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         equal: Optional[Callable[[T, T], bool]] = None,
     ):
         # Determine pattern
-        
         if source is not None and computation is not None:
             # Advanced pattern
             self._simple_pattern = False
@@ -122,64 +205,4 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         self.set(update_fn(cast(T, self._value)))
 
 
-# Decorator factory function for LinkedSignal
-@overload
-def Linked(func: Callable[[], T], /) -> LinkedSignal[T]: ...
-
-
-@overload
-def Linked(
-    func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
-) -> LinkedSignal[T]: ...
-
-
-@overload
-def Linked(
-    *, equal: Callable[[T, T], bool]
-) -> Callable[[Callable[[], T]], LinkedSignal[T]]: ...
-
-
-def Linked(
-    func: Optional[Callable[[], T]] = None,
-    /,
-    *,
-    equal: Optional[Callable[[T, T], bool]] = None,
-) -> Union[LinkedSignal[T], Callable[[Callable[[], T]], LinkedSignal[T]]]:
-    """
-    Create a linked signal that can be both computed and manually set.
-
-    Can be used as a direct factory or as a decorator:
-
-    Usage as factory:
-        source = Signal(0)
-        linked = Linked(lambda: source() * 2)
-
-    Usage as decorator (without parameters):
-        source = Signal(0)
-        @Linked
-        def linked() -> int:
-            return source() * 2
-
-    Usage as decorator (with equality parameter):
-        source = Signal(0)
-        @Linked(equal=lambda a, b: a == b)
-        def linked() -> int:
-            return source() * 2
-
-    Args:
-        func: The computation function (when used as factory or decorator
-            without parens)
-        equal: Optional custom equality function for change detection
-
-    Returns:
-        A LinkedSignal instance or a decorator function
-    """
-    if func is not None:
-        # Direct call: Linked(lambda: ...) or @Linked decorator
-        return LinkedSignal(func, equal=equal)
-    else:
-        # Parameterized decorator: @Linked(equal=...)
-        def decorator(f: Callable[[], T]) -> LinkedSignal[T]:
-            return LinkedSignal(f, equal=equal)
-
-        return decorator
+Linked = LinkedSignal

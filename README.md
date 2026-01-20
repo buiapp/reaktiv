@@ -578,6 +578,58 @@ Notes:
 - It’s writable: call `selection.set(...)` or `selection.update(...)` to override.
 - It auto-resets based on the dependencies you read (simple pattern) or your custom `source` logic (advanced pattern).
 
+### Resource - Async Data Loading
+
+`Resource` brings async operations into your reactive application with automatic dependency tracking, request cancellation, and comprehensive status management. Perfect for API calls and data fetching.
+
+```python
+import asyncio
+from reaktiv import Resource, Signal, ResourceStatus
+
+# Reactive parameter
+user_id = Signal(1)
+
+# Async data loader
+async def fetch_user(params):
+    # Check for cancellation
+    if params.cancellation.is_set():
+        return None
+    
+    await asyncio.sleep(0.5)  # Simulate API call
+    return {"id": params.params["user_id"], "name": f"User {params.params['user_id']}"}
+
+async def main():
+    # Create resource
+    user_resource = Resource(
+        params=lambda: {"user_id": user_id()},  # When user_id changes, auto-reload
+        loader=fetch_user
+    )
+    
+    # Wait for initial load
+    await asyncio.sleep(0.6)
+    
+    # Access data safely
+    if user_resource.has_value():
+        print(user_resource.value())  # {"id": 1, "name": "User 1"}
+    
+    # Changing param automatically triggers reload
+    user_id.set(2)
+    await asyncio.sleep(0.6)
+    print(user_resource.value())  # {"id": 2, "name": "User 2"}
+
+asyncio.run(main())
+```
+
+**Key features:**
+- **6 status states**: IDLE, LOADING, RELOADING, RESOLVED, ERROR, LOCAL
+- **Automatic request cancellation** when parameters change (prevents race conditions)
+- **Seamless integration** with Computed and Effect
+- **Manual control** via `reload()`, `set()`, and `update()` methods
+- **Atomic snapshots** for safe state access
+- **Automatic cleanup** when garbage collected
+
+📖 **[Full Resource Documentation](https://reaktiv.bui.app/docs/api/resource-signal/)** - Complete API reference, advanced patterns, and examples.
+
 ### Custom Equality
 ```python
 # For objects where you want value-based comparison

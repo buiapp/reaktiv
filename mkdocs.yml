@@ -78,6 +78,7 @@ nav:
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
     - LinkedSignal: api/linked-signal.md
+    - Resource: api/resource-signal.md
     - Utils: api/utils.md
   - Examples: examples/index.md
 

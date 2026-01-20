@@ -1,15 +1,18 @@
 # reaktiv
 
+<div align="center">
+
+![reaktiv](./docs/assets/logo.png)
+
 ![Python Version](https://img.shields.io/badge/python-3.9%2B-blue) [![PyPI Version](https://img.shields.io/pypi/v/reaktiv.svg)](https://pypi.org/project/reaktiv/) [![PyPI Downloads](https://static.pepy.tech/badge/reaktiv/month)](https://pepy.tech/projects/reaktiv) ![Documentation Status](https://readthedocs.org/projects/reaktiv/badge/) ![License](https://img.shields.io/badge/license-MIT-green) [![Checked with pyright](https://microsoft.github.io/pyright/img/pyright_badge.svg)](https://microsoft.github.io/pyright/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H71OBINS)
 
 **Reactive Declarative State Management Library for Python** - automatic dependency tracking and reactive updates for your application state.
 
-<p align="center">
-
 [Website](https://reaktiv.bui.app/) | [Live Playground](https://reaktiv.bui.app/#playground) | [Documentation](https://reaktiv.bui.app/docs) | [Deep Dive Article](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
-</p>
+
+</div>
 
 ## Installation
 

@@ -21,7 +21,7 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
-__version__ = "0.20.1"
+__version__ = "0.21.0"
 __all__ = [
     "Signal",
     "ReadonlySignal",

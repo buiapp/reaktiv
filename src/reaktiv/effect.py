@@ -21,13 +21,16 @@ class Effect:
     """A reactive effect that automatically tracks signal dependencies and re-runs when they change.
     
     Effect creates a side effect function that runs immediately and re-runs whenever
-    any signal it depends on changes. It supports both sync and async functions, and
-    optional cleanup logic.
+    any signal it depends on changes. It supports optional cleanup logic.
+    
+    Note:
+        Async functions are supported but still experimental and may not behave as expected
+        in all scenarios.
     
     Args:
-        func: The effect function to run. Can be sync or async. May optionally accept an
-            `on_cleanup` callback parameter for registering cleanup logic, or return a
-            cleanup function.
+        func: The effect function to run. Can be sync or async (experimental). May optionally 
+            accept an `on_cleanup` callback parameter for registering cleanup logic, or return 
+            a cleanup function.
             
     Examples:
         Basic effect:
@@ -37,7 +40,8 @@ class Effect:
         counter = Signal(0)
         
         # Effect runs immediately and on every change
-        Effect(lambda: print(f"Counter: {counter()}"))
+        # Must retain reference to prevent garbage collection
+        effect = Effect(lambda: print(f"Counter: {counter()}"))
         # Prints: "Counter: 0"
         
         counter.set(1)
@@ -86,33 +90,6 @@ class Effect:
         
         enabled.set(False)
         # Prints: "Stopping..."
-        ```
-        
-        Async effect:
-        ```python
-        import asyncio
-        from reaktiv import Signal, Effect
-        
-        user_id = Signal(1)
-        
-        async def fetch_user():
-            uid = user_id()
-            print(f"Fetching user {uid}...")
-            await asyncio.sleep(0.1)
-            print(f"Got user {uid}")
-        
-        async def main():
-            effect = Effect(fetch_user)
-            await asyncio.sleep(0.2)
-            
-            user_id.set(2)
-            await asyncio.sleep(0.2)
-        
-        asyncio.run(main())
-        # Prints: "Fetching user 1..."
-        # Prints: "Got user 1"
-        # Prints: "Fetching user 2..."
-        # Prints: "Got user 2"
         ```
         
         Manual disposal:

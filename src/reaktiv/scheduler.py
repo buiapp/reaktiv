@@ -99,7 +99,7 @@ def batch() -> Generator[None, None, None]:
         from reaktiv import Signal, Effect, batch
         
         x = Signal(0)
-        Effect(lambda: print(f"x={x()}"))
+        effect = Effect(lambda: print(f"x={x()}"))  # retain reference
         # Prints: "x=0"
         
         with batch():

@@ -18,7 +18,121 @@ EffectFn = Union[
 
 
 class Effect:
-    """Reactive effect that tracks signal dependencies."""
+    """A reactive effect that automatically tracks signal dependencies and re-runs when they change.
+    
+    Effect creates a side effect function that runs immediately and re-runs whenever
+    any signal it depends on changes. It supports both sync and async functions, and
+    optional cleanup logic.
+    
+    Args:
+        func: The effect function to run. Can be sync or async. May optionally accept an
+            `on_cleanup` callback parameter for registering cleanup logic, or return a
+            cleanup function.
+            
+    Examples:
+        Basic effect:
+        ```python
+        from reaktiv import Signal, Effect
+        
+        counter = Signal(0)
+        
+        # Effect runs immediately and on every change
+        Effect(lambda: print(f"Counter: {counter()}"))
+        # Prints: "Counter: 0"
+        
+        counter.set(1)
+        # Prints: "Counter: 1"
+        ```
+        
+        Effect with cleanup:
+        ```python
+        from reaktiv import Signal, Effect
+        
+        user_id = Signal(1)
+        
+        def subscribe_to_user():
+            uid = user_id()
+            print(f"Subscribing to user {uid}")
+            
+            # Return cleanup function
+            def cleanup():
+                print(f"Unsubscribing from user {uid}")
+            return cleanup
+        
+        effect = Effect(subscribe_to_user)
+        # Prints: "Subscribing to user 1"
+        
+        user_id.set(2)
+        # Prints: "Unsubscribing from user 1"
+        # Prints: "Subscribing to user 2"
+        
+        effect.dispose()
+        # Prints: "Unsubscribing from user 2"
+        ```
+        
+        Effect with on_cleanup parameter:
+        ```python
+        from reaktiv import Signal, Effect
+        
+        enabled = Signal(True)
+        
+        def my_effect(on_cleanup):
+            if enabled():
+                print("Starting...")
+                on_cleanup(lambda: print("Stopping..."))
+        
+        effect = Effect(my_effect)
+        # Prints: "Starting..."
+        
+        enabled.set(False)
+        # Prints: "Stopping..."
+        ```
+        
+        Async effect:
+        ```python
+        import asyncio
+        from reaktiv import Signal, Effect
+        
+        user_id = Signal(1)
+        
+        async def fetch_user():
+            uid = user_id()
+            print(f"Fetching user {uid}...")
+            await asyncio.sleep(0.1)
+            print(f"Got user {uid}")
+        
+        async def main():
+            effect = Effect(fetch_user)
+            await asyncio.sleep(0.2)
+            
+            user_id.set(2)
+            await asyncio.sleep(0.2)
+        
+        asyncio.run(main())
+        # Prints: "Fetching user 1..."
+        # Prints: "Got user 1"
+        # Prints: "Fetching user 2..."
+        # Prints: "Got user 2"
+        ```
+        
+        Manual disposal:
+        ```python
+        from reaktiv import Signal, Effect
+        
+        count = Signal(0)
+        
+        effect = Effect(lambda: print(count()))
+        # Prints: 0
+        
+        count.set(1)
+        # Prints: 1
+        
+        effect.dispose()
+        
+        count.set(2)
+        # No print - effect is disposed
+        ```
+    """
 
     __slots__ = (
         "_fn",
@@ -206,6 +320,34 @@ class Effect:
             self._async_task.cancel()
 
     def dispose(self) -> None:
+        """Stop the effect and prevent it from running again.
+        
+        This method:
+        - Marks the effect as disposed
+        - Unsubscribes from all signal dependencies
+        - Runs any pending cleanup functions
+        - Cancels any in-progress async tasks
+        
+        After calling dispose(), the effect will no longer react to signal changes.
+        
+        Examples:
+            ```python
+            from reaktiv import Signal, Effect
+            
+            counter = Signal(0)
+            
+            effect = Effect(lambda: print(f"Count: {counter()}"))
+            # Prints: "Count: 0"
+            
+            counter.set(1)
+            # Prints: "Count: 1"
+            
+            effect.dispose()
+            
+            counter.set(2)
+            # No output - effect is disposed
+            ```
+        """
         self._flags |= graph.DISPOSED
         if not (self._flags & graph.RUNNING):
             self._dispose_now()

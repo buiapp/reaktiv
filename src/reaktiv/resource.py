@@ -30,14 +30,23 @@ P = TypeVar("P")
 
 
 class ResourceStatus(str, Enum):
-    """Status of a resource's async operation."""
+    """Status of a resource's async operation.
+    
+    Attributes:
+        IDLE: No valid request and the loader has not run
+        ERROR: The loader has encountered an error
+        LOADING: The loader is running as a result of the params value changing
+        RELOADING: The loader is running as a result of reload() being called
+        RESOLVED: The loader has completed successfully
+        LOCAL: The resource's value has been set locally via set() or update()
+    """
 
-    IDLE = "idle"  # No valid request and the loader has not run
-    ERROR = "error"  # The loader has encountered an error
-    LOADING = "loading"  # The loader is running as a result of the params value changing
-    RELOADING = "reloading"  # The loader is running as a result of reload() being called
-    RESOLVED = "resolved"  # The loader has completed
-    LOCAL = "local"  # The resource's value has been set locally via set() or update()
+    IDLE = "idle"
+    ERROR = "error"
+    LOADING = "loading"
+    RELOADING = "reloading"
+    RESOLVED = "resolved"
+    LOCAL = "local"
 
 
 @dataclass

@@ -73,6 +73,7 @@ nav:
     - Why reaktiv?: why-reaktiv.md
     - Core Concepts: core-concepts.md
     - Advanced Features: advanced-features.md
+    - Patterns & Best Practices: patterns-and-best-practices.md
   - API Reference:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md

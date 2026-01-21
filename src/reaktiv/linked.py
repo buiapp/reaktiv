@@ -14,7 +14,12 @@ U = TypeVar("U")
 
 
 class PreviousState(Generic[T]):
-    """Container for previous state in LinkedSignal computations."""
+    """Container for previous state in LinkedSignal computations.
+    
+    Attributes:
+        value: The previous value of the LinkedSignal
+        source: The previous value of the source signal
+    """
 
     __slots__ = ("value", "source")
 
@@ -25,32 +30,118 @@ class PreviousState(Generic[T]):
 
 
 class LinkedSignal(ComputeSignal[T], Generic[T]):
-    """A writable signal that automatically resets when source signals change.
-
-    Implementation based on ComputeSignal. Can be used as a direct factory or as a decorator:
-
-    Usage as factory:
-        source = Signal(0)
-        linked = Linked(lambda: source() * 2)
-
-    Usage as decorator (without parameters):
-        source = Signal(0)
-        @Linked
-        def linked() -> int:
-            return source() * 2
-
-    Usage as decorator (with equality parameter):
-        source = Signal(0)
-        @Linked[int](equal=lambda a, b: a == b)
-        def linked() -> int:
-            return source() * 2
-
+    """A writable signal that automatically recomputes when source signals change.
+    
+    LinkedSignal combines the benefits of computed signals (automatic updates) with
+    writable signals (can be set manually). When source signals change, it recomputes.
+    When manually set, it holds that value until sources change again.
+    
+    Perfect for form inputs, UI state, and derived values that users can override.
+    
     Args:
-        computation_or_source: The computation function (when used as factory or decorator
-            without parens)
-        source: Optional source signal or callable
-        computation: Optional computation function for advanced pattern
+        computation_or_source: The computation function (simple pattern) or source signal
+        source: Optional source signal or callable (advanced pattern)
+        computation: Optional computation function (advanced pattern)
         equal: Optional custom equality function for change detection
+        
+    Examples:
+        Simple pattern (automatic derivation):
+        ```python
+        from reaktiv import Signal, LinkedSignal
+        
+        fahrenheit = Signal(32)
+        
+        # Celsius automatically computes from Fahrenheit
+        celsius = LinkedSignal(lambda: (fahrenheit() - 32) * 5/9)
+        
+        print(celsius())  # 0.0
+        
+        fahrenheit.set(212)
+        print(celsius())  # 100.0
+        
+        # Can override manually
+        celsius.set(25)
+        print(celsius())  # 25.0 (manual value)
+        
+        # Changing source recomputes
+        fahrenheit.set(68)
+        print(celsius())  # 20.0 (recomputed from source)
+        ```
+        
+        Form input pattern:
+        ```python
+        from reaktiv import Signal, LinkedSignal, Effect
+        
+        # Server data
+        server_name = Signal("John Doe")
+        
+        # Form input linked to server data
+        input_value = LinkedSignal(lambda: server_name())
+        
+        # Track changes (keep reference to prevent GC)
+        effect = Effect(lambda: print(f"Input: {input_value()}"))
+        # Prints: "Input: John Doe"
+        
+        # User edits the input
+        input_value.set("Jane Smith")
+        # Prints: "Input: Jane Smith"
+        
+        # Server data refreshes
+        server_name.set("John Updated")
+        # Prints: "Input: John Updated" (reset to server value)
+        ```
+        
+        Advanced pattern (with previous state):
+        ```python
+        from reaktiv import Signal, LinkedSignal, PreviousState
+        
+        total_pages = Signal(10)
+        
+        def clamp_page(page_num, prev):
+            max_page = total_pages()
+            
+            if max_page == 0:
+                return None
+            
+            # First time or source changed - use default
+            if prev is None or prev.source != max_page:
+                return 1
+            
+            # Clamp to valid range
+            return max(1, min(prev.value, max_page))
+        
+        current_page = LinkedSignal(
+            source=total_pages,
+            computation=clamp_page
+        )
+        
+        print(current_page())  # 1 (default)
+        
+        current_page.set(5)
+        print(current_page())  # 5
+        
+        total_pages.set(3)
+        print(current_page())  # 3 (clamped to max)
+        ```
+        
+        As decorator:
+        ```python
+        from reaktiv import Signal, LinkedSignal
+        
+        source = Signal(0)
+        
+        @LinkedSignal
+        def derived():
+            return source() * 2
+        
+        print(derived())  # 0
+        
+        source.set(5)
+        print(derived())  # 10
+        
+        derived.set(100)
+        print(derived())  # 100 (manual override)
+        ```
     """
 
     __slots__ = (

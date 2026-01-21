@@ -18,7 +18,71 @@ T = TypeVar("T")
 
 
 class Signal(Generic[T]):
-    """Reactive writable signal."""
+    """A reactive writable signal that notifies dependents when its value changes.
+    
+    Signal is the core building block in reaktiv. It creates a container for values
+    that can change over time and automatically notify effects and computed signals
+    that depend on it.
+    
+    Args:
+        value: The initial value of the signal
+        equal: Optional custom equality function to determine if two values should be 
+            considered equal. By default, identity (`is`) is used.
+    
+    Examples:
+        Basic usage:
+        ```python
+        from reaktiv import Signal
+        
+        # Create a signal with an initial value
+        counter = Signal(0)
+        
+        # Get the current value
+        value = counter()  # 0
+        
+        # Set a new value
+        counter.set(5)
+        
+        # Update using a function
+        counter.update(lambda x: x + 1)  # Now 6
+        ```
+        
+        Custom equality:
+        ```python
+        from reaktiv import Signal
+        
+        # Custom equality function for dictionaries
+        def dict_equal(a, b):
+            return isinstance(a, dict) and isinstance(b, dict) and a == b
+        
+        user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
+        
+        # This won't trigger updates (same key-value pairs)
+        user.set({"name": "Alice", "age": 30})
+        
+        # This will trigger updates (different age)
+        user.set({"name": "Alice", "age": 31})
+        ```
+        
+        Readonly wrapper:
+        ```python
+        from reaktiv import Signal
+        
+        # Internal writable signal
+        _counter = Signal(0)
+        
+        # Expose readonly view
+        counter = _counter.as_readonly()
+        
+        def increment():
+            _counter.update(lambda x: x + 1)
+        
+        print(counter())  # 0
+        increment()
+        print(counter())  # 1
+        # counter.set(5)  # Error: ReadonlySignal has no 'set' method
+        ```
+    """
 
     __slots__ = (
         "_value",
@@ -31,6 +95,14 @@ class Signal(Generic[T]):
     )
 
     def __init__(self, value: T, *, equal: Optional[Callable[[T, T], bool]] = None):
+        """Initialize a new Signal with an initial value.
+        
+        Args:
+            value: The initial value of the signal
+            equal: Optional custom equality function. If provided, it will be used to
+                determine if a new value is different from the current value. If not
+                provided, identity comparison (`is`) is used.
+        """
         self._value = value
         self._equal = equal
         self._readonly_cache: Optional[ReadonlySignal[T]] = None
@@ -77,6 +149,22 @@ class Signal(Generic[T]):
         return True
 
     def get(self) -> T:
+        """Get the current value of the signal.
+        
+        When called within an active effect or computed signal, it establishes a 
+        dependency relationship, so changes to this signal will notify the dependent.
+        
+        Returns:
+            The current value of the signal
+            
+        Examples:
+            ```python
+            counter = Signal(42)
+            value = counter.get()  # 42
+            # Or use the callable syntax
+            value = counter()      # 42
+            ```
+        """
         # Use lock to protect the read operation only when thread safety is enabled
         if self._lock is not None:
             with self._lock:
@@ -93,6 +181,31 @@ class Signal(Generic[T]):
             return self._value
 
     def set(self, new_value: T) -> None:
+        """Set a new value for the signal and notify subscribers if it changed.
+        
+        A notification is triggered only if the new value is considered different
+        from the current value. By default, identity comparison (`is`) is used
+        unless a custom equality function was provided.
+        
+        Args:
+            new_value: The new value to set
+            
+        Raises:
+            RuntimeError: If called from within a ComputeSignal computation
+            
+        Examples:
+            ```python
+            counter = Signal(0)
+            counter.set(5)
+            print(counter())  # 5
+            
+            # Setting the same value (by identity) won't trigger updates
+            obj = {"x": 1}
+            signal = Signal(obj)
+            signal.set(obj)  # No notification
+            signal.set({"x": 1})  # Notification (different object)
+            ```
+        """
         debug_log(
             f"Signal set() called with new_value: {new_value} (old_value: {self._value})"
         )
@@ -140,7 +253,29 @@ class Signal(Generic[T]):
             end_batch()
 
     def update(self, update_fn: Callable[[T], T]) -> None:
-        """Atomically update the signal using a function."""
+        """Atomically update the signal using a function of its current value.
+        
+        This method is useful for updates that depend on the current value,
+        such as incrementing a counter or modifying an object.
+        
+        Args:
+            update_fn: A function that takes the current value and returns the new value
+            
+        Examples:
+            ```python
+            counter = Signal(0)
+            counter.update(lambda x: x + 1)
+            print(counter())  # 1
+            
+            counter.update(lambda x: x * 2)
+            print(counter())  # 2
+            
+            # Works with any type
+            name = Signal("Alice")
+            name.update(lambda s: s.upper())
+            print(name())  # "ALICE"
+            ```
+        """
         # Use lock to protect the read-modify-write operation when thread safety is enabled
         if self._lock is not None:
             with self._lock:
@@ -151,13 +286,60 @@ class Signal(Generic[T]):
             self._set_internal(new_value)
 
     def as_readonly(self) -> "ReadonlySignal[T]":
+        """Return a readonly wrapper that exposes only read access to this signal.
+        
+        Useful for encapsulation when you want to share a value but prevent
+        external code from mutating it.
+        
+        Returns:
+            A ReadonlySignal that wraps this signal
+            
+        Examples:
+            ```python
+            # Keep internal signal private
+            _counter = Signal(0)
+            
+            # Expose readonly view
+            counter = _counter.as_readonly()
+            
+            def increment():
+                _counter.update(lambda x: x + 1)
+            
+            print(counter())  # 0
+            increment()
+            print(counter())  # 1
+            # counter.set(5)  # AttributeError: 'ReadonlySignal' has no attribute 'set'
+            ```
+        """
         if self._readonly_cache is None:
             self._readonly_cache = ReadonlySignal(self)
         return self._readonly_cache
 
 
 class ReadonlySignal(Generic[T]):
-    """A readonly wrapper around a Signal that prevents modification."""
+    """A readonly wrapper around a Signal that prevents modification.
+    
+    ReadonlySignal provides only read access (`get()` and `__call__()`) to the 
+    underlying signal, preventing direct modification. Useful for encapsulation
+    and API design.
+    
+    Note:
+        You typically don't create ReadonlySignal directly. Use `Signal.as_readonly()` instead.
+        
+    Examples:
+        ```python
+        from reaktiv import Signal
+        
+        _counter = Signal(0)
+        counter = _counter.as_readonly()
+        
+        # Can read
+        print(counter())  # 0
+        
+        # Cannot write
+        # counter.set(5)  # AttributeError
+        ```
+    """
 
     __slots__ = ("_signal",)
 
@@ -174,11 +356,114 @@ class ReadonlySignal(Generic[T]):
         return self.get()
 
     def get(self) -> T:
+        """Get the current value of the underlying signal.
+        
+        Returns:
+            The current value
+        """
         return self._signal.get()
 
 
 class ComputeSignal(Signal[T]):
-    """Computed signal that derives value from other signals."""
+    """A computed signal that derives its value from other signals.
+    
+    ComputeSignal automatically tracks dependencies on other signals and recomputes
+    its value when any dependency changes. Computations are lazy and cached - they
+    only run when accessed and dependencies have changed.
+    
+    Args:
+        compute_fn: A function that computes the signal's value from other signals
+        equal: Optional custom equality function for change detection
+        
+    Examples:
+        Basic computed signal:
+        ```python
+        from reaktiv import Signal, Computed
+        
+        first_name = Signal("John")
+        last_name = Signal("Doe")
+        
+        # Create computed signal
+        full_name = Computed(lambda: f"{first_name()} {last_name()}")
+        
+        print(full_name())  # "John Doe"
+        
+        first_name.set("Jane")
+        print(full_name())  # "Jane Doe"
+        ```
+        
+        Lazy computation:
+        ```python
+        from reaktiv import Signal, Computed
+        
+        x = Signal(10)
+        y = Signal(20)
+        
+        def expensive_computation():
+            print("Computing...")
+            return x() * y()
+        
+        result = Computed(expensive_computation)
+        
+        # Nothing happens yet - computation is lazy
+        
+        # First access - computation runs
+        print(result())  # Prints: "Computing..." then "200"
+        
+        # Second access - no computation (cached)
+        print(result())  # Just prints "200"
+        
+        # Change a dependency
+        x.set(5)
+        
+        # Next access will recompute
+        print(result())  # Prints: "Computing..." then "100"
+        ```
+        
+        Decorator pattern:
+        ```python
+        from reaktiv import Signal, Computed
+        
+        price = Signal(100)
+        quantity = Signal(2)
+        
+        @Computed
+        def total():
+            return price() * quantity()
+        
+        print(total())  # 200
+        ```
+        
+        Error handling:
+        ```python
+        from reaktiv import Signal, Computed
+        
+        x = Signal(10)
+        
+        # Computed signal with potential error
+        result = Computed(lambda: 100 / x())
+        
+        print(result())  # 10.0 (100 / 10)
+        
+        # Set x to 0, causing division by zero
+        x.set(0)
+        
+        # Exception is propagated to caller
+        try:
+            print(result())
+        except ZeroDivisionError as e:
+            print(f"Error: {e}")
+        
+        # After fixing, computation works again
+        x.set(5)
+        print(result())  # 20.0 (100 / 5)
+        ```
+        
+    Note:
+        Computed signals are lazy - they only compute when accessed and cache the
+        result until dependencies change. When a computation raises an exception,
+        it is propagated to the caller for flexible error handling.
+    """
 
     __slots__ = (
         "_fn",
@@ -393,6 +678,54 @@ def Computed(
     *,
     equal: Optional[Callable[[T, T], bool]] = None,
 ) -> Union[ComputeSignal[T], Callable[[Callable[[], T]], ComputeSignal[T]]]:
+    """Create a computed signal that derives its value from other signals.
+    
+    Can be used as a function or as a decorator (with or without parameters).
+    
+    Args:
+        func: The computation function (when used as factory or decorator without params)
+        equal: Optional custom equality function for change detection
+        
+    Returns:
+        A ComputeSignal instance or a decorator function
+        
+    Examples:
+        As a function:
+        ```python
+        from reaktiv import Signal, Computed
+        
+        x = Signal(10)
+        result = Computed(lambda: x() * 2)
+        print(result())  # 20
+        ```
+        
+        As a decorator (no parameters):
+        ```python
+        from reaktiv import Signal, Computed
+        
+        price = Signal(100)
+        quantity = Signal(2)
+        
+        @Computed
+        def total():
+            return price() * quantity()
+        
+        print(total())  # 200
+        ```
+        
+        As a decorator (with custom equality):
+        ```python
+        from reaktiv import Signal, Computed
+        
+        items = Signal([1, 2, 3])
+        
+        @Computed(equal=lambda a, b: a == b)
+        def sorted_items():
+            return sorted(items())
+        
+        print(sorted_items())  # [1, 2, 3]
+        ```
+    """
     """
     Create a computed signal that derives its value from other signals.
 

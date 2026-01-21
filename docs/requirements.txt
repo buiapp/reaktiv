@@ -5,3 +5,5 @@ mkdocstrings-python>=1.1.0
 pymdown-extensions>=10.0.0
 # Add specific version for mermaid support
 mkdocs-mermaid2-plugin>=0.6.0
+# Install the reaktiv package itself for mkdocstrings to access
+-e ..

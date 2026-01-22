@@ -628,7 +628,8 @@ asyncio.run(main())
 - **Atomic snapshots** for safe state access
 - **Automatic cleanup** when garbage collected
 
-📖 **[Full Resource Documentation](https://reaktiv.bui.app/docs/api/resource-signal/)** - Complete API reference, advanced patterns, and examples.
+
+For complete documentation, examples, and design patterns, see the [Resource User Guide](https://reaktiv.bui.app/docs/resource-guide.html).
 
 ### Custom Equality
 ```python

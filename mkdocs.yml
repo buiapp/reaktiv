@@ -74,6 +74,7 @@ nav:
     - Core Concepts: core-concepts.md
     - Advanced Features: advanced-features.md
     - Patterns & Best Practices: patterns-and-best-practices.md
+    - Resource Guide: resource-guide.md
   - API Reference:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md

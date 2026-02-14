@@ -262,8 +262,20 @@ async def test_diamond_dependency():
     b = ComputeSignal(lambda: base.get() * 2)
     c = ComputeSignal(lambda: a.get() + b.get())
 
+    # Track effect executions to ensure no duplicate updates
+    effect_count = 0
+    
+    def track_effect():
+        nonlocal effect_count
+        c.get()  # Subscribe to c
+        effect_count += 1
+    
+    eff = Effect(track_effect)
+    await asyncio.sleep(0)
+    
     # Initial values
     assert c.get() == 4  # (1+1) + (1*2) = 4
+    assert effect_count == 1, "Effect should run exactly once initially"
 
     # Update base and verify propagation
     base.set(2)
@@ -271,11 +283,15 @@ async def test_diamond_dependency():
     assert a.get() == 3
     assert b.get() == 4
     assert c.get() == 7  # 3 + 4
+    assert effect_count == 2, f"Effect should run exactly once per update, got {effect_count} total runs"
 
     # Verify dependencies update properly
     base.set(3)
     await asyncio.sleep(0)
     assert c.get() == 10  # (3+1) + (3*2) = 4 + 6 = 10
+    assert effect_count == 3, f"Effect should run exactly once per update, got {effect_count} total runs"
+    
+    eff.dispose()
 
 
 @pytest.mark.asyncio

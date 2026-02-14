@@ -11,7 +11,6 @@ from typing import Callable, Generic, Optional, TypeVar, Union, cast, overload
 from ._debug import debug_log
 from . import graph
 from .scheduler import start_batch, end_batch
-from . import scheduler as _sched
 from .thread_safety import is_thread_safety_enabled
 
 T = TypeVar("T")
@@ -627,8 +626,10 @@ class ComputeSignal(Signal[T]):
     def _notify(self) -> None:
         if not (self._flags & graph.NOTIFIED):
             self._flags |= graph.OUTDATED | graph.NOTIFIED
-            # schedule recompute; dependents will be notified only if version changes
-            _sched.enqueue_computed(self)
+            node = self._targets
+            while node is not None:
+                node.target._notify()
+                node = node.next_target
 
     def get(self) -> T:
         # Thread-safe circular dependency detection

@@ -149,7 +149,11 @@ class Effect:
             return False
         if self._is_async and self._executing:
             return False
-        return True
+        # Always run on first execution (no sources yet)
+        if self._sources is None:
+            return True
+        # Check if any dependencies have actually changed (Preact Signals style)
+        return graph.needs_to_recompute(self)
 
     # --------------------------- Execution helpers ----------------------------
     def _start(self) -> Callable[[], None]:

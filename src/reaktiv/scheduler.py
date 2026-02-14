@@ -4,17 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import asyncio
-from typing import Optional, Callable, Set, TYPE_CHECKING, Generator
+from typing import Optional, Callable, Generator
 
 from ._debug import debug_log
 from . import graph
-
-from collections import deque
-
-if TYPE_CHECKING:  # only for type checkers, avoid runtime import cycles
-    from .signal import ComputeSignal
-
-_deferred_computed_queue: deque["ComputeSignal"] = deque()
 
 # ---------------------------------------------------------------------------
 # Batch management
@@ -139,49 +132,6 @@ def end_batch():
 
 
 # ---------------------------------------------------------------------------
-# Deferred computed processing
-# ---------------------------------------------------------------------------
-
-
-def enqueue_computed(comp: "ComputeSignal"):
-    _deferred_computed_queue.append(comp)
-
-
-def _process_deferred_computed():
-    # Drain queue deduplicating while preserving order of last occurrence
-    if not _deferred_computed_queue:
-        return
-    seen: Set[int] = set()
-    batch: list["ComputeSignal"] = []
-    while _deferred_computed_queue:
-        comp = _deferred_computed_queue.pop()
-        key = id(comp)
-        if key in seen:
-            continue
-        seen.add(key)
-        batch.append(comp)
-    # Process in reverse to maintain FIFO behavior
-    for comp in reversed(batch):
-        try:
-            prev_ver: Optional[int] = comp._version
-            changed = False
-            # Recompute now
-            comp._refresh()
-            new_ver: Optional[int] = comp._version
-            changed = (
-                prev_ver is not None and new_ver is not None and new_ver != prev_ver
-            )
-            # Only notify dependents if value actually changed
-            if changed:
-                node = comp._targets
-                while node is not None:
-                    node.target._notify()
-                    node = node.next_target
-        except Exception as e:
-            debug_log(f"Error processing deferred computed: {e}")
-
-
-# ---------------------------------------------------------------------------
 # Effect flush loop
 # ---------------------------------------------------------------------------
 
@@ -189,10 +139,6 @@ def _process_deferred_computed():
 def _flush_effects():
     if graph.batch_depth > 0:
         return
-
-    # First, process any pending computed recomputations; this may enqueue effects
-    while _deferred_computed_queue:
-        _process_deferred_computed()
 
     # Cycle guard
     iterations = 0
@@ -216,10 +162,6 @@ def _flush_effects():
                 except Exception as e:
                     debug_log(f"Effect execution error: {e}")
             current = nxt
-
-        # After running a batch of effects, process any newly enqueued computeds
-        if _deferred_computed_queue:
-            _process_deferred_computed()
 
 
 # ---------------------------------------------------------------------------

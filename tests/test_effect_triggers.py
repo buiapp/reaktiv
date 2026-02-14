@@ -172,22 +172,65 @@ def test_diamond_dependency_effect_trigger():
     assert b() == 4  # 3+1
     assert c() == 6  # 3*2
     assert d() == 10  # 4+6
-
-    # Either the effect triggered a third time (ideal behavior)
-    # OR it didn't but the values are still correct (current behavior)
-    if len(triggers) == 3:
-        assert triggers[2] == "d=10"  # d = (a+1) + (a*2) = (3+1) + (3*2) = 4 + 6 = 10
-    else:
-        # This is the current behavior as our fix only prevents duplicate triggers
-        # within the same update cycle but doesn't ensure triggers across update cycles
-        assert len(triggers) == 2
-
-        # Force d to recalculate and verify it returns the correct value
-        current_d = d()
-        assert current_d == 10
+    
+    assert len(triggers) == 3, f"Effect should trigger on each update, got {len(triggers)} triggers: {triggers}"
+    assert triggers[2] == "d=10"  # d = (a+1) + (a*2) = (3+1) + (3*2) = 4 + 6 = 10
 
     # Cleanup
     eff.dispose()
+
+
+def test_diamond_dependency_with_intermediate_effects():
+    """Test that effects on intermediate nodes in diamond dependencies trigger correctly.
+    
+    This is the critical test case that caught the original bug where effects
+    watching intermediate computed signals in a diamond were not triggered.
+    
+    Topology:
+        a → b → c
+            ↓   ↓
+            └→ d ←┘
+    
+    Effects watch b, c, and d separately.
+    """
+    a = Signal(1)
+    b = Computed(lambda: a() * 2)       # level 1
+    c = Computed(lambda: b() + 10)      # level 2
+    d = Computed(lambda: b() + c())     # diamond: reads both b and c
+
+    log: list[str] = []
+    eb = Effect(lambda: log.append(f'b={b()}'))
+    ec = Effect(lambda: log.append(f'c={c()}'))
+    ed = Effect(lambda: log.append(f'd={d()}'))
+
+    # Initial: all three effects should run
+    assert len(log) == 3, f"Expected 3 initial effects, got {len(log)}: {log}"
+    assert set(log) == {'b=2', 'c=12', 'd=14'}
+    log.clear()
+
+    # Update a - all three effects should trigger
+    a.set(5)
+    assert len(log) == 3, f"Expected 3 effects after update, got {len(log)}: {log}"
+    assert 'b=10' in log, f"Effect on b should trigger, log: {log}"
+    assert 'c=20' in log, f"Effect on c should trigger, log: {log}"
+    assert 'd=30' in log, f"Effect on d should trigger, log: {log}"
+
+    # Verify values are correct
+    assert b() == 10
+    assert c() == 20
+    assert d() == 30
+    
+    log.clear()
+
+    # Another update to ensure consistency
+    a.set(3)
+    assert len(log) == 3, f"Expected 3 effects on second update, got {len(log)}: {log}"
+    assert set(log) == {'b=6', 'c=16', 'd=22'}
+
+    # Cleanup
+    eb.dispose()
+    ec.dispose()
+    ed.dispose()
 
 
 def test_multiple_signal_chain_updates():
@@ -492,19 +535,9 @@ async def test_async_diamond_dependency_effect_trigger():
     assert b() == 4  # 3+1
     assert c() == 6  # 3*2
     assert d() == 10  # 4+6
-
-    # Either the effect triggered a third time (ideal behavior)
-    # OR it didn't but the values are still correct (current behavior)
-    if len(triggers) == 3:
-        assert triggers[2] == "d=10"  # d = (a+1) + (a*2) = (3+1) + (3*2) = 4 + 6 = 10
-    else:
-        # This is the current behavior as our fix only prevents duplicate triggers
-        # within the same update cycle but doesn't ensure triggers across update cycles
-        assert len(triggers) == 2
-
-        # Force d to recalculate and verify it returns the correct value
-        current_d = d()
-        assert current_d == 10
+    
+    assert len(triggers) == 3, f"Async effect should trigger on each update, got {len(triggers)} triggers: {triggers}"
+    assert triggers[2] == "d=10"  # d = (a+1) + (a*2) = (3+1) + (3*2) = 4 + 6 = 10
 
     # Cleanup
     eff.dispose()

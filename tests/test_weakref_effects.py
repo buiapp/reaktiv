@@ -5,7 +5,6 @@ when there are no external strong references to them.
 """
 
 import gc
-import pytest
 from reaktiv import Signal, Effect
 
 

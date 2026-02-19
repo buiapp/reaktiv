@@ -7,12 +7,9 @@ lazy subscription. Not part of the public API.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Union, TYPE_CHECKING
+from typing import Optional, Protocol, Union
 import contextvars
 import weakref
-
-if TYPE_CHECKING:
-    from reaktiv.effect import Effect
 
 # ---------------------------------------------------------------------------
 # Flags (bit mask) shared by ComputeSignal / Effect

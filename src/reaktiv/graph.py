@@ -6,9 +6,13 @@ lazy subscription. Not part of the public API.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Protocol
+from dataclasses import dataclass, field
+from typing import Optional, Protocol, Union, TYPE_CHECKING
 import contextvars
+import weakref
+
+if TYPE_CHECKING:
+    from reaktiv.effect import Effect
 
 # ---------------------------------------------------------------------------
 # Flags (bit mask) shared by ComputeSignal / Effect
@@ -71,7 +75,7 @@ class _Producer(Protocol):
 @dataclass
 class Edge:
     source: _Producer
-    target: _Consumer
+    _target_ref: Union[_Consumer, "weakref.ref[_Consumer]"] = field(repr=False)
     prev_source: Optional["Edge"] = None
     next_source: Optional["Edge"] = None
     prev_target: Optional["Edge"] = None
@@ -79,10 +83,53 @@ class Edge:
     version: int = 0  # last seen producer version (-1 reusable)
     rollback_node: Optional["Edge"] = None
 
+    @property
+    def target(self) -> Optional[_Consumer]:
+        """Get the target consumer, dereferencing weakref if needed."""
+        if isinstance(self._target_ref, weakref.ref):
+            return self._target_ref()
+        return self._target_ref
+
+    def is_alive(self) -> bool:
+        """Check if the target is still alive."""
+        return self.target is not None
+
 
 # ---------------------------------------------------------------------------
 # Dependency management
 # ---------------------------------------------------------------------------
+
+
+def _is_effect(consumer: _Consumer) -> bool:
+    """Check if consumer is an Effect."""
+    # Avoid circular import by checking type name
+    return type(consumer).__name__ == "Effect"
+
+
+def _create_edge_with_weakref_cleanup(source: _Producer, consumer: _Consumer, prev_head: Optional[Edge]) -> Edge:
+    """Create an Edge with weakref for Effects and cleanup callback."""
+    
+    # Use weakref for Effects to allow garbage collection
+    if _is_effect(consumer):
+        def on_effect_gc(weak_ref: "weakref.ref[_Consumer]") -> None:
+            """Called when an Effect is garbage collected - clean up the edge."""
+            # Remove edge from source's targets list
+            edge_to_remove = None
+            current = source._targets
+            while current is not None:
+                if current._target_ref is weak_ref:
+                    edge_to_remove = current
+                    break
+                current = current.next_target
+            
+            if edge_to_remove is not None:
+                source._unsubscribe_edge(edge_to_remove)
+        
+        target_ref = weakref.ref(consumer, on_effect_gc)
+    else:
+        target_ref = consumer
+    
+    return Edge(source, target_ref, prev_head)
 
 
 def add_dependency(source: _Producer) -> Optional[Edge]:
@@ -93,7 +140,7 @@ def add_dependency(source: _Producer) -> Optional[Edge]:
     node = source._node
     if node is None or node.target is not consumer:
         prev_head = consumer._sources
-        edge = Edge(source, consumer, prev_head)
+        edge = _create_edge_with_weakref_cleanup(source, consumer, prev_head)
         if prev_head is not None:
             prev_head.next_source = edge
         consumer._sources = edge

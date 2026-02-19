@@ -246,7 +246,9 @@ class Signal(Generic[T]):
         try:
             node = self._targets
             while node is not None:
-                node.target._notify()
+                target = node.target
+                if target is not None:  # Skip dead weakrefs
+                    target._notify()
                 node = node.next_target
         finally:
             end_batch()
@@ -628,7 +630,9 @@ class ComputeSignal(Signal[T]):
             self._flags |= graph.OUTDATED | graph.NOTIFIED
             node = self._targets
             while node is not None:
-                node.target._notify()
+                target = node.target
+                if target is not None:  # Skip dead weakrefs
+                    target._notify()
                 node = node.next_target
 
     def get(self) -> T:

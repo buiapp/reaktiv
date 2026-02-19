@@ -23,6 +23,29 @@ class Effect:
     Effect creates a side effect function that runs immediately and re-runs whenever
     any signal it depends on changes. It supports optional cleanup logic.
     
+    Lifecycle and Memory Management:
+        Effects are weakly referenced to prevent memory leaks. This means:
+        
+        - **Without a stored reference**: The Effect will be garbage collected immediately
+          and stop responding to signal changes. Cleanup functions will run
+          automatically during garbage collection.
+          
+        - **With a stored reference**: The Effect persists and continues reacting to changes.
+          Call dispose() explicitly when done to ensure immediate cleanup.
+          
+        Best practices:
+        - Store Effect references: ``self.effect = Effect(...)``
+        - Call dispose() explicitly: ``self.effect.dispose()``
+        - Cleanup functions run automatically on GC, but prefer explicit dispose()
+    
+    Cleanup Functions:
+        Effects can register cleanup logic to run when:
+        1. The effect reruns (cleanup from previous run)
+        2. dispose() is called explicitly
+        3. The Effect is garbage collected (automatic)
+        
+        Register cleanup by returning a function or using the on_cleanup parameter.
+    
     Note:
         Async functions are supported but still experimental and may not behave as expected
         in all scenarios.
@@ -120,6 +143,7 @@ class Effect:
         "_is_async",
         "_async_task",
         "_executing",
+        "__weakref__",  # Allow weak references for garbage collection
     )
 
     def __init__(self, func: EffectFn):
@@ -332,3 +356,15 @@ class Effect:
         self._flags |= graph.DISPOSED
         if not (self._flags & graph.RUNNING):
             self._dispose_now()
+
+    def __del__(self) -> None:
+        """Run cleanup function when Effect is garbage collected.
+        
+        This ensures that cleanup functions (e.g., closing connections, canceling
+        subscriptions) are executed even if dispose() is not called explicitly.
+        
+        Note: This is called automatically by Python's garbage collector when the
+        Effect has no more references. For deterministic cleanup, prefer calling
+        dispose() explicitly.
+        """
+        self._run_cleanup()

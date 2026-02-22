@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any, overload
 
-from typing_extensions import Self
-
 from .signal import Signal, ComputeSignal, debug_log
 from .context import untracked
 
@@ -157,7 +155,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         cls,
         func: Callable[[], T],
         /,
-    ) -> Self: ...
+    ) -> LinkedSignal[T]: ...
 
     @overload
     def __new__(
@@ -166,7 +164,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         /,
         *,
         equal: Callable[[T, T], bool],
-    ) -> Self: ...
+    ) -> LinkedSignal[T]: ...
 
     @overload
     def __new__(
@@ -174,7 +172,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         /,
         *,
         equal: Callable[[T, T], bool],
-    ) -> Callable[[Callable[[], T]], Self]: ...  # Decorator factory
+    ) -> Callable[[Callable[[], T]], LinkedSignal[T]]: ...  # Decorator factory
 
     @overload
     def __new__(
@@ -184,7 +182,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         source: Optional[Union[Signal[U], Callable[[], U]]] = None,
         computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Self: ...
+    ) -> LinkedSignal[T]: ...
 
     def __new__(
         cls,
@@ -192,7 +190,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         source: Optional[Union[Signal[U], Callable[[], U]]] = None,
         computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Union[Self, Callable[[Callable[[], T]], Self]]:
+    ) -> Union[LinkedSignal[T], Callable[[Callable[[], T]], LinkedSignal[T]]]:
         if (
             equal is not None
             and computation_or_source is None
@@ -200,7 +198,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             and computation is None
         ):
             # Parameterized decorator: @Linked(equal=...)
-            def decorator(f: Callable[[], T]) -> Self:
+            def decorator(f: Callable[[], T]) -> LinkedSignal[T]:
                 return cls(f, equal=equal)
 
             return decorator

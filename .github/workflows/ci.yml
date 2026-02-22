@@ -40,3 +40,9 @@ jobs:
       - name: Build package
         run: |
           uv build
+
+      - name: Test clean install (catch undeclared dependencies)
+        run: |
+          uv venv .test-venv --python 3.9
+          .test-venv/bin/pip install dist/*.whl
+          .test-venv/bin/python -c "import reaktiv"

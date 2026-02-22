@@ -44,5 +44,5 @@ jobs:
       - name: Test clean install (catch undeclared dependencies)
         run: |
           uv venv .test-venv --python 3.9
-          .test-venv/bin/pip install dist/*.whl
+          uv pip install --python .test-venv/bin/python dist/*.whl
           .test-venv/bin/python -c "import reaktiv"

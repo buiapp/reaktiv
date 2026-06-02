@@ -83,7 +83,7 @@ class WritableSignal(ReadableSignal[T_inv], Protocol[T_inv]):
         increment(r)  # Type error
     """
 
-    def set(self, value: T_inv) -> None:
+    def set(self, value: T_inv, /) -> None:
         """
         Directly set the signal to a new value.
         

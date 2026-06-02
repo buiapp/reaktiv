@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from reaktiv import Signal, Effect, ComputeSignal, batch, untracked
+from reaktiv import Signal, Effect, ComputeSignal, LinkedSignal, batch, untracked
+from reaktiv.protocols import WritableSignal
 from reaktiv._debug import set_debug
 
 set_debug(True)
@@ -1602,3 +1603,24 @@ async def test_readonly_signal_complex_dependency_chain():
 
     await asyncio.sleep(0.01)
     assert effect_values == [10, 20, 40]  # Only final value from batch
+
+
+def test_set_positional_only_and_protocol_conformance():
+    """set() must be positional-only; Signal and LinkedSignal must satisfy WritableSignal."""
+    
+
+    # Static assignability (also validated by type-checkers such as Pylance/pyright)
+    s: WritableSignal[int] = Signal(0)
+    s.set(1)
+    assert s() == 1
+
+    linked: WritableSignal[int] = LinkedSignal(lambda: 0)
+    linked.set(42)
+    assert linked() == 42
+
+    # Positional-only: keyword usage must raise TypeError at runtime
+    with pytest.raises(TypeError):
+        s.set(new_value=2)  # type: ignore[call-arg]
+
+    with pytest.raises(TypeError):
+        linked.set(new_value=99)  # type: ignore[call-arg]

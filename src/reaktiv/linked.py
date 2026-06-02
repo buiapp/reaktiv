@@ -283,7 +283,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
     def __call__(self) -> T:
         return self.get()
 
-    def set(self, new_value: T) -> None:
+    def set(self, new_value: T, /) -> None:
         debug_log(f"LinkedSignal manual set() called with value: {new_value}")
         # If never computed, trigger initial computation to establish dependencies
         if self._version == 0:

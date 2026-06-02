@@ -179,7 +179,7 @@ class Signal(Generic[T]):
             debug_log(f"Signal get() returning value: {self._value}")
             return self._value
 
-    def set(self, new_value: T) -> None:
+    def set(self, new_value: T, /) -> None:
         """Set a new value for the signal and notify subscribers if it changed.
         
         A notification is triggered only if the new value is considered different
@@ -656,7 +656,7 @@ class ComputeSignal(Signal[T]):
             raise self._last_error
         return self._value  # type: ignore[return-value]
 
-    def set(self, new_value: T) -> None:
+    def set(self, new_value: T, /) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal")
 
 

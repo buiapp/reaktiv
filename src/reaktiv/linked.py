@@ -269,7 +269,9 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             return result
 
         super().__init__(_compute, equal=equal)
-        debug_log(f"LinkedSignal created with simple_pattern={self._simple_pattern}")
+        debug_log(
+            lambda: f"LinkedSignal created with simple_pattern={self._simple_pattern}"
+        )
 
     def __repr__(self) -> str:
         try:
@@ -284,7 +286,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         return self.get()
 
     def set(self, new_value: T, /) -> None:
-        debug_log(f"LinkedSignal manual set() called with value: {new_value}")
+        debug_log(lambda: f"LinkedSignal manual set() called with value: {new_value}")
         # If never computed, trigger initial computation to establish dependencies
         if self._version == 0:
             super()._refresh()

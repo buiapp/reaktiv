@@ -23,7 +23,7 @@ def set_thread_safety(enabled: bool) -> None:
     """
     global _THREAD_SAFETY_ENABLED
     _THREAD_SAFETY_ENABLED = bool(enabled)
-    debug_log(f"Thread safety {'enabled' if enabled else 'disabled'}")
+    debug_log(lambda: f"Thread safety {'enabled' if enabled else 'disabled'}")
 
 
 def is_thread_safety_enabled() -> bool:

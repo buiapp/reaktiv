@@ -106,12 +106,12 @@ def batch() -> Generator[None, None, None]:
         ```
     """
     graph.batch_depth += 1
-    debug_log(f"Batch start depth={graph.batch_depth}")
+    debug_log(lambda: f"Batch start depth={graph.batch_depth}")
     try:
         yield
     finally:
         graph.batch_depth -= 1
-        debug_log(f"Batch end depth={graph.batch_depth}")
+        debug_log(lambda: f"Batch end depth={graph.batch_depth}")
         if graph.batch_depth == 0:
             _flush_effects()
 
@@ -160,7 +160,7 @@ def _flush_effects():
                 try:
                     current._run_callback()
                 except Exception as e:
-                    debug_log(f"Effect execution error: {e}")
+                    debug_log(lambda exc=e: f"Effect execution error: {exc}")
             current = nxt
 
 

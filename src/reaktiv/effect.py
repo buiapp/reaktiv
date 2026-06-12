@@ -155,7 +155,9 @@ class Effect:
         self._is_async = asyncio.iscoroutinefunction(func)
         self._async_task: Optional[asyncio.Task] = None
         self._executing: bool = False
-        debug_log(f"Effect created with func: {func}, is_async: {self._is_async}")
+        debug_log(
+            lambda: f"Effect created with func: {func}, is_async: {self._is_async}"
+        )
 
         # Schedule initial run
         self._notify()

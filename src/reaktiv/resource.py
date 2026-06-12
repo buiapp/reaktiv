@@ -240,7 +240,7 @@ class Resource(Generic[P, T]):
                     self._error_signal.set(None)
                 self._previous_status = ResourceStatus.RESOLVED
 
-                debug_log(f"Resource loaded successfully: {result}")
+                debug_log(lambda: f"Resource loaded successfully: {result}")
 
             except asyncio.CancelledError:
                 # Task was cancelled, clean exit without warnings
@@ -250,7 +250,7 @@ class Resource(Generic[P, T]):
             except Exception as e:
                 # Check if cancelled
                 if cancellation.is_set():
-                    debug_log(f"Load cancelled during error: {e}")
+                    debug_log(lambda exc=e: f"Load cancelled during error: {exc}")
                     return
 
                 # Update error state (use untracked to avoid triggering watchers)
@@ -260,7 +260,7 @@ class Resource(Generic[P, T]):
                     self._is_loading_signal.set(False)
                 self._previous_status = ResourceStatus.ERROR
 
-                debug_log(f"Resource load error: {e}")
+                debug_log(lambda exc=e: f"Resource load error: {exc}")
 
         # Schedule in the current event loop
         loop = asyncio.get_running_loop()
@@ -279,10 +279,10 @@ class Resource(Generic[P, T]):
                 debug_log("Task was cancelled (expected)")
             except Exception as e:
                 # Already logged in _execute, just consume the exception
-                debug_log(f"Task completed with exception: {e}")
+                debug_log(lambda exc=e: f"Task completed with exception: {exc}")
         
         task.add_done_callback(_task_done_callback)
-        debug_log(f"Scheduled loader in event loop, task: {self._loading_task}")
+        debug_log(lambda: f"Scheduled loader in event loop, task: {self._loading_task}")
 
     def reload(self) -> None:
         """Manually trigger the loader to reload data.

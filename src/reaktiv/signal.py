@@ -110,7 +110,7 @@ class Signal(Generic[T]):
         self._node: Optional[graph.Edge] = None
         # RLock for thread-safe operations - only when thread safety is enabled
         self._lock = threading.RLock() if is_thread_safety_enabled() else None
-        debug_log(f"Signal initialized with value: {value}")
+        debug_log(lambda: f"Signal initialized with value: {value}")
 
     def __repr__(self) -> str:
         try:
@@ -170,13 +170,13 @@ class Signal(Generic[T]):
                 edge = graph.add_dependency(self)
                 if edge is not None:
                     edge.version = self._version
-                debug_log(f"Signal get() returning value: {self._value}")
+                debug_log(lambda: f"Signal get() returning value: {self._value}")
                 return self._value
         else:
             edge = graph.add_dependency(self)
             if edge is not None:
                 edge.version = self._version
-            debug_log(f"Signal get() returning value: {self._value}")
+            debug_log(lambda: f"Signal get() returning value: {self._value}")
             return self._value
 
     def set(self, new_value: T, /) -> None:
@@ -206,7 +206,10 @@ class Signal(Generic[T]):
             ```
         """
         debug_log(
-            f"Signal set() called with new_value: {new_value} (old_value: {self._value})"
+            lambda: (
+                f"Signal set() called with new_value: {new_value} "
+                f"(old_value: {self._value})"
+            )
         )
         # Disallow side effects from within a ComputeSignal's computation
         active = graph.active_consumer.get()
@@ -231,7 +234,11 @@ class Signal(Generic[T]):
                 if self._equal(self._value, new_value):
                     should_update = False
             except Exception as e:
-                debug_log(f"Error in custom equality check during set: {e}")
+                    debug_log(
+                        lambda exc=e: (
+                            f"Error in custom equality check during set: {exc}"
+                        )
+                    )
         else:
             if self._value is new_value:
                 should_update = False
@@ -590,7 +597,9 @@ class ComputeSignal(Signal[T]):
                             self._flags &= ~graph.HAS_ERROR
                             self._last_error = None
                     except Exception as e:
-                        debug_log(f"Error in custom equality check: {e}")
+                        debug_log(
+                            lambda exc=e: f"Error in custom equality check: {exc}"
+                        )
                         self._value = value
                         self._version += 1
                         self._flags &= ~graph.HAS_ERROR

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Callable, Union
+
 _debug_enabled = False
 _suppress_debug = False  # When True, debug logging is suppressed
 
@@ -12,7 +14,7 @@ def set_debug(enabled: bool) -> None:
     _debug_enabled = enabled
 
 
-def debug_log(msg: str) -> None:
+def debug_log(msg: Union[str, Callable[[], str]]) -> None:
     """Log a debug message if debugging is enabled and not suppressed."""
     if _debug_enabled and not _suppress_debug:
-        print(f"[REAKTIV DEBUG] {msg}")
+        print(f"[REAKTIV DEBUG] {msg() if callable(msg) else msg}")

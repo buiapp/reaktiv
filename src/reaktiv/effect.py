@@ -183,9 +183,13 @@ class Effect:
             self._flags |= graph.NOTIFIED
             _sched.enqueue_effect(self)
 
+    def _lock(self) -> threading.RLock:
+        if self._graph_lock is None:
+            raise RuntimeError("Effect graph lock is not initialized")
+        return self._graph_lock
+
     def _needs_run(self) -> bool:
-        lock = cast(threading.RLock, self._graph_lock)
-        with lock:
+        with self._lock():
             if self._flags & graph.DISPOSED:
                 return False
             if self._executing:
@@ -236,8 +240,7 @@ class Effect:
 
     # --------------------------- Sync execution ----------------------------
     def _run_callback(self) -> None:
-        lock = cast(threading.RLock, self._graph_lock)
-        with lock:
+        with self._lock():
             if self._flags & graph.DISPOSED:
                 return
             if self._fn is None:
@@ -375,9 +378,10 @@ class Effect:
             # No output - effect is disposed
             ```
         """
-        self._flags |= graph.DISPOSED
-        if not (self._flags & graph.RUNNING):
-            self._dispose_now()
+        with self._lock():
+            self._flags |= graph.DISPOSED
+            if not (self._flags & graph.RUNNING):
+                self._dispose_now()
 
     def __del__(self) -> None:
         """Run cleanup function when Effect is garbage collected.

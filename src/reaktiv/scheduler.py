@@ -4,10 +4,35 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import asyncio
+import threading
 from typing import Optional, Callable, Generator
 
 from ._debug import debug_log
 from . import graph
+
+
+class _SchedulerState:
+    __slots__ = ("batch_depth", "batched_effect_head")
+
+    def __init__(self) -> None:
+        self.batch_depth = 0
+        self.batched_effect_head: Optional[graph._BatchedEffect] = None
+
+
+_thread_state = threading.local()
+
+
+def _get_state() -> _SchedulerState:
+    state = getattr(_thread_state, "scheduler_state", None)
+    if state is None:
+        state = _SchedulerState()
+        _thread_state.scheduler_state = state
+    return state
+
+
+def current_batch_depth() -> int:
+    return _get_state().batch_depth
+
 
 # ---------------------------------------------------------------------------
 # Batch management
@@ -105,14 +130,15 @@ def batch() -> Generator[None, None, None]:
         # Prints: "x=4"
         ```
     """
-    graph.batch_depth += 1
-    debug_log(lambda: f"Batch start depth={graph.batch_depth}")
+    state = _get_state()
+    state.batch_depth += 1
+    debug_log(lambda: f"Batch start depth={state.batch_depth}")
     try:
         yield
     finally:
-        graph.batch_depth -= 1
-        debug_log(lambda: f"Batch end depth={graph.batch_depth}")
-        if graph.batch_depth == 0:
+        state.batch_depth -= 1
+        debug_log(lambda: f"Batch end depth={state.batch_depth}")
+        if state.batch_depth == 0:
             _flush_effects()
 
 
@@ -122,12 +148,13 @@ def batch() -> Generator[None, None, None]:
 
 
 def start_batch():
-    graph.batch_depth += 1
+    _get_state().batch_depth += 1
 
 
 def end_batch():
-    graph.batch_depth -= 1
-    if graph.batch_depth == 0:
+    state = _get_state()
+    state.batch_depth -= 1
+    if state.batch_depth == 0:
         _flush_effects()
 
 
@@ -137,18 +164,19 @@ def end_batch():
 
 
 def _flush_effects():
-    if graph.batch_depth > 0:
+    state = _get_state()
+    if state.batch_depth > 0:
         return
 
     # Cycle guard
     iterations = 0
-    while graph.batched_effect_head is not None:
+    while state.batched_effect_head is not None:
         iterations += 1
         if iterations > graph.MAX_BATCH_ITERATIONS:
             raise RuntimeError("Reactive cycle detected (effect iterations exceeded)")
 
-        head = graph.batched_effect_head
-        graph.batched_effect_head = None
+        head = state.batched_effect_head
+        state.batched_effect_head = None
 
         # Traverse linked list
         current = head
@@ -170,9 +198,10 @@ def _flush_effects():
 
 
 def enqueue_effect(effect):
-    if graph.batched_effect_head is not None:
-        effect._next_batched_effect = graph.batched_effect_head
-    graph.batched_effect_head = effect
+    state = _get_state()
+    if state.batched_effect_head is not None:
+        effect._next_batched_effect = state.batched_effect_head
+    state.batched_effect_head = effect
 
 
 # Async task helper (central so tests can monkeypatch)

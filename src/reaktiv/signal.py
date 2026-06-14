@@ -123,26 +123,28 @@ class Signal(Generic[T]):
 
     # Producer API expected by graph core
     def _subscribe_edge(self, edge: graph.Edge) -> None:
-        targets = self._targets
-        if targets is not edge and edge.prev_target is None:
-            edge.next_target = targets
-            self._targets = edge
-            if targets is not None:
-                targets.prev_target = edge
+        with graph.producer_lock(self):
+            targets = self._targets
+            if targets is not edge and edge.prev_target is None:
+                edge.next_target = targets
+                self._targets = edge
+                if targets is not None:
+                    targets.prev_target = edge
 
     def _unsubscribe_edge(self, edge: graph.Edge) -> None:
-        if self._targets is None:
-            return
-        prev = edge.prev_target
-        nxt = edge.next_target
-        if prev is not None:
-            prev.next_target = nxt
-            edge.prev_target = None
-        if nxt is not None:
-            nxt.prev_target = prev
-            edge.next_target = None
-        if edge is self._targets:
-            self._targets = nxt
+        with graph.producer_lock(self):
+            if self._targets is None:
+                return
+            prev = edge.prev_target
+            nxt = edge.next_target
+            if prev is not None:
+                prev.next_target = nxt
+                edge.prev_target = None
+            if nxt is not None:
+                nxt.prev_target = prev
+                edge.next_target = None
+            if edge is self._targets:
+                self._targets = nxt
 
     def _refresh(self) -> bool:
         return True
@@ -219,14 +221,17 @@ class Signal(Generic[T]):
                     "Side effect detected: Cannot set Signal from within a ComputeSignal computation"
                 )
 
-        # Use lock to protect the entire set operation when thread safety is enabled
+        # Update the value under the signal lock, then notify outside it so
+        # effects can safely read other signals without lock-order deadlocks.
         if self._lock is not None:
             with self._lock:
-                self._set_internal(new_value)
+                targets = self._set_internal(new_value)
         else:
-            self._set_internal(new_value)
+            targets = self._set_internal(new_value)
+        if targets is not None:
+            self._notify_targets(targets)
 
-    def _set_internal(self, new_value: T) -> None:
+    def _set_internal(self, new_value: T) -> Optional[list[graph._Consumer]]:
         """Internal set method that does the actual work without locking."""
         should_update = True
         if self._equal is not None:
@@ -243,20 +248,24 @@ class Signal(Generic[T]):
             if self._value is new_value:
                 should_update = False
         if not should_update:
-            return
+            return None
 
         self._value = new_value
         self._version += 1
         graph.global_version += 1
 
+        if self._targets is None:
+            return None
+
+        return graph.snapshot_targets(self)
+
+    def _notify_targets(self, targets: list[graph._Consumer]) -> None:
+        if not targets:
+            return
         start_batch()
         try:
-            node = self._targets
-            while node is not None:
-                target = node.target
-                if target is not None:  # Skip dead weakrefs
-                    target._notify()
-                node = node.next_target
+            for target in targets:
+                target._notify()
         finally:
             end_batch()
 
@@ -288,10 +297,12 @@ class Signal(Generic[T]):
         if self._lock is not None:
             with self._lock:
                 new_value = update_fn(self._value)
-                self._set_internal(new_value)
+                targets = self._set_internal(new_value)
         else:
             new_value = update_fn(self._value)
-            self._set_internal(new_value)
+            targets = self._set_internal(new_value)
+        if targets is not None:
+            self._notify_targets(targets)
 
     def as_readonly(self) -> "ReadonlySignal[T]":
         """Return a readonly wrapper that exposes only read access to this signal.
@@ -476,12 +487,14 @@ class ComputeSignal(Signal[T]):
     __slots__ = (
         "_fn",
         "_sources",
+        "_source_map",
         "_global_version_seen",
         "_flags",
         "_last_error",
         "_dependencies",
         "_thread_local",
         "_computation_lock",
+        "_graph_lock",
     ) + Signal.__slots__
 
     def __init__(
@@ -494,6 +507,7 @@ class ComputeSignal(Signal[T]):
         self._fn = compute_fn
         # Explicit typing for consumer sources list
         self._sources: Optional[graph.Edge] = None
+        self._source_map: dict[int, graph.Edge] = {}
         self._global_version_seen: int = graph.global_version - 1
         self._flags: int = graph.OUTDATED
         self._last_error: Optional[BaseException] = None
@@ -504,6 +518,7 @@ class ComputeSignal(Signal[T]):
         self._computation_lock = (
             threading.RLock() if is_thread_safety_enabled() else None
         )
+        self._graph_lock = self._computation_lock
 
     def _is_running_in_current_thread(self) -> bool:
         """Check if this signal is currently being computed in the current thread."""
@@ -518,29 +533,37 @@ class ComputeSignal(Signal[T]):
 
     # Producer API (override to detect first/last subscriber)
     def _subscribe_edge(self, edge: graph.Edge) -> None:
-        had_subs = self._targets is not None
-        super()._subscribe_edge(edge)
-        if not had_subs and self._targets is not None:
-            # became watched
-            self._flags |= graph.OUTDATED | graph.TRACKING
-            # lazily subscribe to existing sources
-            node = self._sources
-            while node is not None:
-                node.source._subscribe_edge(node)
-                node = node.next_source
+        with graph.producer_lock(self):
+            had_subs = self._targets is not None
+            super()._subscribe_edge(edge)
+            if not had_subs and self._targets is not None:
+                # became watched
+                self._flags |= graph.OUTDATED | graph.TRACKING
+                # lazily subscribe to existing sources
+                node = self._sources
+                while node is not None:
+                    node.source._subscribe_edge(node)
+                    node = node.prev_source
 
     def _unsubscribe_edge(self, edge: graph.Edge) -> None:
-        super()._unsubscribe_edge(edge)
-        if self._targets is None:
-            # lost last subscriber
-            self._flags &= ~graph.TRACKING
-            node = self._sources
-            while node is not None:
-                node.source._unsubscribe_edge(node)
-                node = node.next_source
+        with graph.producer_lock(self):
+            super()._unsubscribe_edge(edge)
+            if self._targets is None:
+                # lost last subscriber
+                self._flags &= ~graph.TRACKING
+                node = self._sources
+                while node is not None:
+                    node.source._unsubscribe_edge(node)
+                    node = node.prev_source
 
     # Consumer refresh logic
     def _refresh(self) -> bool:
+        if self._computation_lock is not None:
+            with self._computation_lock:
+                return self._refresh_unlocked()
+        return self._refresh_unlocked()
+
+    def _refresh_unlocked(self) -> bool:
         # clear NOTIFIED
         self._flags &= ~graph.NOTIFIED
 
@@ -630,31 +653,35 @@ class ComputeSignal(Signal[T]):
         node = self._sources
         while node is not None:
             deps.add(node.source)
-            node = node.next_source
+            node = node.prev_source
         self._dependencies = deps
         return True
 
     def _notify(self) -> None:
-        if not (self._flags & graph.NOTIFIED):
-            self._flags |= graph.OUTDATED | graph.NOTIFIED
-            node = self._targets
-            while node is not None:
-                target = node.target
-                if target is not None:  # Skip dead weakrefs
-                    target._notify()
-                node = node.next_target
+        lock = self._computation_lock
+        if lock is not None:
+            with lock:
+                targets = self._notify_unlocked()
+        else:
+            targets = self._notify_unlocked()
+
+        for target in targets:
+            target._notify()
+
+    def _notify_unlocked(self) -> list[graph._Consumer]:
+        if self._flags & graph.NOTIFIED:
+            return []
+        self._flags |= graph.OUTDATED | graph.NOTIFIED
+        if self._targets is None:
+            return []
+        return graph.snapshot_targets(self)
 
     def get(self) -> T:
         # Thread-safe circular dependency detection
         if self._is_running_in_current_thread():
             raise RuntimeError("Circular dependency detected")
 
-        # Use lock to protect the refresh operation only when thread safety is enabled
-        if self._computation_lock is not None:
-            with self._computation_lock:
-                self._refresh()
-        else:
-            self._refresh()
+        self._refresh()
 
         # participate as producer if someone depends on us
         edge = graph.add_dependency(self)

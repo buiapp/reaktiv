@@ -290,7 +290,13 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         # If never computed, trigger initial computation to establish dependencies
         if self._version == 0:
             super()._refresh()
-        super()._set_internal(new_value)
+        if self._lock is not None:
+            with self._lock:
+                targets = super()._set_internal(new_value)
+        else:
+            targets = super()._set_internal(new_value)
+        if targets is not None:
+            self._notify_targets(targets)
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         self.set(update_fn(cast(T, self._value)))

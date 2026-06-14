@@ -8,6 +8,14 @@ from reaktiv import (
     Resource,
     ResourceStatus,
     Computed,
+    ComputeSignal,
+    Effect,
+    Linked,
+    LinkedSignal,
+    is_thread_safety_enabled,
+    set_thread_safety,
+    to_async_iter,
+    untracked,
 )
 
 
@@ -97,6 +105,60 @@ async def test_resource_params_change():
     assert user_resource.value()["id"] == "user2"
     assert user_resource.status() == ResourceStatus.RESOLVED
     assert load_count == 2
+
+
+@pytest.mark.asyncio
+async def test_resource_reloads_for_each_param_change_with_async_iterator_subscriber():
+    """Resource params should keep reloading after prior graph/effect activity."""
+    original_thread_safety = is_thread_safety_enabled()
+    set_thread_safety(True)
+
+    _run_prior_public_graph_workload()
+
+    project_id = Signal("project-0")
+    loads: list[str] = []
+
+    async def fetch_project(params):
+        loads.append(params.params["id"])
+        await asyncio.sleep(0)
+        return {"id": params.params["id"]}
+
+    try:
+        project_resource = create_resource(
+            params=lambda: {"id": project_id()},
+            loader=lambda p: fetch_project(p),
+        )
+
+        iterations = 25
+        observed_task = asyncio.create_task(
+            _collect_values(project_id, expected=iterations)
+        )
+
+        await _wait_for(
+            lambda: (
+                project_resource.status() == ResourceStatus.RESOLVED
+                and project_resource.value()["id"] == "project-0"
+            )
+        )
+
+        for index in range(1, iterations + 1):
+            expected = f"project-{index}"
+            project_id.set(expected)
+            await _wait_for(lambda: project_resource.status() == ResourceStatus.RESOLVED)
+
+        observed = await observed_task
+
+        await _wait_for(
+            lambda: (
+                project_resource.status() == ResourceStatus.RESOLVED
+                and project_resource.value()["id"] == "project-25"
+            )
+        )
+
+        assert observed == [f"project-{index}" for index in range(1, iterations + 1)]
+        assert loads == [f"project-{index}" for index in range(0, iterations + 1)]
+    finally:
+        set_thread_safety(original_thread_safety)
 
 
 @pytest.mark.asyncio
@@ -484,3 +546,53 @@ def test_resource_requires_asyncio_context():
             loader=lambda p: fetch_user(p)
         )
 
+
+def _run_prior_public_graph_workload() -> None:
+    price = Signal(1)
+    quantity = Signal(2)
+    tax = Signal(1)
+    note = Signal("cold")
+
+    subtotal = ComputeSignal(lambda: price() * quantity())
+
+    @Computed
+    def total():
+        return subtotal() + tax()
+
+    selected = LinkedSignal(lambda: total())
+
+    @Linked
+    def label():
+        return f"{selected()}:{quantity()}"
+
+    def effect_body():
+        untracked(lambda: note())
+        total()
+        label()
+
+    effect = Effect(effect_body)
+    try:
+        price.set(2)
+        quantity.update(lambda value: value + 1)
+        tax.set(2)
+        selected.set(total())
+    finally:
+        effect.dispose()
+
+
+async def _collect_values(signal, expected: int):
+    values = []
+    async for value in to_async_iter(signal, initial=False):
+        values.append(value)
+        if len(values) == expected:
+            break
+    return values
+
+
+async def _wait_for(predicate, timeout: float = 1.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(0)
+    raise AssertionError("condition was not reached before timeout")

@@ -7,8 +7,9 @@ lazy subscription. Not part of the public API.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol, Union
+from typing import Dict, List, Optional, Protocol, Union
 import contextvars
+import threading
 import weakref
 
 # ---------------------------------------------------------------------------
@@ -44,6 +45,43 @@ class _BatchedEffect(Protocol):
 
 
 batched_effect_head: Optional[_BatchedEffect] = None
+_graph_mutation_lock = threading.RLock()
+
+
+def mutation_lock() -> threading.RLock:
+    return _graph_mutation_lock
+
+
+def producer_lock(source: "_Producer") -> threading.RLock:
+    lock = getattr(source, "_lock", None)
+    if lock is not None:
+        return lock
+    return mutation_lock()
+
+
+def consumer_lock(consumer: "_Consumer") -> threading.RLock:
+    lock = getattr(consumer, "_graph_lock", None)
+    if lock is not None:
+        return lock
+    lock = getattr(consumer, "_computation_lock", None)
+    if lock is not None:
+        return lock
+    return mutation_lock()
+
+
+def snapshot_targets(source: "_Producer") -> List["_Consumer"]:
+    if source._targets is None:
+        return []
+
+    targets: List[_Consumer] = []
+    with producer_lock(source):
+        node = source._targets
+        while node is not None:
+            target = node.target
+            if target is not None:
+                targets.append(target)
+            node = node.next_target
+    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +89,9 @@ batched_effect_head: Optional[_BatchedEffect] = None
 # ---------------------------------------------------------------------------
 class _Consumer(Protocol):
     _sources: Optional["Edge"]
+    _source_map: Dict[int, "Edge"]
     _flags: int
+    _graph_lock: Optional[threading.RLock]
 
     def _notify(self) -> None: ...
 
@@ -111,16 +151,17 @@ def _create_edge_with_weakref_cleanup(source: _Producer, consumer: _Consumer, pr
         def on_effect_gc(weak_ref: "weakref.ref[_Consumer]") -> None:
             """Called when an Effect is garbage collected - clean up the edge."""
             # Remove edge from source's targets list
-            edge_to_remove = None
-            current = source._targets
-            while current is not None:
-                if current._target_ref is weak_ref:
-                    edge_to_remove = current
-                    break
-                current = current.next_target
-            
-            if edge_to_remove is not None:
-                source._unsubscribe_edge(edge_to_remove)
+            with mutation_lock():
+                edge_to_remove = None
+                current = source._targets
+                while current is not None:
+                    if current._target_ref is weak_ref:
+                        edge_to_remove = current
+                        break
+                    current = current.next_target
+
+                if edge_to_remove is not None:
+                    source._unsubscribe_edge(edge_to_remove)
         
         target_ref = weakref.ref(consumer, on_effect_gc)
     else:
@@ -134,33 +175,32 @@ def add_dependency(source: _Producer) -> Optional[Edge]:
     if consumer is None:
         return None
 
-    node = source._node
-    if node is None or node.target is not consumer:
-        prev_head = consumer._sources
-        edge = _create_edge_with_weakref_cleanup(source, consumer, prev_head)
-        if prev_head is not None:
-            prev_head.next_source = edge
-        consumer._sources = edge
-        source._node = edge
-        if consumer._flags & TRACKING:
-            source._subscribe_edge(edge)
-        return edge
-    elif node.version == -1:
-        node.version = 0
-        if node.next_source is not None:
-            nxt = node.next_source
-            prv = node.prev_source
-            if prv is not None:
-                prv.next_source = nxt
-            nxt.prev_source = prv
-            prev_head = consumer._sources
-            node.prev_source = prev_head
-            node.next_source = None
-            if prev_head is not None:
-                prev_head.next_source = node
-            consumer._sources = node
-        return node
-    return None
+    lock = consumer._graph_lock
+    if lock is None:
+        return _add_dependency_unlocked(source, consumer)
+
+    with lock:
+        return _add_dependency_unlocked(source, consumer)
+
+
+def _add_dependency_unlocked(source: _Producer, consumer: _Consumer) -> Optional[Edge]:
+    source_id = id(source)
+    edge = consumer._source_map.get(source_id)
+    if edge is not None and edge.target is consumer:
+        if edge.version == -1:
+            edge.version = 0
+            return edge
+        return None
+
+    prev_head = consumer._sources
+    edge = _create_edge_with_weakref_cleanup(source, consumer, prev_head)
+    if prev_head is not None:
+        prev_head.next_source = edge
+    consumer._sources = edge
+    consumer._source_map[source_id] = edge
+    if consumer._flags & TRACKING:
+        source._subscribe_edge(edge)
+    return edge
 
 
 # ---------------------------------------------------------------------------
@@ -169,35 +209,46 @@ def add_dependency(source: _Producer) -> Optional[Edge]:
 
 
 def prepare_sources(target: _Consumer) -> None:
+    lock = target._graph_lock
+    if lock is not None:
+        with lock:
+            _prepare_sources_unlocked(target)
+        return
+    _prepare_sources_unlocked(target)
+
+
+def _prepare_sources_unlocked(target: _Consumer) -> None:
     edge = target._sources
     while edge is not None:
-        rollback = edge.source._node
-        if rollback is not None:
-            edge.rollback_node = rollback
-        edge.source._node = edge
         edge.version = -1
-        if edge.next_source is None:
-            target._sources = edge
-        edge = edge.next_source
+        edge = edge.prev_source
 
 
 def cleanup_sources(target: _Consumer) -> None:
+    lock = target._graph_lock
+    if lock is not None:
+        with lock:
+            _cleanup_sources_unlocked(target)
+        return
+    _cleanup_sources_unlocked(target)
+
+
+def _cleanup_sources_unlocked(target: _Consumer) -> None:
     edge = target._sources
-    head: Optional[Edge] = None
     while edge is not None:
         prev_edge = edge.prev_source
         if edge.version == -1:
             edge.source._unsubscribe_edge(edge)
+            target._source_map.pop(id(edge.source), None)
             if prev_edge is not None:
                 prev_edge.next_source = edge.next_source
             if edge.next_source is not None:
                 edge.next_source.prev_source = prev_edge
-        else:
-            head = edge
-        edge.source._node = edge.rollback_node
-        edge.rollback_node = None
+            if target._sources is edge:
+                target._sources = prev_edge
+            edge.prev_source = None
+            edge.next_source = None
         edge = prev_edge
-    target._sources = head
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +266,7 @@ def needs_to_recompute(target: _Consumer) -> bool:
             or src._version != edge.version
         ):
             return True
-        edge = edge.next_source
+        edge = edge.prev_source
     return False
 
 

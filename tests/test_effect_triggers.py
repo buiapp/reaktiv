@@ -43,6 +43,22 @@ def test_effect_trigger_count():
     eff.dispose()
 
 
+def test_sync_effect_runs_once_for_every_successful_set_outside_batch():
+    """Synchronous effects should run for every dependency change outside batch()."""
+    source = Signal(0)
+    observed_values: List[int] = []
+
+    effect = Effect(lambda: observed_values.append(source()))
+    observed_values.clear()
+
+    for value in range(1, 6):
+        source.set(value)
+
+    assert observed_values == [1, 2, 3, 4, 5]
+
+    effect.dispose()
+
+
 def test_complex_dependency_chain():
     """Test a more complex dependency chain with multiple levels and branches."""
     # Arrange

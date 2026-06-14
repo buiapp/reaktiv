@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import threading
 import traceback
 from typing import Callable, Coroutine, List, Optional, Union, cast
 
@@ -21,7 +22,10 @@ class Effect:
     """A reactive effect that automatically tracks signal dependencies and re-runs when they change.
     
     Effect creates a side effect function that runs immediately and re-runs whenever
-    any signal it depends on changes. It supports optional cleanup logic.
+    any signal it depends on changes. For synchronous effects outside a batch, every
+    successful dependency update that changes a value triggers one effect execution.
+    Updates inside ``batch()`` are intentionally coalesced and run once after the
+    outermost batch completes. It supports optional cleanup logic.
     
     Lifecycle and Memory Management:
         Effects are weakly referenced to prevent memory leaks. This means:
@@ -69,6 +73,9 @@ class Effect:
         
         counter.set(1)
         # Prints: "Counter: 1"
+
+        counter.set(2)
+        # Prints: "Counter: 2"
         ```
         
         Effect with cleanup:
@@ -138,11 +145,14 @@ class Effect:
         "_fn",
         "_cleanup",
         "_sources",
+        "_source_map",
         "_next_batched_effect",
         "_flags",
         "_is_async",
+        "_accepts_cleanup",
         "_async_task",
         "_executing",
+        "_graph_lock",
         "__weakref__",  # Allow weak references for garbage collection
     )
 
@@ -151,17 +161,20 @@ class Effect:
         self._cleanup: Optional[Callable[[], None]] = None
         self._sources: Optional[graph.Edge] = None
         self._next_batched_effect: Optional[Effect] = None
+        self._source_map: dict[int, graph.Edge] = {}
         self._flags: int = graph.TRACKING
         self._is_async = asyncio.iscoroutinefunction(func)
+        self._accepts_cleanup = len(inspect.signature(func).parameters) >= 1
         self._async_task: Optional[asyncio.Task] = None
         self._executing: bool = False
+        self._graph_lock: Optional[threading.RLock] = threading.RLock()
         debug_log(
             lambda: f"Effect created with func: {func}, is_async: {self._is_async}"
         )
 
         # Schedule initial run
         self._notify()
-        if graph.batch_depth == 0:
+        if _sched.current_batch_depth() == 0:
             _sched.flush_now()
 
     # --------------------------- Scheduling API ----------------------------
@@ -171,15 +184,17 @@ class Effect:
             _sched.enqueue_effect(self)
 
     def _needs_run(self) -> bool:
-        if self._flags & graph.DISPOSED:
-            return False
-        if self._is_async and self._executing:
-            return False
-        # Always run on first execution (no sources yet)
-        if self._sources is None:
-            return True
-        # Check if any dependencies have actually changed (Preact Signals style)
-        return graph.needs_to_recompute(self)
+        lock = cast(threading.RLock, self._graph_lock)
+        with lock:
+            if self._flags & graph.DISPOSED:
+                return False
+            if self._executing:
+                return False
+            # Always run on first execution (no sources yet)
+            if self._sources is None:
+                return True
+            # Check if any dependencies have actually changed (Preact Signals style)
+            return graph.needs_to_recompute(self)
 
     # --------------------------- Execution helpers ----------------------------
     def _start(self) -> Callable[[], None]:
@@ -221,62 +236,64 @@ class Effect:
 
     # --------------------------- Sync execution ----------------------------
     def _run_callback(self) -> None:
-        if self._flags & graph.DISPOSED:
-            return
-        if self._fn is None:
-            return
+        lock = cast(threading.RLock, self._graph_lock)
+        with lock:
+            if self._flags & graph.DISPOSED:
+                return
+            if self._fn is None:
+                return
 
-        if self._is_async:
             if self._executing:
                 return
+
+            if self._is_async:
+                self._executing = True
+                self._async_task = _sched.create_task(self._run_effect_async())
+                return
+
             self._executing = True
-            self._async_task = _sched.create_task(self._run_effect_async())
-            return
-
-        finish = self._start()
-        try:
-            fn = cast(Callable[..., object], self._fn)
-            sig = inspect.signature(fn)
-            pass_on_cleanup = len(sig.parameters) >= 1
-
-            pending_cleanups: List[Callable[[], None]] = []
-
-            def on_cleanup(fn_cleanup: Callable[[], None]) -> None:
-                pending_cleanups.append(fn_cleanup)
-
+            finish = self._start()
             try:
-                result = fn(on_cleanup) if pass_on_cleanup else fn()
-                if callable(result):
-                    pending_cleanups.append(result)  # type: ignore[arg-type]
-            except Exception:
-                traceback.print_exc()
-            finally:
-                # adopt latest cleanup (run all pending once, then store composite)
-                def _composite():
-                    for c in pending_cleanups:
-                        try:
-                            c()
-                        except Exception:
-                            traceback.print_exc()
+                fn = cast(Callable[..., object], self._fn)
 
-                self._cleanup = _composite if pending_cleanups else None
-        finally:
-            finish()
+                pending_cleanups: List[Callable[[], None]] = []
+
+                def on_cleanup(fn_cleanup: Callable[[], None]) -> None:
+                    pending_cleanups.append(fn_cleanup)
+
+                try:
+                    result = fn(on_cleanup) if self._accepts_cleanup else fn()
+                    if callable(result):
+                        pending_cleanups.append(result)  # type: ignore[arg-type]
+                except Exception:
+                    traceback.print_exc()
+                finally:
+                    # adopt latest cleanup (run all pending once, then store composite)
+                    def _composite():
+                        for c in pending_cleanups:
+                            try:
+                                c()
+                            except Exception:
+                                traceback.print_exc()
+
+                    self._cleanup = _composite if pending_cleanups else None
+            finally:
+                try:
+                    finish()
+                finally:
+                    self._executing = False
 
     # --------------------------- Async execution ----------------------------
     async def _run_effect_async(self) -> None:
         try:
             finish = self._start()
-            fn = cast(Callable[..., object], self._fn)
-            sig = inspect.signature(fn)
-            pass_on_cleanup = len(sig.parameters) >= 1
             pending_cleanups: List[Callable[[], None]] = []
 
             def on_cleanup(fn_cleanup: Callable[[], None]) -> None:
                 pending_cleanups.append(fn_cleanup)
 
             try:
-                if pass_on_cleanup:
+                if self._accepts_cleanup:
                     await cast(
                         Callable[
                             [Callable[[Callable[[], None]], None]],
@@ -315,11 +332,14 @@ class Effect:
     # --------------------------- Disposal ----------------------------
     def _dispose_now(self) -> None:
         # unsubscribe from sources
-        node = self._sources
-        while node is not None:
-            node.source._unsubscribe_edge(node)
-            node = node.next_source
-        self._sources = None
+        with graph.consumer_lock(self):
+            node = self._sources
+            while node is not None:
+                prev = node.prev_source
+                node.source._unsubscribe_edge(node)
+                node = prev
+            self._sources = None
+            self._source_map.clear()
         # run cleanup
         self._run_cleanup()
         # cancel async task

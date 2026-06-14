@@ -657,6 +657,71 @@ class TestThreadSafetyStressTests:
             # Value should be odd (since base*2 is even, +1 makes it odd)
             assert value % 2 == 1, f"Computed value {value} should be odd"
 
+    def test_threaded_sets_trigger_effect_once_with_consistent_computed_values(self):
+        """Each serialized threaded set should run the effect with consistent values."""
+        source = Signal(0)
+        level1 = ComputeSignal(lambda: source.get() * 2)
+        level2 = ComputeSignal(lambda: level1.get() + 10)
+        level3 = ComputeSignal(lambda: level2.get() * level1.get())
+
+        observations: list[tuple[int, int, int, int]] = []
+        effect_thread_ids: set[int] = set()
+        observation_lock = threading.Lock()
+
+        def track_effect():
+            observed = (source.get(), level1.get(), level2.get(), level3.get())
+            with observation_lock:
+                observations.append(observed)
+                effect_thread_ids.add(threading.get_ident())
+
+        effect = Effect(track_effect)
+        with observation_lock:
+            observations.clear()
+            effect_thread_ids.clear()
+
+        num_threads = 4
+        sets_per_thread = 20
+        set_lock = threading.Lock()
+        start = threading.Barrier(num_threads)
+        set_values: list[int] = []
+
+        def setter(thread_index: int):
+            start.wait()
+            for offset in range(sets_per_thread):
+                value = (thread_index * sets_per_thread) + offset + 1
+                # Exact per-set effect counts require non-overlapping set calls.
+                # Fully concurrent reads are covered separately and are not
+                # transactional multi-signal snapshots.
+                with set_lock:
+                    source.set(value)
+                    set_values.append(value)
+
+        threads = [
+            threading.Thread(target=setter, args=(thread_index,))
+            for thread_index in range(num_threads)
+        ]
+
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        expected_runs = num_threads * sets_per_thread
+        with observation_lock:
+            recorded = list(observations)
+            run_thread_ids = set(effect_thread_ids)
+
+        assert len(recorded) == expected_runs
+        assert [source_value for source_value, _, _, _ in recorded] == set_values
+        assert len(run_thread_ids) > 1
+
+        for source_value, first, second, third in recorded:
+            assert first == source_value * 2
+            assert second == first + 10
+            assert third == second * first
+
+        effect.dispose()
+
     def test_complex_reactive_system_stress(self):
         """Complex stress test with signals, computed signals, and effects in multiple threads."""
         input_signal1 = Signal(0)
@@ -948,20 +1013,16 @@ class TestThreadSafetyStressTests:
         with chain_lock:
             assert len(effect_chain) > 0, "Cascading effects should have been triggered"
 
-        # 2. Check mathematical consistency in reads
+        # 2. Concurrent reads should complete without exceptions. These tuples are
+        # not atomic snapshots: an updater may run between source/level reads.
+        assert len(all_reads) == 3
         for read_batch in all_reads:
+            assert len(read_batch) == 50
             for s, l1, l2, l3 in read_batch:
-                # Verify the mathematical relationships hold
-                # (allowing for some concurrent update inconsistencies)
-                if l1 == s * 2:  # If we caught a consistent state
-                    expected_l2 = l1 + 10
-                    expected_l3 = l2 * l1
-
-                    # In a consistent state, all should match
-                    if l2 == expected_l2:
-                        assert l3 == expected_l3, (
-                            f"Level3 inconsistent: {l3} != {expected_l3} (s={s}, l1={l1}, l2={l2})"
-                        )
+                assert isinstance(s, int)
+                assert isinstance(l1, int)
+                assert isinstance(l2, int)
+                assert isinstance(l3, int)
 
         # 3. Final state should be mathematically consistent
         final_source = source.get()

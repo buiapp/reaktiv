@@ -145,6 +145,8 @@ logger.dispose()
 Effects:
 
 - Execute a function when created and whenever dependencies change
+- For synchronous effects outside `batch()`, every successful dependency update that changes a value triggers one effect execution
+- Updates inside `batch()` are intentionally coalesced, so the effect runs once after the outermost batch completes
 - Automatically track signal dependencies
 - Can be disposed when no longer needed
 - Support both synchronous and asynchronous functions
@@ -158,6 +160,7 @@ counter = Signal(0)
 sync_effect = Effect(lambda: print(f"Counter: {counter()}"))  # Runs immediately
 
 counter.set(1)  # Effect runs synchronously
+counter.set(2)  # Effect runs synchronously again
 ```
 Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
 
@@ -270,8 +273,8 @@ def log_sum():
 
 logger = Effect(log_sum)  # Prints: "Sum: 30"
 
-# Without batching, each signal change would trigger recomputation
-# With batching, recomputation happens only once after all changes
+# Without batching, each signal change would trigger the effect
+# With batching, the effect runs only once after all changes
 with batch():
     x.set(5)  # No recomputation yet
     y.set(15)  # No recomputation yet

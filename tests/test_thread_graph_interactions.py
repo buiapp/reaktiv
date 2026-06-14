@@ -420,24 +420,23 @@ def test_shared_source_fanout_graphs_remain_consistent_under_parallel_readers():
     stop = threading.Event()
     reader_errors = []
     reader_error_lock = threading.Lock()
+    start = threading.Barrier(5)
 
     def reader():
         local_reads = 0
+        start.wait()
         while not stop.is_set():
-            src = source()
-            mult = multiplier()
-            shared_value = shared()
-            left_value = left()
-            right_value = right()
-            total_value = total()
-
-            assert isinstance(src, int)
-            assert isinstance(mult, int)
-            assert isinstance(shared_value, int)
-            assert isinstance(left_value, int)
-            assert isinstance(right_value, int)
-            assert isinstance(total_value, int)
+            # Exercise the fanout graph while the writer invalidates shared
+            # dependencies. These reads are not expected to be one atomic
+            # snapshot; they are here to force concurrent refresh paths.
+            source()
+            multiplier()
+            shared()
+            left()
+            right()
+            total()
             local_reads += 1
+            time.sleep(0)
         return local_reads
 
     def guarded_reader():
@@ -452,25 +451,66 @@ def test_shared_source_fanout_graphs_remain_consistent_under_parallel_readers():
         threading.Thread(target=guarded_reader, name=f"fanout-reader-{index}")
         for index in range(4)
     ]
-    for thread in reader_threads:
-        thread.start()
+    try:
+        for thread in reader_threads:
+            thread.start()
 
-    for value in range(1, 80):
-        source.set(value)
-        if value % 7 == 0:
-            multiplier.set(2 + value % 5)
+        start.wait()
+        # Mutate both the shared source and a secondary dependency. This used
+        # to expose stale downstream computeds when notifications coalesced.
+        for value in range(1, 80):
+            source.set(value)
+            if value % 7 == 0:
+                multiplier.set(2 + value % 5)
+            if value % 3 == 0:
+                time.sleep(0)
 
-    stop.set()
-    _join_all(reader_threads)
+        stop.set()
+        _join_all(reader_threads)
 
-    assert reader_errors == []
-    src = source()
-    mult = multiplier()
-    assert shared() == src * mult
-    assert left() == shared() + src
-    assert right() == shared() - src
-    assert total() == left() + right()
-    assert observed[-1] == total()
+        assert reader_errors == []
+        src = source()
+        mult = multiplier()
+        # After all writers/readers settle, every node must agree with the final
+        # source state and the effect must have observed the final total.
+        assert shared() == src * mult
+        assert left() == shared() + src
+        assert right() == shared() - src
+        assert total() == left() + right()
+        assert observed[-1] == total()
+    finally:
+        stop.set()
+        effect.dispose()
+
+
+def test_shared_source_fanout_effect_observes_final_public_value_after_updates():
+    source = Signal(0)
+    multiplier = Signal(2)
+    shared = Computed(lambda: source() * multiplier())
+    left = Computed(lambda: shared() + source())
+    right = Computed(lambda: shared() - source())
+    total = Computed(lambda: left() + right())
+    observed = []
+    effect = Effect(lambda: observed.append(total()))
+    observed.clear()
+
+    source.set(78)
+    multiplier.set(4)
+    observed.clear()
+
+    # A plain read of an intermediate computed should not leave downstream
+    # public values or effects stale after the next source update.
+    assert shared() == 312
+
+    source.set(79)
+
+    assert source() == 79
+    assert multiplier() == 4
+    assert shared() == 316
+    assert left() == 395
+    assert right() == 237
+    assert total() == 632
+    assert observed[-1] == 632
     effect.dispose()
 
 

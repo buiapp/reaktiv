@@ -577,6 +577,7 @@ class ComputeSignal(Signal[T]):
         if (
             not force
             and (self._flags & (graph.OUTDATED | graph.TRACKING)) == graph.TRACKING
+            and self._global_version_seen == graph.global_version
         ):
             return True
         # clear outdated bit
@@ -669,8 +670,6 @@ class ComputeSignal(Signal[T]):
             target._notify()
 
     def _notify_unlocked(self) -> list[graph._Consumer]:
-        if self._flags & graph.NOTIFIED:
-            return []
         self._flags |= graph.OUTDATED | graph.NOTIFIED
         if self._targets is None:
             return []

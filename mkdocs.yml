@@ -81,6 +81,7 @@ nav:
     - Effect: api/effect.md
     - LinkedSignal: api/linked-signal.md
     - Resource: api/resource-signal.md
+    - ReactiveModel: api/reactive-model.md
     - Utils: api/utils.md
   - Examples: examples/index.md
 

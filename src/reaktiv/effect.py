@@ -6,16 +6,70 @@ import asyncio
 import inspect
 import threading
 import traceback
-from typing import Callable, Coroutine, List, Optional, Union, cast
+import weakref
+from typing import Any, Callable, Coroutine, List, Optional, Union, cast, overload
 
+from ._descriptor import PerInstanceDescriptor, is_instance_method
 from ._debug import debug_log
 from . import graph
 from . import scheduler as _sched
 
-EffectFn = Union[
-    Callable[..., Optional[Callable[[], None]]],
-    Callable[..., Coroutine[None, None, None]],
-]
+EffectFn = Callable[..., object]
+CleanupRegistrar = Callable[[Callable[[], None]], None]
+
+
+class EffectDescriptor(PerInstanceDescriptor["Effect"]):
+    """Descriptor that creates one Effect per owner instance."""
+
+    initialize_eagerly = True
+
+    def __init__(self, func: Callable[..., object]) -> None:
+        super().__init__()
+        self._func = func
+
+    def _create(self, instance: object) -> "Effect":
+        parameters = tuple(inspect.signature(self._func).parameters.values())
+        accepts_cleanup = len(parameters) >= 2
+        try:
+            instance_ref = weakref.ref(instance)
+
+            def owner() -> object:
+                current = instance_ref()
+                if current is None:
+                    raise ReferenceError("Reactive owner has been garbage collected")
+                return current
+
+        except TypeError:
+
+            def owner() -> object:
+                return instance
+
+        if asyncio.iscoroutinefunction(self._func):
+            if accepts_cleanup:
+
+                async def async_with_cleanup(on_cleanup):
+                    return await cast(Callable[..., Any], self._func)(
+                        owner(), on_cleanup
+                    )
+
+                return _create_effect_instance(async_with_cleanup)
+
+            async def async_without_cleanup():
+                return await cast(Callable[..., Any], self._func)(owner())
+
+            return _create_effect_instance(async_without_cleanup)
+
+        if accepts_cleanup:
+
+            def sync_with_cleanup(on_cleanup):
+                return self._func(owner(), on_cleanup)
+
+            return _create_effect_instance(sync_with_cleanup)
+
+        def sync_without_cleanup():
+            return self._func(owner())
+
+        return _create_effect_instance(sync_without_cleanup)
 
 
 class Effect:
@@ -156,6 +210,25 @@ class Effect:
         "__weakref__",  # Allow weak references for garbage collection
     )
 
+    @overload
+    def __new__(cls, func: Callable[[], object], /) -> "Effect": ...
+
+    @overload
+    def __new__(cls, func: Callable[[CleanupRegistrar], object], /) -> "Effect": ...
+
+    @overload
+    def __new__(cls, func: Callable[[Any], object], /) -> EffectDescriptor: ...
+
+    @overload
+    def __new__(
+        cls, func: Callable[[Any, CleanupRegistrar], object], /
+    ) -> EffectDescriptor: ...
+
+    def __new__(cls, func: EffectFn) -> Union["Effect", EffectDescriptor]:
+        if is_instance_method(func):
+            return EffectDescriptor(func)
+        return super().__new__(cls)
+
     def __init__(self, func: EffectFn):
         self._fn = func
         self._cleanup: Optional[Callable[[], None]] = None
@@ -257,7 +330,7 @@ class Effect:
             self._executing = True
             finish = self._start()
             try:
-                fn = cast(Callable[..., object], self._fn)
+                fn = self._fn
 
                 pending_cleanups: List[Callable[[], None]] = []
 
@@ -267,7 +340,7 @@ class Effect:
                 try:
                     result = fn(on_cleanup) if self._accepts_cleanup else fn()
                     if callable(result):
-                        pending_cleanups.append(result)  # type: ignore[arg-type]
+                        pending_cleanups.append(cast(Callable[[], None], result))
                 except Exception:
                     traceback.print_exc()
                 finally:
@@ -300,12 +373,12 @@ class Effect:
                     await cast(
                         Callable[
                             [Callable[[Callable[[], None]], None]],
-                            Coroutine[None, None, None],
+                            Coroutine[Any, Any, None],
                         ],
                         self._fn,
                     )(on_cleanup)
                 else:
-                    await cast(Callable[[], Coroutine[None, None, None]], self._fn)()
+                    await cast(Callable[[], Coroutine[Any, Any, None]], self._fn)()
             except asyncio.CancelledError:
                 # run any collected cleanups even on cancel
                 for c in pending_cleanups:
@@ -394,3 +467,31 @@ class Effect:
         dispose() explicitly.
         """
         self._run_cleanup()
+
+
+def _create_effect_instance(func: EffectFn) -> Effect:
+    effect = Effect(func)
+    if isinstance(effect, EffectDescriptor):
+        raise TypeError("Expected an Effect instance, got an Effect descriptor")
+    return effect
+
+
+class _EffectFactory:
+    """Lowercase decorator-friendly Effect factory."""
+
+    @overload
+    def __call__(self, func: Callable[[], object], /) -> Effect: ...
+
+    @overload
+    def __call__(self, func: Callable[[Any], object], /) -> EffectDescriptor: ...
+
+    @overload
+    def __call__(
+        self, func: Callable[[Any, CleanupRegistrar], object], /
+    ) -> EffectDescriptor: ...
+
+    def __call__(self, func: EffectFn, /) -> Union[Effect, EffectDescriptor]:
+        return Effect(func)
+
+
+effect = _EffectFactory()

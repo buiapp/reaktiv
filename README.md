@@ -347,6 +347,46 @@ def increment_age(current: int) -> int:
 age.update(increment_age)  # Type checked!
 ```
 
+## Class-Based Reactive Models
+
+For application state objects, `ReactiveModel` gives each instance its own
+signals and descriptor-backed reactive members:
+
+```python
+from reaktiv import ReactiveModel, computed, effect, field, linked
+
+
+class Cart(ReactiveModel):
+    price = field(10.0)
+    quantity = field(2)
+
+    @computed
+    def subtotal(self) -> float:
+        return self.price() * self.quantity()
+
+    @linked
+    def selected_quantity(self) -> int:
+        return self.quantity()
+
+    @effect
+    def log_subtotal(self) -> None:
+        print(f"Subtotal: {self.subtotal()}")
+
+
+cart = Cart()
+cart.price.set(12.0)
+cart.selected_quantity.set(5)
+cart.dispose()
+```
+
+Manual primitive wiring still works and remains ideal for small graphs:
+
+```python
+price = Signal(10.0)
+quantity = Signal(2)
+subtotal = Computed(lambda: price() * quantity())
+```
+
 ## Why This Pattern?
 
 ```mermaid

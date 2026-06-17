@@ -1,0 +1,73 @@
+name: Upload Test Python Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "TestPyPI version, for example 0.22.0.dev123"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  testpypi-build:
+    runs-on: ubuntu-latest
+    environment: testpypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5.3.1
+        with:
+          python-version: 3.9
+
+      - name: Set package version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="0.22.0.dev${{ github.run_number }}"
+          fi
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          uv version "$VERSION" --no-sync
+          sed -i "s/^__version__ = .*/__version__ = \"$VERSION\"/" src/reaktiv/__init__.py
+
+      - name: Run Ruff linting
+        run: uvx ruff check
+
+      - name: Run Pyright
+        run: uv run pyright
+
+      - name: Run tests
+        run: uv run pytest tests/
+
+      - name: Build package
+        run: uv build --no-sources
+
+      - name: Test clean install from wheel
+        run: |
+          uv venv .test-venv --python 3.9
+          uv pip install --python .test-venv/bin/python dist/*.whl
+          .test-venv/bin/python -c "import reaktiv; print(reaktiv.__version__)"
+
+      - name: Publish to TestPyPI
+        run: |
+          uv publish \
+            --publish-url https://test.pypi.org/legacy/ \
+            --check-url https://test.pypi.org/simple/ \
+            --trusted-publishing always
+
+      - name: Test install from TestPyPI
+        run: |
+          uv run \
+            --with "reaktiv==$PACKAGE_VERSION" \
+            --default-index https://test.pypi.org/simple/ \
+            --index https://pypi.org/simple/ \
+            --refresh-package reaktiv \
+            --no-project \
+            -- python -c "import reaktiv; print(reaktiv.__version__)"

@@ -64,7 +64,8 @@ lowercase_effect: Effect = effect(lambda: decorated_computed())
 
 class CounterModel(ReactiveModel):
     count = field(1)
-    name = field("Ada")
+    name = field[str]("")
+    labels = field[list[str]](factory=list)
 
     @computed
     def doubled(self) -> int:
@@ -127,8 +128,10 @@ class CounterModel(ReactiveModel):
         return params.params
 
 
-model = CounterModel()
+model = CounterModel(name="Ada")
 model_count: Signal[int] = model.count
+model_name_field: Signal[str] = model.name
+model_labels: Signal[list[str]] = model.labels
 model_doubled: ComputeSignal[int] = model.doubled
 model_normalized_name: ComputeSignal[str] = model.normalized_name
 model_normalized_name_value: str = model.normalized_name()

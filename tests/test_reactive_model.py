@@ -53,6 +53,58 @@ def test_reactive_model_fields_are_per_instance() -> None:
     assert right.items() == []
 
 
+def test_typed_fields_support_defaults_and_factories() -> None:
+    class Profile(ReactiveModel):
+        name = field[str]("")
+        age = field[int](0)
+        tags = field[list[str]](factory=list)
+
+        def __init__(self, name: str, age: int = 0) -> None:
+            self.observed: list[tuple[str, int]] = []
+            super().__init__(name=name, age=age)
+
+        @effect
+        def observe(self) -> None:
+            self.observed.append((self.name(), self.age()))
+
+    profile = Profile("Ada", age=37)
+
+    assert profile.name() == "Ada"
+    assert profile.age() == 37
+    assert profile.tags() == []
+    assert profile.observed == [("Ada", 37)]
+
+
+def test_fields_require_a_default_or_factory() -> None:
+    with pytest.raises(TypeError, match="requires exactly one default value"):
+        field()
+
+    with pytest.raises(TypeError, match="requires exactly one default value"):
+        field[str]()
+
+
+def test_reactive_model_rejects_unknown_fields() -> None:
+    class User(ReactiveModel):
+        name = field[str]("")
+
+    with pytest.raises(TypeError, match="Unknown reactive field.*nmae"):
+        User(name="Ada", nmae="Grace")
+
+
+def test_subclass_attribute_can_override_inherited_field() -> None:
+    class Base(ReactiveModel):
+        value = field(1)
+
+    class Child(Base):
+        value = "fixed"
+
+    child = Child()
+
+    assert child.value == "fixed"
+    with pytest.raises(TypeError, match="Unknown reactive field.*value"):
+        Child(value=2)
+
+
 def test_computed_and_linked_method_decorators_are_per_instance() -> None:
     class Cart(ReactiveModel):
         price = field(10)

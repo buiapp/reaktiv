@@ -4,6 +4,43 @@
 state. This is useful when a model owns a small graph of fields, computed values,
 editable linked values, effects, and async resources.
 
+## Fields And Initial Values
+
+Field types are inferred from their defaults or factories:
+
+```python
+class Cart(ReactiveModel):
+    quantity = field(1)
+    tags = field(factory=list[str])
+```
+
+Use `field[T]` to make the type explicit:
+
+```python
+class UserModel(ReactiveModel):
+    name = field[str]("")
+    age = field[int](0)
+    tags = field[list[str]](factory=list)
+
+
+user = UserModel(name="Ada", age=37)
+
+print(user.name())  # Ada
+print(user.age())   # 37
+```
+
+Every field must provide either a default value or a factory. Unknown constructor
+field names raise `TypeError`. For precise constructor autocomplete and static
+checking, declare an explicit constructor:
+
+```python
+class UserModel(ReactiveModel):
+    name = field[str]("")
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name=name)
+```
+
 ## Linked Example
 
 Use `linked` for state that starts from another signal, can be edited locally,

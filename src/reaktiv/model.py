@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Callable, Generic, Optional, Protocol, TypeVar, Union, overload, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Optional,
+    Protocol,
+    TypeVar,
+    Union,
+    overload,
+    runtime_checkable,
+)
 from weakref import WeakKeyDictionary
 
 from ._descriptor import PerInstanceDescriptor
@@ -10,21 +20,120 @@ from .signal import Signal
 
 T = TypeVar("T")
 
-class _Missing:
-    pass
-
-
-_MISSING = _Missing()
-
 
 class ReactiveModel:
-    """Base class for class-based reactive state models."""
+    """Base class for per-instance reactive state.
+
+    Declare writable state with `field()` and derive model-owned reactive
+    members with `@computed`, `@linked`, `@effect`, and `@resource`. Every model
+    instance receives its own signals, computed values, effects, and resources.
+
+    Values passed to the constructor override declared field defaults before
+    eager effects and resources are initialized:
+
+    ```python
+    from reaktiv import ReactiveModel, computed, field
+
+
+    class CounterModel(ReactiveModel):
+        count = field(0)
+
+        @computed
+        def doubled(self) -> int:
+            return self.count() * 2
+
+
+    counter = CounterModel(count=5)
+
+    print(counter.count())    # 5
+    print(counter.doubled())  # 10
+    ```
+
+    Field types are inferred from defaults and factories. Use `field[T]` when
+    the type should be explicit:
+
+    ```python
+    class UserModel(ReactiveModel):
+        name = field[str]("")
+        age = field[int](0)
+        tags = field[list[str]](factory=list)
+
+
+    user = UserModel(name="Ada")
+    ```
+
+    Every field must provide either a default value or a factory. Constructor
+    values override those defaults. Unknown constructor field names raise
+    `TypeError`.
+
+    Add an explicit constructor when callers should receive precise parameter
+    hints and static type checking:
+
+    ```python
+    class CounterModel(ReactiveModel):
+        count = field(0)
+
+        def __init__(self, count: int = 0) -> None:
+            super().__init__(count=count)
+    ```
+
+    When mixing `ReactiveModel` with a class that does not use cooperative
+    `super()`, initialize both bases explicitly. Call `ReactiveModel.__init__`
+    last, after setting every ordinary attribute that an effect or resource may
+    read, because model-owned effects start during reactive initialization:
+
+    ```python
+    from reaktiv import ReactiveModel, effect, field
+
+
+    class NamedService:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+
+    class CounterService(NamedService, ReactiveModel):
+        count = field(0)
+
+        def __init__(self, name: str, count: int = 0) -> None:
+            NamedService.__init__(self, name)
+            ReactiveModel.__init__(self, count=count)
+
+        @effect
+        def log_count(self) -> None:
+            print(f"{self.name}: {self.count()}")
+    ```
+
+    Call `dispose()` when the model is no longer needed. It disposes all effects
+    and resources owned by that model instance.
+
+    Args:
+        **fields: Initial values for fields declared with `field()`.
+    """
 
     def __init__(self, **fields: object) -> None:
         self._reaktiv_owned: list[object] = []
+        declared_fields = self._reaktiv_declared_fields()
+
+        unknown = fields.keys() - declared_fields.keys()
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise TypeError(f"Unknown reactive field(s): {names}")
+
         for name, value in fields.items():
-            setattr(self, name, value)
+            declared_fields[name].initialize(self, value)
         self._reaktiv_initialize_eager_members()
+
+    def _reaktiv_declared_fields(self) -> dict[str, "SignalField[Any]"]:
+        fields: dict[str, SignalField[Any]] = {}
+        seen: set[str] = set()
+        for cls in type(self).mro():
+            for name, member in cls.__dict__.items():
+                if name in seen:
+                    continue
+                seen.add(name)
+                if isinstance(member, SignalField):
+                    fields[name] = member
+        return fields
 
     def _reaktiv_initialize_eager_members(self) -> None:
         seen: set[str] = set()
@@ -69,16 +178,8 @@ class Destroyable(Protocol):
 class SignalField(Generic[T]):
     """Descriptor that creates one writable Signal per model instance."""
 
-    def __init__(
-        self,
-        default: Union[T, _Missing] = _MISSING,
-        *,
-        factory: Optional[Callable[[], T]] = None,
-    ) -> None:
-        if not isinstance(default, _Missing) and factory is not None:
-            raise ValueError("field() accepts either a default or a factory, not both")
-        self._default = default
-        self._factory = factory
+    def __init__(self, initial_value: Callable[[], T]) -> None:
+        self._initial_value = initial_value
         self._cache: WeakKeyDictionary[object, Signal[T]] = WeakKeyDictionary()
         self._storage_name: Optional[str] = None
 
@@ -101,32 +202,51 @@ class SignalField(Generic[T]):
     def __set__(self, instance: object, value: T) -> None:
         self._get_or_create(instance).set(value)
 
+    def initialize(self, instance: object, value: T) -> Signal[T]:
+        signal = self._get_existing(instance)
+        if signal is not None:
+            signal.set(value)
+            return signal
+
+        signal = Signal(value)
+        self._store(instance, signal)
+        return signal
+
     def _get_or_create(self, instance: object) -> Signal[T]:
+        signal = self._get_existing(instance)
+        if signal is not None:
+            return signal
+
+        signal = Signal(self._initial_value())
+        self._store(instance, signal)
+        return signal
+
+    def _get_existing(self, instance: object) -> Optional[Signal[T]]:
         try:
             return self._cache[instance]
         except KeyError:
-            signal = Signal(self._initial_value())
-            self._cache[instance] = signal
-            return signal
+            return None
         except TypeError:
-            signal = self._get_from_instance_dict(instance)
-            if not isinstance(signal, _Missing):
-                return signal
-            signal = Signal(self._initial_value())
+            return self._get_from_instance_dict(instance)
+
+    def _store(self, instance: object, signal: Signal[T]) -> None:
+        try:
+            self._cache[instance] = signal
+        except TypeError:
             self._set_on_instance_dict(instance, signal)
-            return signal
 
-    def _initial_value(self) -> T:
-        if self._factory is not None:
-            return self._factory()
-        if isinstance(self._default, _Missing):
-            raise ValueError("field() requires a default or factory")
-        return self._default
-
-    def _get_from_instance_dict(self, instance: object) -> Union[Signal[T], _Missing]:
-        if self._storage_name is None or not hasattr(instance, "__dict__"):
-            return _MISSING
-        return vars(instance).get(self._storage_name, _MISSING)
+    def _get_from_instance_dict(self, instance: object) -> Optional[Signal[T]]:
+        if self._storage_name is None:
+            return None
+        try:
+            value = vars(instance).get(self._storage_name)
+        except TypeError:
+            return None
+        if value is None:
+            return None
+        if not isinstance(value, Signal):
+            raise TypeError(f"Invalid reactive field storage: {self._storage_name}")
+        return value
 
     def _set_on_instance_dict(self, instance: object, value: Signal[T]) -> None:
         if self._storage_name is None or not hasattr(instance, "__dict__"):
@@ -137,18 +257,54 @@ class SignalField(Generic[T]):
         vars(instance)[self._storage_name] = value
 
 
-@overload
-def field(default: T) -> SignalField[T]: ...
+class _TypedFieldFactory(Generic[T]):
+    """Typed field factory used by `field[T]` syntax."""
+
+    @overload
+    def __call__(self, default: T, /) -> SignalField[T]: ...
+
+    @overload
+    def __call__(self, *, factory: Callable[[], T]) -> SignalField[T]: ...
+
+    def __call__(
+        self,
+        *defaults: T,
+        factory: Optional[Callable[[], T]] = None,
+    ) -> SignalField[T]:
+        return _create_field(defaults, factory)
 
 
-@overload
-def field(*, factory: Callable[[], T]) -> SignalField[T]: ...
-
-
-def field(
-    default: Union[T, _Missing] = _MISSING,
-    *,
-    factory: Optional[Callable[[], T]] = None,
-) -> SignalField[T]:
+class _FieldFactory:
     """Declare a per-instance Signal field on a ReactiveModel."""
-    return SignalField(default, factory=factory)
+
+    @overload
+    def __call__(self, default: T, /) -> SignalField[T]: ...
+
+    @overload
+    def __call__(self, *, factory: Callable[[], T]) -> SignalField[T]: ...
+
+    def __call__(
+        self,
+        *defaults: T,
+        factory: Optional[Callable[[], T]] = None,
+    ) -> SignalField[T]:
+        return _create_field(defaults, factory)
+
+    def __getitem__(self, value_type: type[T]) -> _TypedFieldFactory[T]:
+        del value_type
+        return _TypedFieldFactory()
+
+
+field = _FieldFactory()
+
+
+def _create_field(
+    defaults: tuple[T, ...],
+    factory: Optional[Callable[[], T]],
+) -> SignalField[T]:
+    if len(defaults) == 1 and factory is None:
+        default = defaults[0]
+        return SignalField(lambda: default)
+    if not defaults and factory is not None:
+        return SignalField(factory)
+    raise TypeError("field() requires exactly one default value or a factory")

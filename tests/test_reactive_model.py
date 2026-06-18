@@ -1,6 +1,7 @@
 import asyncio
 import gc
 import weakref
+from typing import Optional
 
 import pytest
 
@@ -58,6 +59,7 @@ def test_typed_fields_support_defaults_and_factories() -> None:
         name = field[str]("")
         age = field[int](0)
         tags = field[list[str]](factory=list)
+        nickname = field[Optional[str]](None)
 
         def __init__(self, name: str, age: int = 0) -> None:
             self.observed: list[tuple[str, int]] = []
@@ -72,6 +74,7 @@ def test_typed_fields_support_defaults_and_factories() -> None:
     assert profile.name() == "Ada"
     assert profile.age() == 37
     assert profile.tags() == []
+    assert profile.nickname() is None
     assert profile.observed == [("Ada", 37)]
 
 

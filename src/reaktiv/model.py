@@ -178,8 +178,24 @@ class Destroyable(Protocol):
 class SignalField(Generic[T]):
     """Descriptor that creates one writable Signal per model instance."""
 
-    def __init__(self, initial_value: Callable[[], T]) -> None:
-        self._initial_value = initial_value
+    @overload
+    def __init__(self, default: T, /) -> None: ...
+
+    @overload
+    def __init__(self, *, factory: Callable[[], T]) -> None: ...
+
+    def __init__(
+        self,
+        *defaults: T,
+        factory: Optional[Callable[[], T]] = None,
+    ) -> None:
+        if len(defaults) == 1 and factory is None:
+            default = defaults[0]
+            self._initial_value = lambda: default
+        elif not defaults and factory is not None:
+            self._initial_value = factory
+        else:
+            raise TypeError("field() requires exactly one default value or a factory")
         self._cache: WeakKeyDictionary[object, Signal[T]] = WeakKeyDictionary()
         self._storage_name: Optional[str] = None
 
@@ -257,54 +273,4 @@ class SignalField(Generic[T]):
         vars(instance)[self._storage_name] = value
 
 
-class _TypedFieldFactory(Generic[T]):
-    """Typed field factory used by `field[T]` syntax."""
-
-    @overload
-    def __call__(self, default: T, /) -> SignalField[T]: ...
-
-    @overload
-    def __call__(self, *, factory: Callable[[], T]) -> SignalField[T]: ...
-
-    def __call__(
-        self,
-        *defaults: T,
-        factory: Optional[Callable[[], T]] = None,
-    ) -> SignalField[T]:
-        return _create_field(defaults, factory)
-
-
-class _FieldFactory:
-    """Declare a per-instance Signal field on a ReactiveModel."""
-
-    @overload
-    def __call__(self, default: T, /) -> SignalField[T]: ...
-
-    @overload
-    def __call__(self, *, factory: Callable[[], T]) -> SignalField[T]: ...
-
-    def __call__(
-        self,
-        *defaults: T,
-        factory: Optional[Callable[[], T]] = None,
-    ) -> SignalField[T]:
-        return _create_field(defaults, factory)
-
-    def __getitem__(self, value_type: type[T]) -> _TypedFieldFactory[T]:
-        del value_type
-        return _TypedFieldFactory()
-
-
-field = _FieldFactory()
-
-
-def _create_field(
-    defaults: tuple[T, ...],
-    factory: Optional[Callable[[], T]],
-) -> SignalField[T]:
-    if len(defaults) == 1 and factory is None:
-        default = defaults[0]
-        return SignalField(lambda: default)
-    if not defaults and factory is not None:
-        return SignalField(factory)
-    raise TypeError("field() requires exactly one default value or a factory")
+field = SignalField

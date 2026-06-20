@@ -2,8 +2,6 @@
 ReactiveModel example: class-based reactive state.
 """
 
-from collections.abc import Callable
-
 from reaktiv import ReactiveModel, batch, computed, effect, field, linked
 
 
@@ -43,7 +41,7 @@ class ShoppingCart(ReactiveModel):
         return self.quantity()
 
     @effect
-    def audit_total(self, on_cleanup: Callable[[Callable[[], None]], None]) -> None:
+    def audit_total(self):
         total = self.total()
         message = (
             f"{self.item_name()}: quantity={self.quantity()}, "
@@ -52,9 +50,7 @@ class ShoppingCart(ReactiveModel):
         self.audit_log.append(message)
         print(message)
 
-        on_cleanup(
-            lambda: self.cleanup_log.append(f"closed audit view for ${total:.2f}")
-        )
+        return lambda: self.cleanup_log.append(f"closed audit view for ${total:.2f}")
 
 
 def main() -> None:

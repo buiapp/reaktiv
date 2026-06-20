@@ -483,6 +483,9 @@ class _EffectFactory:
     def __call__(self, func: Callable[[], object], /) -> Effect: ...
 
     @overload
+    def __call__(self, func: Callable[[CleanupRegistrar], object], /) -> Effect: ...
+
+    @overload
     def __call__(self, func: Callable[[Any], object], /) -> EffectDescriptor: ...
 
     @overload

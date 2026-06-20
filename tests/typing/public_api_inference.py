@@ -1,11 +1,12 @@
 """Type-checking fixture for public generic inference.
 
-This file is not a pytest module. It is checked with ty to ensure public
-decorators and factory functions preserve their user-visible value types.
+This file is not a pytest module. It is checked with Pyright and ty to ensure
+public decorators and factory functions preserve their user-visible value types.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Optional
 
 from reaktiv import (
@@ -38,6 +39,7 @@ untracked_readonly_count: int = untracked(readonly_count)
 untracked_name: str = untracked(lambda: name())
 
 factory_computed: ComputeSignal[int] = Computed(lambda: count() + 1)
+lowercase_factory_computed: ComputeSignal[int] = computed(lambda: count() + 1)
 
 
 @computed
@@ -48,7 +50,16 @@ def decorated_computed() -> str:
 decorated_computed_signal: ComputeSignal[str] = decorated_computed
 
 
+@computed
+def optional_computed() -> Optional[str]:
+    return name() or None
+
+
+optional_computed_signal: ComputeSignal[Optional[str]] = optional_computed
+
+
 factory_linked: LinkedSignal[int] = Linked(lambda: count() * 2)
+lowercase_factory_linked: LinkedSignal[int] = linked(lambda: count() * 2)
 
 
 @linked
@@ -60,8 +71,38 @@ decorated_linked_signal: LinkedSignal[str] = decorated_linked
 decorated_linked.set("Grace")
 
 
+@linked
+def optional_linked() -> Optional[str]:
+    return name() or None
+
+
+optional_linked_signal: LinkedSignal[Optional[str]] = optional_linked
+
+
 uppercase_effect: Effect = Effect(lambda: decorated_computed())
 lowercase_effect: Effect = effect(lambda: decorated_computed())
+
+
+def effect_with_cleanup(
+    on_cleanup: Callable[[Callable[[], None]], None],
+) -> None:
+    on_cleanup(lambda: None)
+
+
+lowercase_cleanup_effect: Effect = effect(effect_with_cleanup)
+
+
+def check_lowercase_resource_factory() -> None:
+    async def load_name(
+        params: ResourceLoaderParams[dict[str, str]],
+    ) -> str:
+        return params.params["name"]
+
+    direct_resource: Resource[dict[str, str], str] = resource(
+        lambda: {"name": name()},
+        load_name,
+    )
+    direct_resource.destroy()
 
 
 class CounterModel(ReactiveModel):
@@ -129,7 +170,6 @@ class CounterModel(ReactiveModel):
         self, params: ResourceLoaderParams[dict[str, str]]
     ) -> dict[str, str]:
         return params.params
-
 
 model = CounterModel(name="Ada")
 model_count: Signal[int] = model.count

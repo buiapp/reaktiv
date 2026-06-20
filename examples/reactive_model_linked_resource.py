@@ -5,7 +5,6 @@ ReactiveModel example: editable state with Linked and async Resource.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from typing import Optional, Union
 
 from reaktiv import (
@@ -118,7 +117,7 @@ class ProductSearch(ReactiveModel):
         return status.value
 
     @effect
-    def log_status(self, on_cleanup: Callable[[Callable[[], None]], None]) -> None:
+    def log_status(self):
         summary = self.result_label()
         line = (
             f"status={self.products.status().value} "
@@ -129,7 +128,7 @@ class ProductSearch(ReactiveModel):
         self.events.append(line)
         print(line)
 
-        on_cleanup(lambda: self.events.append(f"cleanup {summary}"))
+        return lambda: self.events.append(f"cleanup {summary}")
 
     def submit_search(self) -> None:
         self.committed_query.set(self.draft_query())

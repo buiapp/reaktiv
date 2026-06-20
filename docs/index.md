@@ -46,6 +46,7 @@ reaktiv solves common pain points in state management:
 * **Zero external dependencies:** Lightweight and easy to incorporate into any project
 * **Type-safe:** Fully annotated for clarity and maintainability
 * **Lazy and memoized:** Computations run only when needed and cache until dependencies change
+* **Application-ready models:** Group fields, derived values, effects, resources, and cleanup in one class
 
 ## Quick Start
 
@@ -73,12 +74,46 @@ name.set("Bob")   # Prints: Updated: Hello, Bob! You are 30 years old.
 age.set(31)       # Prints: Updated: Hello, Bob! You are 31 years old.
 ```
 
+## ReactiveModel
+
+After learning the primitives, use `ReactiveModel` to organize a related graph
+as reusable application state. Every instance receives independent fields,
+computed values, effects, and resources:
+
+```python
+from reaktiv import ReactiveModel, computed, effect, field
+
+
+class ShoppingCart(ReactiveModel):
+    unit_price = field(12.50)
+    quantity = field(1)
+    discount = field(0.0)
+
+    @computed
+    def total(self) -> float:
+        return self.unit_price() * self.quantity() * (1 - self.discount())
+
+    @effect
+    def show_total(self) -> None:
+        print(f"{self.quantity()} item(s): ${self.total():.2f}")
+
+
+cart = ShoppingCart()
+cart.quantity.set(3)
+cart.discount.set(0.10)
+cart.dispose()
+```
+
+See the [ReactiveModel API guide](api/reactive-model.md) for fields, typing,
+cleanup, linked state, async resources, and mixin patterns.
+
 ## Documentation
 
 * [Installation](./installation.md) - How to install the library
 * [Quick Start](./quickstart.md) - Get up and running quickly
 * [Why reaktiv?](./why-reaktiv.md) - When and why to use reaktiv
 * [Core Concepts](./core-concepts.md) - Understanding the fundamentals
+* [ReactiveModel](./api/reactive-model.md) - Class-based application state and lifecycle management
 * [API Reference](./api/signal.md) - Detailed API documentation
   * [Signal](./api/signal.md) - Writable reactive values
   * [Computed](./api/compute-signal.md) - Derived reactive values

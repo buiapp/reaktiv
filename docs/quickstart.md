@@ -211,5 +211,6 @@ for i in range(1, 3):
 
 - Read [Why reaktiv?](why-reaktiv.md) to understand when and why to use reaktiv
 - See the [Core Concepts](core-concepts.md) page for a deeper understanding of reaktiv's design
+- Organize application state with the [ReactiveModel API guide](api/reactive-model.md)
 - Check out the [Examples](examples/index.md) page for real-world usage examples
 - Explore the [Advanced Features](advanced-features.md) for more powerful capabilities

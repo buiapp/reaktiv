@@ -222,6 +222,28 @@ def test_effect_method_decorator_is_owned_and_disposed() -> None:
     assert counter.values == [0, 1]
 
 
+def test_effect_method_can_return_cleanup() -> None:
+    class Counter(ReactiveModel):
+        count = field(0)
+        runs = field[list[int]](factory=list)
+        cleanups = field[list[int]](factory=list)
+
+        @effect
+        def track_count(self):
+            value = self.count()
+            self.runs().append(value)
+            return lambda: self.cleanups().append(value)
+
+    counter = Counter()
+
+    counter.count.set(1)
+    assert counter.runs() == [0, 1]
+    assert counter.cleanups() == [0]
+
+    counter.dispose()
+    assert counter.cleanups() == [0, 1]
+
+
 def test_descriptor_cache_does_not_keep_instances_alive() -> None:
     class Counter(ReactiveModel):
         count = field(1)

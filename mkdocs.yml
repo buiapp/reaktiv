@@ -79,9 +79,9 @@ nav:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
+    - ReactiveModel: api/reactive-model.md
     - LinkedSignal: api/linked-signal.md
     - Resource: api/resource-signal.md
-    - ReactiveModel: api/reactive-model.md
     - Utils: api/utils.md
   - Examples: examples/index.md
 

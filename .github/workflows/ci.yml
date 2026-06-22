@@ -46,3 +46,20 @@ jobs:
           uv venv .test-venv --python 3.9
           uv pip install --python .test-venv/bin/python dist/*.whl
           .test-venv/bin/python -c "import reaktiv"
+
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5.3.1
+        with:
+          python-version: "3.12"
+
+      - name: Test interactive examples
+        run: uv run --group docs python docs/check_examples.py
+
+      - name: Build documentation
+        run: uv run --group docs mkdocs build --strict

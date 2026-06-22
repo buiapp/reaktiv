@@ -57,7 +57,7 @@ The diagram above illustrates the core **Push-Pull** pattern:
 
 Signals are containers for values that can change over time. They notify interested parties (subscribers) when their values change.
 
-```python
+```pyodide install="reaktiv" height="15" theme="github_light_default,github_dark"
 from reaktiv import Signal
 
 # Create a signal with initial value
@@ -71,6 +71,8 @@ counter.set(1)
 
 # Update using a function
 counter.update(lambda x: x + 1)  # Now 2
+
+print(counter())  # 2
 ```
 
 Signals are the fundamental building blocks in reaktiv. They:
@@ -84,7 +86,7 @@ Signals are the fundamental building blocks in reaktiv. They:
 
 Computed signals derive their values from other signals. They automatically update when their dependencies change.
 
-```python
+```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 # Base signals
@@ -106,9 +108,15 @@ print(sum_xy())  # 35
 ```
 
 You can also use the factory function style:
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 # Alternative: factory function style
+from reaktiv import Computed, Signal
+
+x = Signal(10)
+y = Signal(20)
 sum_xy = Computed(lambda: x() + y())
+
+print(sum_xy())  # 30
 ```
 
 Key characteristics of computed signals:
@@ -124,7 +132,7 @@ Key characteristics of computed signals:
 
 Effects run side effects (like updating UI, logging, or network calls) when signals change.
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect
 
 name = Signal("Alice")
@@ -154,13 +162,17 @@ Effects:
 
 Effects work with both synchronous and asynchronous functions, giving you flexibility based on your needs:
 
-```python
+```pyodide install="reaktiv" assets="no" height="10" theme="github_light_default,github_dark"
+from reaktiv import Effect, Signal
+
+
 # Synchronous effect (no asyncio needed)
 counter = Signal(0)
 sync_effect = Effect(lambda: print(f"Counter: {counter()}"))  # Runs immediately
 
 counter.set(1)  # Effect runs synchronously
 counter.set(2)  # Effect runs synchronously again
+sync_effect.dispose()
 ```
 Choose synchronous effects when you don't need async functionality, and async effects when you need to perform async operations within your effects.
 
@@ -176,7 +188,7 @@ Common use cases:
 
 **Simple pattern** (auto-reset to default when any dependency used inside lambda changes):
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, LinkedSignal
 
 page = Signal(1)
@@ -229,7 +241,7 @@ Notes:
 
 reaktiv automatically tracks dependencies between Signals, Computed and Effects:
 
-```python
+```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 first_name = Signal("John")
@@ -245,6 +257,7 @@ display = Effect(lambda: print(f"Full name: {full_name()}"))
 
 # Changing either first_name or last_name will update full_name and trigger the effect
 first_name.set("Jane")  # Effect runs
+display.dispose()
 ```
 
 The dependency tracking works by:
@@ -258,7 +271,7 @@ The dependency tracking works by:
 
 When multiple signals change, reaktiv can batch the updates to avoid unnecessary recalculations:
 
-```python
+```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, batch, Effect
 
 x = Signal(10)
@@ -279,6 +292,7 @@ with batch():
     x.set(5)  # No recomputation yet
     y.set(15)  # No recomputation yet
 # After batch completes, prints: "Sum: 20"
+logger.dispose()
 ```
 
 ## Memory Management
@@ -316,13 +330,21 @@ class TemperatureMonitor:
 
         # Assign Effect to self._effect to prevent garbage collection
         self._effect = Effect(_handle_temperature_change)
+
+    def dispose(self):
+        self._effect.dispose()
+
+
+monitor = TemperatureMonitor(20)
+monitor._temperature.set(32)
+monitor.dispose()
 ```
 
 ## Untracked Reads
 
 Use `untracked()` as a context manager to read signals without creating dependencies. This is useful for logging, debugging, or conditional logic inside an effect without adding extra dependencies.
 
-```python
+```pyodide install="reaktiv" assets="no" height="35" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect, untracked
 
 name = Signal("Alice")
@@ -360,6 +382,7 @@ name.set("Charlie")
 # Prints:
 # LOG [DEBUG]: Greeting updated to 'Hello, Charlie'
 # Hello, Charlie
+greeting_effect.dispose()
 ```
 
 The context manager approach is particularly useful when you need to read multiple signals for logging, debugging, or conditional logic without creating reactive dependencies.
@@ -377,7 +400,10 @@ With the default identity comparison:
   - Creating a new object with the same content will be detected as a change
   - Modifying an object in-place won't be detected as a change
 
-```python
+```pyodide install="reaktiv" assets="no" height="16" theme="github_light_default,github_dark"
+from reaktiv import Signal
+
+
 # With default identity equality
 items = Signal([1, 2, 3])
 
@@ -393,7 +419,10 @@ current.append(4)  # Signal doesn't detect this change
 
 For collections or custom objects, you can provide a custom equality function:
 
-```python
+```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
+from reaktiv import Signal
+
+
 # Custom equality for comparing lists by value
 def list_equal(a, b):
     if len(a) != len(b):
@@ -408,11 +437,16 @@ items.set([1, 2, 3])
 
 # This will trigger updates because the values differ
 items.set([1, 2, 3, 4])
+
+print(items())
 ```
 
 For dictionaries:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+from reaktiv import Signal
+
+
 def dict_equal(a, b):
     return a.keys() == b.keys() and all(a[k] == b[k] for k in a.keys())
 
@@ -423,6 +457,8 @@ config.set({"theme": "dark", "font_size": 12})
 
 # Will trigger updates (different content)
 config.set({"theme": "light", "font_size": 12})
+
+print(config())
 ```
 
 When working with mutable objects, you have two options:
@@ -431,7 +467,10 @@ When working with mutable objects, you have two options:
 
 The immutable approach is often cleaner and less error-prone:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+from reaktiv import Signal
+
+
 # Immutable approach with lists
 items = Signal([1, 2, 3])
 
@@ -443,4 +482,7 @@ config = Signal({"theme": "dark"})
 
 # Create a new dict when updating
 config.update(lambda current: {**current, "font_size": 14})
+
+print(items())
+print(config())
 ```

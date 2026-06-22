@@ -17,7 +17,7 @@ This section contains practical examples of using reaktiv in real-world scenario
 
 Managing configuration from multiple sources (defaults, user settings, environment) with automatic priority resolution:
 
-```python
+```pyodide install="reaktiv" height="35" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 # Different configuration sources
@@ -61,13 +61,17 @@ user_config.set({"timeout": 60, "log_level": "DEBUG"})
 # Later, update from environment
 env_config.set({"retries": 5})
 # Everything dependent on retries updates automatically
+
+print(connection_settings())
+print(logger_settings())
+config_monitor.dispose()
 ```
 
 ## Data Processing Pipeline
 
 Building a multi-stage data processing pipeline where each step depends on the previous one:
 
-```python
+```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 import json
 
@@ -106,7 +110,7 @@ print(stats())
 
 Smart cache invalidation system that automatically refreshes cached data when dependencies change:
 
-```python
+```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 import time
 
@@ -139,13 +143,14 @@ user_id.set("user2")
 # Simulate database update and cache invalidation
 db["user2"] = {"name": "Robert"}
 cache_version.update(lambda v: v + 1)  # Increment version to invalidate cache
+cache_logger.dispose()
 ```
 
 ## Form Validation
 
 Complex form validation with interdependent fields:
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 # Form fields
@@ -209,13 +214,14 @@ email.set("bob@example.com")
 password.set("password123")
 password_confirm.set("password123")
 terms_accepted.set(True)
+submission_monitor.dispose()
 ```
 
 ## API Data Fetching
 
 Coordinating API data fetching with loading states and automatic refresh:
 
-```python
+```pyodide install="reaktiv" assets="no" height="45" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Signal, Computed, Effect
 
@@ -248,7 +254,7 @@ async def demo_api_fetching():
         
         try:
             # Simulate API call
-            await asyncio.sleep(1)  # Pretend this is an API request
+            await asyncio.sleep(0.05)  # Pretend this is an API request
             
             # Simulate success or failure based on user_id
             if user % 2 == 0:
@@ -275,32 +281,35 @@ async def demo_api_fetching():
     ))
     
     # Let initial fetch complete
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(0.1)
     
     # Change user - triggers automatic refetch
     print("\nSwitching to user 2...")
     user_id.set(2)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(0.1)
     
     # Force refresh current user
     print("\nRefreshing current user...")
     refresh_trigger.update(lambda n: n + 1)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(0.1)
     
     # Switch to user that will cause an error
     print("\nSwitching to user 3 (will cause error)...")
     user_id.set(3)
-    await asyncio.sleep(1.5)
+    await asyncio.sleep(0.1)
+
+    fetcher.dispose()
+    status_reporter.dispose()
 
 # Run the demo
-# asyncio.run(demo_api_fetching())
+await demo_api_fetching()
 ```
 
 ## Status Monitoring
 
 Building a reactive system monitoring dashboard:
 
-```python
+```pyodide install="reaktiv" assets="no" height="45" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 # System metrics (in a real app, these would be updated from actual monitoring)
@@ -398,6 +407,7 @@ error_count.set(5)
 # Full recovery
 error_count.set(0)
 # Output: "✓ System status: NORMAL - All systems operational"
+status_monitor.dispose()
 ```
 
 Each of these examples demonstrates how reaktiv simplifies complex state management scenarios by automatically handling dependencies and updates. You can build on these patterns to create more complex reactive systems tailored to your specific needs.

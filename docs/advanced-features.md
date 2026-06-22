@@ -6,7 +6,7 @@ This page covers advanced features and techniques in reaktiv for building more s
 
 By default, reaktiv uses identity comparison (`is`) to determine if a signal's value has changed. For more complex types, you can provide custom equality functions:
 
-```python
+```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
 from reaktiv import Signal
 
 # Custom equality for dictionaries
@@ -25,6 +25,8 @@ user.set({"name": "Alice", "age": 30})
 
 # This will trigger updates because the "age" value is different
 user.set({"name": "Alice", "age": 31})
+
+print(user())
 ```
 
 Custom equality functions are especially useful for:
@@ -38,7 +40,7 @@ Custom equality functions are especially useful for:
 
 Effects can register cleanup functions that will run before the next execution or when the effect is disposed:
 
-```python
+```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect
 
 counter = Signal(0)
@@ -83,7 +85,7 @@ This pattern is useful for:
 
 The `to_async_iter` utility lets you use signals with `async for` loops:
 
-```python
+```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Signal, to_async_iter
 
@@ -93,7 +95,7 @@ async def main():
     # Start a task that increments the counter
     async def increment_counter():
         for i in range(1, 5):
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.05)
             counter.set(i)
     
     asyncio.create_task(increment_counter())
@@ -104,7 +106,7 @@ async def main():
         if value >= 4:
             break
 
-asyncio.run(main())
+await main()
 ```
 
 Output:
@@ -127,7 +129,7 @@ This is useful for:
 
 You can selectively control which signals create dependencies using `untracked`:
 
-```python
+```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect, untracked
 
 user_id = Signal(123)
@@ -153,4 +155,7 @@ user_id.set(456)
 
 # This update won't trigger the effect, even though it changes the output
 show_details.set(True)
+
+user_data.set({"name": "Grace"})  # Now tracked because details are visible
+display.dispose()
 ```

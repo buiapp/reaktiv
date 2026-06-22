@@ -12,7 +12,7 @@ preferred lowercase decorator/factory spelling for new code, especially inside
 
 Create a computed signal from a callable:
 
-```python
+```pyodide install="reaktiv" height="12" theme="github_light_default,github_dark"
 from reaktiv import Computed, Signal
 
 price = Signal(10)
@@ -25,7 +25,7 @@ print(total())  # 20
 
 Use lowercase decorator syntax for new code:
 
-```python
+```pyodide install="reaktiv" assets="no" height="14" theme="github_light_default,github_dark"
 from reaktiv import Signal, computed
 
 price = Signal(10)
@@ -34,12 +34,14 @@ quantity = Signal(2)
 @computed
 def total() -> int:
     return price() * quantity()
+
+print(total())  # 20
 ```
 
 When omitting a return annotation, use typed decorator syntax so type checkers
 can preserve the returned signal type:
 
-```python
+```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
 from reaktiv import Signal, computed
 
 name = Signal("Ada")
@@ -47,12 +49,14 @@ name = Signal("Ada")
 @computed[str]
 def normalized_name():
     return name().strip().lower()
+
+print(normalized_name())  # ada
 ```
 
 Custom equality can suppress downstream updates when two computed values should
 be treated as equivalent:
 
-```python
+```pyodide install="reaktiv" assets="no" height="14" theme="github_light_default,github_dark"
 from reaktiv import Signal, computed
 
 temperature = Signal(21.04)
@@ -60,6 +64,10 @@ temperature = Signal(21.04)
 @computed[float](equal=lambda left, right: round(left, 1) == round(right, 1))
 def rounded_temperature():
     return temperature()
+
+print(rounded_temperature())
+temperature.set(21.05)
+print(rounded_temperature())
 ```
 
 ::: reaktiv.ComputeSignal

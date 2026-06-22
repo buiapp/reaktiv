@@ -9,7 +9,7 @@ view model, workflow, or service.
 
 ## Complete Example
 
-```python
+```pyodide install="reaktiv" height="30" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, computed, effect, field
 
 
@@ -45,7 +45,7 @@ The fields, formulas, and side effects stay together, while every
 
 `field(default)` declares a writable `Signal` owned by each model instance:
 
-```python
+```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, field
 
 
@@ -66,16 +66,28 @@ print(right.quantity())  # 1
 Every field requires exactly one default value or a factory. Use a factory for
 mutable defaults so each instance receives a new object:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+from reaktiv import ReactiveModel, field
+
+
 class TodoModel(ReactiveModel):
     items = field[list[str]](factory=list)
+
+
+left = TodoModel()
+right = TodoModel()
+left.items.update(lambda items: items + ["first"])
+
+print(left.items())   # ["first"]
+print(right.items())  # []
 ```
 
 Types are inferred from defaults and annotated factories. Use `field[T]` when
 the intended type is wider than the default:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from typing import Optional
+from reaktiv import ReactiveModel, field
 
 
 class SearchModel(ReactiveModel):
@@ -117,7 +129,7 @@ ordinary attributes they read before calling `super().__init__()`.
 Decorated methods become per-instance computed signals. Pyright infers the
 computed value type from the method implementation:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, computed, field
 
 
@@ -128,17 +140,28 @@ class Cart(ReactiveModel):
     @computed
     def total(self):
         return self.price() * self.quantity()
+
+
+cart = Cart()
+print(cart.total())  # 20.0
 ```
 
 Use `computed[T]` when you want to provide the result type explicitly:
 
-```python
+```pyodide install="reaktiv" assets="no" height="15" theme="github_light_default,github_dark"
+from reaktiv import ReactiveModel, computed, field
+
+
 class SearchModel(ReactiveModel):
     query = field(" Notebook ")
 
     @computed[str]
     def normalized_query(self):
         return self.query().strip().lower()
+
+
+search = SearchModel()
+print(search.normalized_query())  # notebook
 ```
 
 Concrete types such as `computed[str]` and `computed[list[int]]` are supported.
@@ -150,7 +173,7 @@ Custom equality functions are supported with
 Use `linked` for state that starts from another signal, can be edited locally,
 and resets when the source changes.
 
-```python
+```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, field, linked
 
 
@@ -169,6 +192,7 @@ print(form.draft_name())  # Grace
 
 form.server_name.set("Linus")
 print(form.draft_name())  # Linus
+form.dispose()
 ```
 
 `linked` also supports custom equality through `@linked(equal=...)` and
@@ -180,7 +204,7 @@ Model effects start eagerly and are retained by the model. Unlike standalone
 effects, they do not need to be assigned to a separate variable. Return a
 callable when the effect needs cleanup:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, effect, field
 
 
@@ -192,6 +216,11 @@ class SessionModel(ReactiveModel):
         user_id = self.user_id()
         print(f"subscribe {user_id}")
         return lambda: print(f"unsubscribe {user_id}")
+
+
+session = SessionModel()
+session.user_id.set("grace")
+session.dispose()
 ```
 
 Cleanup runs before the effect reruns and when the model is disposed. An effect
@@ -206,7 +235,7 @@ A model with resources must be created while an asyncio event loop is running.
 The first type argument describes the parameter value and the second describes
 the loaded value.
 
-```python
+```pyodide install="reaktiv" assets="no" height="40" theme="github_light_default,github_dark"
 import asyncio
 
 from reaktiv import (
@@ -259,7 +288,7 @@ async def main() -> None:
         store.dispose()
 
 
-asyncio.run(main())
+await main()
 ```
 
 Changing `user_id` starts a new load. `dispose()` destroys model-owned resources
@@ -277,10 +306,18 @@ and cancels pending work.
 Disposal is idempotent. Prefer explicit disposal when a model has effects or
 resources instead of relying on garbage collection.
 
-```python
-model = ShoppingCart()
+```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
+from reaktiv import ReactiveModel, field
+
+
+class Counter(ReactiveModel):
+    count = field(0)
+
+
+model = Counter()
 try:
-    model.quantity.set(10)
+    model.count.set(10)
+    print(model.count())
 finally:
     model.dispose()
 ```
@@ -291,7 +328,7 @@ With cooperative multiple inheritance, use `super()` normally. When another
 base class does not call `super()`, initialize both bases explicitly and call
 `ReactiveModel.__init__` last:
 
-```python
+```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, effect, field
 
 
@@ -310,6 +347,11 @@ class CounterService(NamedService, ReactiveModel):
     @effect
     def log_count(self) -> None:
         print(f"{self.name}: {self.count()}")
+
+
+service = CounterService("worker", count=1)
+service.count.set(2)
+service.dispose()
 ```
 
 Calling `ReactiveModel.__init__` last ensures ordinary attributes such as

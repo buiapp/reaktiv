@@ -219,90 +219,76 @@ submission_monitor.dispose()
 
 ## API Data Fetching
 
-Coordinating API data fetching with loading states and automatic refresh:
+Keep request parameters, loading state, errors, and automatic refresh together
+in a reactive model:
 
-```pyodide install="reaktiv" assets="no" height="45" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Signal, Computed, Effect
 
-async def demo_api_fetching():
-    # Signals to control the data fetch
-    user_id = Signal(1)
-    refresh_trigger = Signal(0)  # Increment to force refresh
-    
-    # Loading state
-    is_loading = Signal(False)
-    
-    # Error handling
-    error = Signal(None)
-    
-    # Data cache
-    user_data = Signal(None)
-    
-    # Combined fetch key - changes when either user_id or refresh_trigger changes
-    fetch_key = Computed(lambda: (user_id(), refresh_trigger()))
-    
-    # Effect that performs the data fetching
-    async def fetch_user_data():
-        # Get the current fetch key (creates dependency)
-        current_fetch_key = fetch_key()
-        user = user_id()
-        
-        # Reset states
-        error.set(None)
-        is_loading.set(True)
-        
-        try:
-            # Simulate API call
-            await asyncio.sleep(0.05)  # Pretend this is an API request
-            
-            # Simulate success or failure based on user_id
-            if user % 2 == 0:
-                user_data.set({"id": user, "name": f"User {user}", "status": "active"})
-            else:
-                # Simulate error for odd user IDs
-                raise Exception(f"Failed to fetch user {user}")
-                
-        except Exception as e:
-            error.set(str(e))
-            user_data.set(None)
-        finally:
-            is_loading.set(False)
-    
-    # Create the effect
-    fetcher = Effect(fetch_user_data)
-    
-    # Status reporting effect
-    status_reporter = Effect(lambda: print(
-        f"User {user_id()}: " +
-        (f"Loading..." if is_loading() else
-         f"Error: {error()}" if error() else
-         f"Data: {user_data()}")
-    ))
-    
-    # Let initial fetch complete
-    await asyncio.sleep(0.1)
-    
-    # Change user - triggers automatic refetch
-    print("\nSwitching to user 2...")
-    user_id.set(2)
-    await asyncio.sleep(0.1)
-    
-    # Force refresh current user
-    print("\nRefreshing current user...")
-    refresh_trigger.update(lambda n: n + 1)
-    await asyncio.sleep(0.1)
-    
-    # Switch to user that will cause an error
-    print("\nSwitching to user 3 (will cause error)...")
-    user_id.set(3)
-    await asyncio.sleep(0.1)
+from reaktiv import (
+    ReactiveModel,
+    ResourceLoaderParams,
+    ResourceStatus,
+    effect,
+    field,
+    resource,
+)
 
-    fetcher.dispose()
-    status_reporter.dispose()
 
-# Run the demo
-await demo_api_fetching()
+class UserStore(ReactiveModel):
+    user_id = field(2)
+
+    def __init__(self):
+        self.finished = asyncio.Event()
+        super().__init__()
+
+    @resource[int, dict[str, object]]
+    def user(self):
+        return self.user_id()
+
+    @user.loader
+    async def load_user(self, request: ResourceLoaderParams[int]):
+        await asyncio.sleep(0.1)  # Replace with an HTTP request.
+        user_id = request.params
+        if user_id % 2:
+            raise RuntimeError(f"User {user_id} was not found")
+        return {"id": user_id, "name": f"User {user_id}", "active": True}
+
+    @effect
+    def show_status(self):
+        status = self.user.status()
+
+        if status in {ResourceStatus.LOADING, ResourceStatus.RELOADING}:
+            print(f"Loading user {self.user_id()}...")
+        elif status == ResourceStatus.ERROR:
+            print(f"Error: {self.user.error()}")
+            self.finished.set()
+        elif self.user.has_value():
+            print(f"Loaded: {self.user.value()}")
+            self.finished.set()
+
+
+async def wait_for_load(store):
+    await store.finished.wait()
+    store.finished.clear()
+
+
+store = UserStore()
+await wait_for_load(store)
+
+print("\nSwitching users reloads automatically:")
+store.user_id.set(4)
+await wait_for_load(store)
+
+print("\nRefreshing the current user:")
+store.user.reload()
+await wait_for_load(store)
+
+print("\nErrors are reactive state too:")
+store.user_id.set(3)
+await wait_for_load(store)
+
+store.dispose()
 ```
 
 ## Status Monitoring

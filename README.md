@@ -39,7 +39,7 @@ uv pip install reaktiv
 
 ## Documentation
 
-Full documentation is available at [https://reaktiv.bui.app/docs/](https://reaktiv.bui.app/docs/).
+Full documentation is available at [https://reaktiv.bui.app/](https://reaktiv.bui.app/).
 
 For a comprehensive guide, check out [The Missing Manual for Signals: State Management for Python Developers](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/).
 

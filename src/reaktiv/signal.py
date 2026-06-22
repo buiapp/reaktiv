@@ -6,9 +6,11 @@ Migrated to Edge-based dependency tracking and minimal scheduler.
 from __future__ import annotations
 
 import threading
-from typing import Callable, Generic, Optional, TypeVar, Union, cast, overload
+import weakref
+from typing import Any, Callable, Generic, Optional, TypeVar, Union, cast, overload
 
 from ._debug import debug_log
+from ._descriptor import PerInstanceDescriptor, is_instance_method
 from . import graph
 from .scheduler import start_batch, end_batch
 from .thread_safety import is_thread_safety_enabled
@@ -689,122 +691,154 @@ class ComputeSignal(Signal[T]):
         if self._flags & graph.HAS_ERROR:
             assert self._last_error is not None
             raise self._last_error
-        return self._value  # type: ignore[return-value]
+        return cast(T, self._value)
 
     def set(self, new_value: T, /) -> None:
         raise AttributeError("Cannot manually set value of ComputeSignal")
 
 
-# Decorator overloads for Computed
-@overload
-def Computed(func: Callable[[], T], /) -> ComputeSignal[T]: ...
+class ComputedDescriptor(PerInstanceDescriptor[ComputeSignal[T]], Generic[T]):
+    """Descriptor that creates one ComputeSignal per owner instance."""
+
+    def __init__(
+        self,
+        func: Callable[[Any], T],
+        *,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> None:
+        super().__init__()
+        self._func = func
+        self._equal = equal
+
+    def _create(self, instance: object) -> ComputeSignal[T]:
+        try:
+            instance_ref = weakref.ref(instance)
+
+            def compute() -> T:
+                current = instance_ref()
+                if current is None:
+                    raise ReferenceError("Reactive owner has been garbage collected")
+                return self._func(current)
+
+        except TypeError:
+
+            def compute() -> T:
+                return self._func(instance)
+
+        return ComputeSignal(compute, equal=self._equal)
 
 
-@overload
-def Computed(
-    func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
-) -> ComputeSignal[T]: ...
+def _create_computed(
+    func: Callable[..., T],
+    equal: Optional[Callable[[T, T], bool]],
+) -> Union[ComputeSignal[T], ComputedDescriptor[T]]:
+    if is_instance_method(func):
+        return ComputedDescriptor(cast(Callable[[Any], T], func), equal=equal)
+    return ComputeSignal(cast(Callable[[], T], func), equal=equal)
 
 
-@overload
-def Computed(
-    *, equal: Callable[[T, T], bool]
-) -> Callable[[Callable[[], T]], ComputeSignal[T]]: ...
+class _TypedComputedFactory(Generic[T]):
+    """Typed computed decorator used by ``computed[T]`` and ``Computed[T]`` syntax."""
 
+    @overload
+    def __call__(self, func: Callable[[], object], /) -> ComputeSignal[T]: ...
 
-def Computed(
-    func: Optional[Callable[[], T]] = None,
-    /,
-    *,
-    equal: Optional[Callable[[T, T], bool]] = None,
-) -> Union[ComputeSignal[T], Callable[[Callable[[], T]], ComputeSignal[T]]]:
-    """Create a computed signal that derives its value from other signals.
-    
-    Can be used as a function or as a decorator (with or without parameters).
-    
-    Args:
-        func: The computation function (when used as factory or decorator without params)
-        equal: Optional custom equality function for change detection
-        
-    Returns:
-        A ComputeSignal instance or a decorator function
-        
-    Examples:
-        As a function:
-        ```python
-        from reaktiv import Signal, Computed
-        
-        x = Signal(10)
-        result = Computed(lambda: x() * 2)
-        print(result())  # 20
-        ```
-        
-        As a decorator (no parameters):
-        ```python
-        from reaktiv import Signal, Computed
-        
-        price = Signal(100)
-        quantity = Signal(2)
-        
-        @Computed
-        def total():
-            return price() * quantity()
-        
-        print(total())  # 200
-        ```
-        
-        As a decorator (with custom equality):
-        ```python
-        from reaktiv import Signal, Computed
-        
-        items = Signal([1, 2, 3])
-        
-        @Computed(equal=lambda a, b: a == b)
-        def sorted_items():
-            return sorted(items())
-        
-        print(sorted_items())  # [1, 2, 3]
-        ```
-    """
-    """
-    Create a computed signal that derives its value from other signals.
+    @overload
+    def __call__(self, func: Callable[[Any], object], /) -> ComputedDescriptor[T]: ...
 
-    Can be used as a direct factory or as a decorator:
+    @overload
+    def __call__(
+        self, /, *, equal: Callable[[T, T], bool]
+    ) -> Callable[
+        [Union[Callable[[], object], Callable[[Any], object]]],
+        Union[ComputeSignal[T], ComputedDescriptor[T]],
+    ]: ...
 
-    Usage as factory:
-        count = Signal(1)
-        double = Computed(lambda: count() * 2)
+    def __call__(
+        self,
+        func: Optional[Callable[..., object]] = None,
+        /,
+        *,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Union[
+        ComputeSignal[T],
+        ComputedDescriptor[T],
+        Callable[
+            [Union[Callable[[], object], Callable[[Any], object]]],
+            Union[ComputeSignal[T], ComputedDescriptor[T]],
+        ],
+    ]:
+        if func is not None:
+            return _create_computed(cast(Callable[..., T], func), equal=equal)
 
-    Usage as factory with equality:
-        count = Signal(1)
-        double = Computed(lambda: count() * 2, equal=lambda a, b: a == b)
-
-    Usage as decorator (without parameters):
-        count = Signal(1)
-        @Computed
-        def double() -> int:
-            return count() * 2
-
-    Usage as decorator (with equality parameter):
-        count = Signal(1)
-        @Computed(equal=lambda a, b: a == b)
-        def double() -> int:
-            return count() * 2
-
-    Args:
-        func: The computation function (when used as factory or decorator
-            without parens)
-        equal: Optional custom equality function for change detection
-
-    Returns:
-        A ComputeSignal instance or a decorator function
-    """
-    if func is not None:
-        # Direct call: Computed(lambda: ...) or @Computed decorator
-        return ComputeSignal(func, equal=equal)
-    else:
-        # Parameterized decorator: @Computed(equal=...)
-        def decorator(f: Callable[[], T]) -> ComputeSignal[T]:
-            return ComputeSignal(f, equal=equal)
+        def decorator(
+            f: Union[Callable[[], object], Callable[[Any], object]],
+        ) -> Union[ComputeSignal[T], ComputedDescriptor[T]]:
+            return _create_computed(cast(Callable[..., T], f), equal=equal)
 
         return decorator
+
+
+class _ComputedFactory:
+    """Create computed signals with factory, decorator, or typed decorator syntax.
+
+    `Computed` is the uppercase constructor-compatible public name. `computed`
+    is the preferred lowercase spelling for decorator-style code and
+    `ReactiveModel` members.
+    """
+
+    @overload
+    def __call__(self, func: Callable[[], T], /) -> ComputeSignal[T]: ...
+
+    @overload
+    def __call__(self, func: Callable[[Any], T], /) -> ComputedDescriptor[T]: ...
+
+    @overload
+    def __call__(
+        self, func: Callable[[], T], /, *, equal: Callable[[T, T], bool]
+    ) -> ComputeSignal[T]: ...
+
+    @overload
+    def __call__(
+        self, func: Callable[[Any], T], /, *, equal: Callable[[T, T], bool]
+    ) -> ComputedDescriptor[T]: ...
+
+    @overload
+    def __call__(
+        self, /, *, equal: Callable[[T, T], bool]
+    ) -> Callable[
+        [Union[Callable[[], T], Callable[[Any], T]]],
+        Union[ComputeSignal[T], ComputedDescriptor[T]],
+    ]: ...
+
+    def __call__(
+        self,
+        func: Optional[Callable[..., T]] = None,
+        /,
+        *,
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Union[
+        ComputeSignal[T],
+        ComputedDescriptor[T],
+        Callable[
+            [Union[Callable[[], T], Callable[[Any], T]]],
+            Union[ComputeSignal[T], ComputedDescriptor[T]],
+        ],
+    ]:
+        if func is not None:
+            return _create_computed(func, equal=equal)
+
+        def decorator(
+            f: Union[Callable[[], T], Callable[[Any], T]],
+        ) -> Union[ComputeSignal[T], ComputedDescriptor[T]]:
+            return _create_computed(cast(Callable[..., T], f), equal=equal)
+
+        return decorator
+
+    def __getitem__(self, value_type: type[T]) -> _TypedComputedFactory[T]:
+        del value_type
+        return _TypedComputedFactory()
+
+
+Computed = _ComputedFactory()
+computed = Computed

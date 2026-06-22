@@ -17,4 +17,5 @@ def set_debug(enabled: bool) -> None:
 def debug_log(msg: Union[str, Callable[[], str]]) -> None:
     """Log a debug message if debugging is enabled and not suppressed."""
     if _debug_enabled and not _suppress_debug:
-        print(f"[REAKTIV DEBUG] {msg() if callable(msg) else msg}")
+        text = msg if isinstance(msg, str) else msg()
+        print(f"[REAKTIV DEBUG] {text}")

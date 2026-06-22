@@ -1,5 +1,5 @@
 site_name: reaktiv
-site_description: Reactive declarative state management for Python
+site_description: Changing values without synchronization spaghetti
 site_url: https://reaktiv.readthedocs.io/
 
 theme:
@@ -9,12 +9,20 @@ theme:
   icon:
     repo: fontawesome/brands/github
   palette:
-    scheme: slate
-    primary: green
-    accent: green
-  font:
-    text: Inter
-    code: JetBrains Mono
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep orange
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.instant
     - navigation.tracking
@@ -29,10 +37,6 @@ theme:
     - content.tabs.link
     - toc.integrate
 
-extra_css:
-  - stylesheets/mkdocs-overrides.css
-  - https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css
-
 repo_url: https://github.com/buiapp/reaktiv
 repo_name: buiapp/reaktiv
 
@@ -41,7 +45,6 @@ markdown_extensions:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
-      pygments_style: monokai
       use_pygments: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
@@ -57,6 +60,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - markdown-exec
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -79,6 +83,7 @@ nav:
     - Signal: api/signal.md
     - Computed Signal: api/compute-signal.md
     - Effect: api/effect.md
+    - ReactiveModel: api/reactive-model.md
     - LinkedSignal: api/linked-signal.md
     - Resource: api/resource-signal.md
     - Utils: api/utils.md

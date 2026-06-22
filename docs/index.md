@@ -22,68 +22,126 @@
 - **Deep Dive Article**: [https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)
 - **GitHub**: [https://github.com/buiapp/reaktiv](https://github.com/buiapp/reaktiv)
 
-## What is reaktiv?
+## Change One Value. Let The Graph Handle The Rest.
 
-reaktiv is a reactive declarative state management library for Python that lets you declare relationships between your data instead of manually wiring updates. When data changes, everything that depends on it updates automatically — eliminating a whole class of bugs where you forget to update dependent state.
+A form field changes. Validation, normalized values, totals, availability, and
+the UI must follow. A query changes. Results, loading state, selection, and
+background work must stay consistent.
 
-Think of it as a spreadsheet for your Python application: change a cell, and all formulas using that cell recalculate instantly.
-
-## Why Use reaktiv?
-
-reaktiv solves common pain points in state management:
-
-- **Eliminates manual state synchronization** - No more forgetting to update derived values
-- **Reduces bugs** - Ensures consistent state throughout your application
-- **Simplifies code** - Declare relationships once, not every time data changes
-- **Improves performance** - Only recomputes what actually needs to change
-
-[Learn more about why you should use reaktiv →](why-reaktiv.md)
-
-## Features
-
-* **Automatic state propagation:** Change a value once, and all dependent computations update automatically
-* **Efficient updates:** Only the necessary parts are recomputed (fine‑grained reactivity)
-* **Zero external dependencies:** Lightweight and easy to incorporate into any project
-* **Type-safe:** Fully annotated for clarity and maintainability
-* **Lazy and memoized:** Computations run only when needed and cache until dependencies change
-
-## Quick Start
-
-reaktiv is built around core primitives for reactive programming:
-
-1. **Signals**: Store values and notify dependents when they change
-2. **Computed Signals**: Derive values that automatically update when dependencies change
-3. **Effects**: Run side effects when signals or computed signals change
+Without a reactive graph, every mutation needs to remember what else to update.
+With reaktiv, each value declares what it depends on:
 
 ```python
-from reaktiv import Signal, Computed, Effect
+query = Signal("")
+results = Computed(lambda: search(query()))
+summary = Computed(lambda: f"{len(results())} matches")
+display = Effect(lambda: render(summary(), results()))
 
-# Reactive data sources
-name = Signal("Alice")
-age = Signal(30)
-
-# Reactive derived value
-greeting = Computed(lambda: f"Hello, {name()}! You are {age()} years old.")
-
-# Reactive side effect (retain a reference!)
-greeting_effect = Effect(lambda: print(f"Updated: {greeting()}"))
-
-# Update base data — everything reacts automatically
-name.set("Bob")   # Prints: Updated: Hello, Bob! You are 30 years old.
-age.set(31)       # Prints: Updated: Hello, Bob! You are 31 years old.
+query.set("python")
 ```
 
-## Documentation
+reaktiv tracks the relationships, invalidates the affected graph, recomputes
+derived values lazily, and runs the relevant effects.
 
-* [Installation](./installation.md) - How to install the library
-* [Quick Start](./quickstart.md) - Get up and running quickly
-* [Why reaktiv?](./why-reaktiv.md) - When and why to use reaktiv
-* [Core Concepts](./core-concepts.md) - Understanding the fundamentals
-* [API Reference](./api/signal.md) - Detailed API documentation
-  * [Signal](./api/signal.md) - Writable reactive values
-  * [Computed](./api/compute-signal.md) - Derived reactive values
-  * [Effect](./api/effect.md) - Reactive side effects
-  * [LinkedSignal](./api/linked-signal.md) - Writable derived signal with auto-reset
+## Try It In Your Browser
 
-* [Advanced Features](./advanced-features.md) - More powerful capabilities
-* [Real-World Examples](./examples/index.md) - Practical applications
+Edit the code and press **Run**. The example runs entirely in your browser with
+Pyodide.
+
+```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
+from reaktiv import Computed, Effect, Signal
+
+unit_price = Signal(12.50)
+quantity = Signal(1)
+
+total = Computed(lambda: unit_price() * quantity())
+receipt = Effect(
+    lambda: print(f"{quantity()} item(s): ${total():.2f}")
+)
+
+quantity.set(3)
+unit_price.set(10.00)
+
+receipt.dispose()
+```
+
+The first run downloads Pyodide and installs `reaktiv`; later runs are cached by
+the browser.
+
+## Three Building Blocks
+
+1. **`Signal` stores changing state.**
+   Read it by calling it and update it with `set()` or `update()`.
+2. **`Computed` describes derived state.**
+   Dependencies are discovered automatically; results are lazy and cached.
+3. **`Effect` reacts to changes.**
+   It reruns when a signal or computed value read by the effect changes.
+
+That small vocabulary scales from a total in a form to branching dependency
+graphs, async resources, and independently updating threaded workloads.
+
+## Why reaktiv?
+
+- **Relationships stay next to the values they define.** You do not have to
+  trace every setter and callback to understand what updates what.
+- **Derived state stays current.** Dependencies are tracked automatically.
+- **Updates stay focused.** Only affected parts of the graph are invalidated.
+- **Computations are lazy and memoized.** Work happens when a value is needed.
+- **Lifetimes are explicit.** Effects and resources can be disposed cleanly.
+- **Thread safety is enabled by default.** Independent graphs do not share a
+  global execution lock.
+
+[See when a reactive graph helps](why-reaktiv.md)
+
+## Organize Application State With ReactiveModel
+
+After learning the primitives, use `ReactiveModel` to keep a related graph and
+its lifecycle in one object:
+
+```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
+from reaktiv import ReactiveModel, computed, effect, field
+
+
+class ShoppingCart(ReactiveModel):
+    unit_price = field(12.50)
+    quantity = field(1)
+    discount = field(0.0)
+
+    @computed
+    def total(self):
+        return self.unit_price() * self.quantity() * (1 - self.discount())
+
+    @effect
+    def show_total(self):
+        print(f"{self.quantity()} item(s): ${self.total():.2f}")
+
+
+cart = ShoppingCart()
+cart.quantity.set(3)
+cart.discount.set(0.10)
+cart.dispose()
+```
+
+Every model instance owns independent fields, computed values, effects, linked
+state, and resources. Model-owned work is retained automatically and cleaned up
+by `dispose()`.
+
+[Explore ReactiveModel](api/reactive-model.md)
+
+## Where To Go Next
+
+- **New to signals?** Start with the [Quick Start](quickstart.md).
+- **Want the mental model?** Read [Core Concepts](core-concepts.md).
+- **Building application state?** See
+  [ReactiveModel](api/reactive-model.md).
+- **Working with async data?** Read the [Resource Guide](resource-guide.md).
+- **Looking for complete programs?** Browse the [Examples](examples/index.md).
+- **Need a class or method?** Open the [API Reference](api/signal.md).
+
+## Project Links
+
+- [Installation](installation.md)
+- [GitHub](https://github.com/buiapp/reaktiv)
+- [PyPI](https://pypi.org/project/reaktiv/)
+- [Live playground](https://reaktiv.bui.app/#playground)
+- [Deep dive article](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/)

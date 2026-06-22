@@ -1,12 +1,23 @@
 """Utility functions for the reaktiv library."""
 
 import asyncio
-from typing import AsyncIterator, TypeVar
+from dataclasses import dataclass
+from typing import AsyncIterator, Generic, TypeVar, Union
 
 from .protocols import ReadableSignal
-from .effect import Effect
+from .effect import Effect, EffectDescriptor
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class _SignalValue(Generic[T]):
+    value: T
+
+
+@dataclass(frozen=True)
+class _SignalError:
+    error: Exception
 
 
 async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> AsyncIterator[T]:
@@ -110,31 +121,33 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
             # ... continue processing
         ```
     """
-    queue = asyncio.Queue()
+    queue = asyncio.Queue[Union[_SignalValue[T], _SignalError]]()
 
     # Create an effect that pushes new values to the queue
     def push_to_queue():
         try:
             value = signal.get()
-            queue.put_nowait(value)
+            queue.put_nowait(_SignalValue(value))
         except Exception as e:
             # In case of errors, put the exception in the queue
-            queue.put_nowait(e)
+            queue.put_nowait(_SignalError(e))
 
     # Create the effect
     effect = Effect(push_to_queue)
+    if isinstance(effect, EffectDescriptor):
+        raise TypeError("to_async_iter expected an Effect instance")
 
     try:
         while True:
-            value = await queue.get()
+            item = await queue.get()
 
             if not initial:
                 # If initial is False, skip the first value
                 initial = True
                 continue
-            elif isinstance(value, Exception):
-                raise value
-            yield value
+            if isinstance(item, _SignalError):
+                raise item.error
+            yield item.value
     finally:
         # Clean up the effect when the iterator is done
         effect.dispose()

@@ -8,7 +8,7 @@ This guide covers common patterns, best practices, and real-world examples for u
 
 **Important:** Signal dependencies are established when signals are called within the effect function. Call dependent signals at the beginning of your effect to ensure proper dependency tracking.
 
-```python
+```pyodide install="reaktiv" height="24" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect
 
 name = Signal("Alice")
@@ -27,6 +27,8 @@ def my_effect():
 
 # Keep reference to prevent GC
 effect = Effect(my_effect)
+name.set("Grace")
+effect.dispose()
 ```
 
 **Why this matters:**
@@ -35,7 +37,12 @@ effect = Effect(my_effect)
 - Conditional signal reads can lead to inconsistent dependencies
 - Reading signals early ensures they're always tracked
 
-```python
+```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+from reaktiv import Effect, Signal
+
+name = Signal("Alice")
+enabled = Signal(True)
+
 # ❌ AVOID: Conditional dependency tracking
 def problematic_effect():
     is_enabled = enabled()
@@ -54,6 +61,12 @@ def better_effect():
     # Then use conditionally
     if is_enabled:
         print(current_name)
+
+
+effect = Effect(better_effect)
+enabled.set(False)
+name.set("Grace")
+effect.dispose()
 ```
 
 ### Memory Management
@@ -78,7 +91,7 @@ To prevent memory leaks:
 2. Call `dispose()` when you're done with the effect
 3. Avoid creating effects inside loops or frequently-called functions without disposing of them
 
-```python
+```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect
 
 def create_temporary_effect(s):
@@ -99,13 +112,19 @@ class MyComponent:
     
     def destroy(self):
         self.effect_instance.dispose()
+
+
+signal = Signal("ready")
+component = MyComponent(signal)
+signal.set("updated")
+component.destroy()
 ```
 
 ### Notification Batching
 
 When multiple signals change, their effects are batched to avoid unnecessary executions:
 
-```python
+```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
 from reaktiv import Signal, Effect, batch
 
 x = Signal(1)
@@ -127,4 +146,5 @@ with batch():
     y.set(20)  # No effect execution yet
 # After batch completes: Effect runs once
 # Prints: "x: 10, y: 20"
+logger.dispose()
 ```

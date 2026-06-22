@@ -28,7 +28,7 @@ Without a reactive system, developers typically face these challenges:
 
 #### Before reaktiv: Manual State Propagation
 
-```python
+```pyodide install="reaktiv" height="20" theme="github_light_default,github_dark"
 # Traditional approach with manual propagation
 user_name = "Alice"
 user_age = 30
@@ -46,7 +46,7 @@ greeting = f"Hello, {user_name}! You are {user_age} years old."  # Manual update
 
 #### After reaktiv: Automatic Propagation
 
-```python
+```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 # State as signals
@@ -67,7 +67,7 @@ print(greeting())  # "Hello, Bob! You are 30 years old."
 
 Many developers don't realize how much "hidden state" exists in their applications. Every time you compute a value based on other values, you're creating state that needs to be managed.
 
-```python
+```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
 # Without reaktiv: Hidden state management
 def get_total_price(items, tax_rate):
     subtotal = sum(item["price"] for item in items)
@@ -79,7 +79,7 @@ def get_total_price(items, tax_rate):
 
 #### After reaktiv: Making Hidden State Explicit
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 # Make state explicit with signals
@@ -102,7 +102,7 @@ print(total_price())  # 36.0 - automatically recalculated
 
 Manually tracking which parts of your code depend on which data becomes increasingly complex as applications grow.
 
-```python
+```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
 # Traditional approach with manual tracking
 class ShoppingCart:
     def __init__(self, items=None):
@@ -129,7 +129,7 @@ class ShoppingCart:
 
 #### After reaktiv: Automatic Dependency Tracking
 
-```python
+```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 class ReactiveShoppingCart:
@@ -137,7 +137,7 @@ class ReactiveShoppingCart:
         self.items = Signal(initial_items or [])
         
         # Dependencies are automatically tracked
-        self.subtotal = Computed(lambda: sum(item.price for item in self.items()))
+        self.subtotal = Computed(lambda: sum(item["price"] for item in self.items()))
         self.tax = Computed(lambda: self.subtotal() * 0.1)  # Automatically depends on subtotal
         self.total = Computed(lambda: self.subtotal() + self.tax())  # Automatically depends on both
 
@@ -150,7 +150,10 @@ class ReactiveShoppingCart:
         self.items.update(lambda items: items + [item])
         # No need to manually update dependencies - they update automatically!
 
-cart = ReactiveShoppingCart()
+cart = ReactiveShoppingCart([{"name": "Notebook", "price": 12.50}])
+print(cart.final_price())
+cart.add_item({"name": "Pen", "price": 2.50})
+print(cart.final_price())
 ```
 
 ## Before & After: How reaktiv Makes Your Code Better
@@ -159,7 +162,7 @@ cart = ReactiveShoppingCart()
 
 #### Before reaktiv:
 
-```python
+```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
 def load_config():
     default_config = {"timeout": 30, "retries": 3, "debug": False}
     try:
@@ -186,7 +189,7 @@ def load_config():
 
 #### After reaktiv:
 
-```python
+```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 default_config = Signal({"timeout": 30, "retries": 3, "debug": False})
@@ -210,7 +213,7 @@ print(connection_settings())  # connect_timeout is now 60
 
 #### Before reaktiv:
 
-```python
+```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
 class DataProcessor:
     def __init__(self, raw_data):
         self.raw_data = raw_data
@@ -241,7 +244,7 @@ class DataProcessor:
 
 #### After reaktiv:
 
-```python
+```pyodide install="reaktiv" assets="no" height="36" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 class ReactiveDataProcessor:
@@ -265,6 +268,7 @@ class ReactiveDataProcessor:
 processor = ReactiveDataProcessor([1, -2, 3, -4, 5])
 print(processor.summary())  # Computed from the chain
 processor.update_data([10, 20, 30])  # Everything recalculates automatically
+print(processor.summary())
 ```
 
 ## Comparing reaktiv with Alternatives

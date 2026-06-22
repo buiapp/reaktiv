@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Callable, TypeVar, Union, ContextManager
+from typing import Callable, TypeVar, Union, ContextManager, overload
 
 from . import graph
-from .signal import Signal
+from .protocols import ReadableSignal
 
 T = TypeVar("T")
 
 
+@overload
+def untracked() -> ContextManager[None]: ...
+
+
+@overload
+def untracked(func_or_signal: Callable[[], T]) -> T: ...
+
+
+@overload
+def untracked(func_or_signal: ReadableSignal[T]) -> T: ...
+
+
 def untracked(
-    func_or_signal: Union[Callable[[], T], object, None] = None,
+    func_or_signal: Union[Callable[[], T], ReadableSignal[T], None] = None,
 ) -> Union[T, ContextManager[None]]:
     """Execute a function without establishing dependencies.
     
@@ -93,9 +105,6 @@ def untracked(
 
     prev = graph.set_active_consumer(None)
     try:
-        if isinstance(func_or_signal, Signal):
-            return func_or_signal._value
-        else:
-            return func_or_signal()  # type: ignore[misc]
+        return func_or_signal()
     finally:
         graph.set_active_consumer(prev)

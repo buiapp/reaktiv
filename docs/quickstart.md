@@ -24,7 +24,7 @@ uv pip install reaktiv
 
 Here's a simple example showing the core functionality:
 
-```python
+```pyodide install="reaktiv" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 # Create a signal with initial value
@@ -42,13 +42,14 @@ greeter = Effect(lambda: print(greeting()))
 
 # Update the signal value — everything reacts automatically
 name.set("Bob")  # Prints: "Hello, Bob!"
+greeter.dispose()
 ```
 
 ## Solving Real Problems
 
 Let's look at a more practical example. Imagine you're calculating the total price of items in a shopping cart:
 
-```python
+```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, Effect
 
 # Create signals for our base values
@@ -81,6 +82,7 @@ quantity.set(3)
 price.set(15.0)
 tax_rate.set(0.15)
 # Prints: "Order total: $51.75"
+display.dispose()
 ```
 
 Notice how we never needed to manually recalculate the total! reaktiv automatically detects the dependencies between values and updates them when needed.
@@ -89,7 +91,7 @@ Notice how we never needed to manually recalculate the total! reaktiv automatica
 
 Computed signals let you derive values from other signals using the `@Computed` decorator:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed
 
 # Create base signals
@@ -111,16 +113,22 @@ print(total())  # 125.0
 ```
 
 You can also use the factory function style if you prefer:
-```python
+```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
 # Alternative: factory function style
+from reaktiv import Computed, Signal
+
+price = Signal(100)
+tax_rate = Signal(0.2)
 total = Computed(lambda: price() * (1 + tax_rate()))
+
+print(total())  # 120.0
 ```
 
 ## Working with Updates
 
 Instead of using `set(new_value)`, you can use `update()` to modify a signal based on its current value:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal
 
 counter = Signal(0)
@@ -138,7 +146,7 @@ print(counter())  # 2
 
 When making multiple signal updates, you can batch them together to optimize performance:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal, Computed, batch
 
 x = Signal(10)
@@ -154,13 +162,15 @@ with batch():
     x.set(15)  # No recalculation yet
     y.set(25)  # No recalculation yet
     # sum_xy will be recalculated only once after the batch completes
+
+print(sum_xy())  # 40
 ```
 
 ## Custom Equality
 
 By default, signals use identity (`is`) for equality checking. You can provide a custom equality function:
 
-```python
+```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 from reaktiv import Signal
 
 # Custom equality function for case-insensitive string comparison
@@ -175,13 +185,15 @@ name.set("alice")
 
 # This will trigger updates because "Bob" is not equal to "Alice"
 name.set("Bob")
+
+print(name())  # Bob
 ```
 
 ## Optional: Async usage
 
 Recommendation: Prefer synchronous effects for predictable behavior. If you need to integrate with asyncio, either spawn a background task from a sync effect, or (advanced) use an async effect.
 
-```python
+```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Signal, Effect
 
@@ -191,7 +203,7 @@ counter = Signal(0)
 def on_counter():
     value = counter()
     async def background():
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
         print(f"Counter value is: {value}")
     asyncio.create_task(background())
 
@@ -205,11 +217,15 @@ counter_effect = Effect(on_counter)
 
 for i in range(1, 3):
     counter.set(i)
+
+await asyncio.sleep(0.1)
+counter_effect.dispose()
 ```
 
 ## Next Steps
 
 - Read [Why reaktiv?](why-reaktiv.md) to understand when and why to use reaktiv
 - See the [Core Concepts](core-concepts.md) page for a deeper understanding of reaktiv's design
+- Organize application state with the [ReactiveModel API guide](api/reactive-model.md)
 - Check out the [Examples](examples/index.md) page for real-world usage examples
 - Explore the [Advanced Features](advanced-features.md) for more powerful capabilities

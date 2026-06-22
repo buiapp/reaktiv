@@ -7,7 +7,7 @@ lazy subscription. Not part of the public API.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Protocol, Union
+from typing import Dict, List, Optional, Protocol, Union, cast, runtime_checkable
 import contextvars
 import threading
 import weakref
@@ -53,19 +53,19 @@ def mutation_lock() -> threading.RLock:
 
 
 def producer_lock(source: "_Producer") -> threading.RLock:
-    lock = getattr(source, "_lock", None)
-    if lock is not None:
-        return lock
+    if isinstance(source, _HasProducerLock) and source._lock is not None:
+        return source._lock
     return mutation_lock()
 
 
 def consumer_lock(consumer: "_Consumer") -> threading.RLock:
-    lock = getattr(consumer, "_graph_lock", None)
-    if lock is not None:
-        return lock
-    lock = getattr(consumer, "_computation_lock", None)
-    if lock is not None:
-        return lock
+    if isinstance(consumer, _HasGraphLock) and consumer._graph_lock is not None:
+        return consumer._graph_lock
+    if (
+        isinstance(consumer, _HasComputationLock)
+        and consumer._computation_lock is not None
+    ):
+        return consumer._computation_lock
     return mutation_lock()
 
 
@@ -106,13 +106,30 @@ class _Producer(Protocol):
     def _refresh(self) -> bool: ...
 
 
+@runtime_checkable
+class _HasProducerLock(Protocol):
+    _lock: Optional[threading.RLock]
+
+
+@runtime_checkable
+class _HasGraphLock(Protocol):
+    _graph_lock: Optional[threading.RLock]
+
+
+@runtime_checkable
+class _HasComputationLock(Protocol):
+    _computation_lock: Optional[threading.RLock]
+
+
 # ---------------------------------------------------------------------------
 # Edge node connecting a producer to a consumer
 # ---------------------------------------------------------------------------
 @dataclass
 class Edge:
     source: _Producer
-    _target_ref: Union[_Consumer, "weakref.ref[_Consumer]"] = field(repr=False)
+    _target_ref: Union[_Consumer, "weakref.ReferenceType[_Consumer]"] = field(
+        repr=False
+    )
     prev_source: Optional["Edge"] = None
     next_source: Optional["Edge"] = None
     prev_target: Optional["Edge"] = None
@@ -123,8 +140,8 @@ class Edge:
     @property
     def target(self) -> Optional[_Consumer]:
         """Get the target consumer, dereferencing weakref if needed."""
-        if isinstance(self._target_ref, weakref.ref):
-            return self._target_ref()
+        if isinstance(self._target_ref, weakref.ReferenceType):
+            return cast(Optional[_Consumer], self._target_ref())
         return self._target_ref
 
     def is_alive(self) -> bool:

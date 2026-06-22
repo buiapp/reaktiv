@@ -9,18 +9,24 @@ This implementation is inspired by Angular's ResourceSignal.
 from __future__ import annotations
 
 import asyncio
+import weakref
 from enum import Enum
 from typing import (
+    Any,
     Awaitable,
     Callable,
     Generic,
     Optional,
     TypeVar,
+    Union,
+    cast,
+    overload,
 )
 from dataclasses import dataclass
 
 from .signal import Signal, ComputeSignal, ReadonlySignal
 from .context import untracked
+from ._descriptor import PerInstanceDescriptor, is_instance_method
 from ._debug import debug_log
 from .effect import Effect
 
@@ -77,6 +83,56 @@ class ResourceSnapshot(Generic[T]):
     error: Optional[Exception] = None
 
 
+class ResourceDescriptor(PerInstanceDescriptor["Resource[P, T]"], Generic[P, T]):
+    """Descriptor that creates one Resource per owner instance."""
+
+    def __init__(self, params: Callable[..., Optional[P]]) -> None:
+        super().__init__()
+        self._params = params
+        self._loader: Optional[
+            Callable[..., Awaitable[T]]
+        ] = None
+
+    def loader(self, func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+        self._loader = func
+        return func
+
+    def _create(self, instance: object) -> "Resource[P, T]":
+        if self._loader is None:
+            raise RuntimeError("Resource decorator requires a loader")
+        try:
+            instance_ref = weakref.ref(instance)
+
+            def owner() -> object:
+                current = instance_ref()
+                if current is None:
+                    raise ReferenceError("Reactive owner has been garbage collected")
+                return current
+
+        except TypeError:
+
+            def owner() -> object:
+                return instance
+
+        def params() -> Optional[P]:
+            if is_instance_method(self._params):
+                return cast(Callable[[object], Optional[P]], self._params)(owner())
+            return cast(Callable[[], Optional[P]], self._params)()
+
+        async def loader(loader_params: ResourceLoaderParams[P]) -> T:
+            assert self._loader is not None
+            if is_instance_method(self._loader):
+                return await cast(
+                    Callable[[object, ResourceLoaderParams[P]], Awaitable[T]],
+                    self._loader,
+                )(owner(), loader_params)
+            return await cast(
+                Callable[[ResourceLoaderParams[P]], Awaitable[T]], self._loader
+            )(loader_params)
+
+        return Resource(params=params, loader=loader)
+
+
 class Resource(Generic[P, T]):
     """A reactive resource that handles async data loading.
 
@@ -88,10 +144,45 @@ class Resource(Generic[P, T]):
     task scheduling and prevents threading complexity.
     """
 
+    @overload
+    def __new__(
+        cls,
+        params: Callable[[Any], Optional[P]],
+    ) -> ResourceDescriptor[P, Any]: ...
+
+    @overload
+    def __new__(
+        cls,
+        params: Callable[[], Optional[P]],
+        loader: Callable[[ResourceLoaderParams[P]], Awaitable[T]],
+    ) -> "Resource[P, T]": ...
+
+    def __new__(
+        cls,
+        params: Callable[..., Optional[P]],
+        loader: Optional[Callable[[ResourceLoaderParams[P]], Awaitable[T]]] = None,
+    ) -> Union["Resource[P, T]", ResourceDescriptor[P, Any]]:
+        if loader is None and callable(params):
+            return ResourceDescriptor(params)
+        return super().__new__(cls)
+
+    @overload
+    def __init__(
+        self,
+        params: Callable[[Any], Optional[P]],
+    ) -> None: ...
+
+    @overload
     def __init__(
         self,
         params: Callable[[], Optional[P]],
         loader: Callable[[ResourceLoaderParams[P]], Awaitable[T]],
+    ) -> None: ...
+
+    def __init__(
+        self,
+        params: Callable[..., Optional[P]],
+        loader: Optional[Callable[[ResourceLoaderParams[P]], Awaitable[T]]] = None,
     ):
         """Initialize a Resource.
 
@@ -102,6 +193,9 @@ class Resource(Generic[P, T]):
         Raises:
             RuntimeError: If no asyncio event loop is running
         """
+        if loader is None:
+            return
+
         # Enforce asyncio context requirement
         try:
             asyncio.get_running_loop()
@@ -448,3 +542,45 @@ class Resource(Generic[P, T]):
         except Exception:
             # Ignore errors during cleanup - we're being GC'd anyway
             pass
+
+
+class _TypedResourceFactory(Generic[P, T]):
+    """Typed Resource decorator used by ``resource[Params, Value]`` syntax."""
+
+    def __call__(self, params: Callable[..., object], /) -> ResourceDescriptor[P, T]:
+        return ResourceDescriptor(cast(Callable[..., Optional[P]], params))
+
+
+class _ResourceFactory:
+    """Lowercase decorator-friendly Resource factory."""
+
+    @overload
+    def __call__(
+        self,
+        params: Callable[[Any], Optional[P]],
+    ) -> ResourceDescriptor[P, Any]: ...
+
+    @overload
+    def __call__(
+        self,
+        params: Callable[[], Optional[P]],
+        loader: Callable[[ResourceLoaderParams[P]], Awaitable[T]],
+    ) -> Resource[P, T]: ...
+
+    def __call__(
+        self,
+        params: Callable[..., Optional[P]],
+        loader: Optional[Callable[[ResourceLoaderParams[P]], Awaitable[T]]] = None,
+    ) -> Union[Resource[P, T], ResourceDescriptor[P, Any]]:
+        if loader is None:
+            return Resource(params)
+        return Resource(params, loader=loader)
+
+    def __getitem__(
+        self, types: tuple[type[P], type[T]]
+    ) -> _TypedResourceFactory[P, T]:
+        del types
+        return _TypedResourceFactory()
+
+
+resource = _ResourceFactory()

@@ -288,7 +288,7 @@ asyncio.run(main())
 
 ### 2. Database Queries
 
-```python
+```pyodide install="reaktiv" height="36" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, Computed
 
@@ -331,13 +331,14 @@ async def main():
     selected_user_id.set(42)
     await asyncio.sleep(0.2)
     print(user_email())  # "user42@example.com"
+    user_resource.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ### 3. Search/Filter with Debouncing
 
-```python
+```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal
 
@@ -377,19 +378,21 @@ async def main():
     
     # Previous request gets automatically cancelled
     search_query.set("Apple")
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     
     if search_results.has_value():
         results = search_results.value()
         print(f"Found: {results}")
         # Output: Found: ['Apple iPhone', 'Apple Watch', 'Apple AirPods']
 
-asyncio.run(main())
+    search_results.destroy()
+
+await main()
 ```
 
 ### 4. Dependent Resources (Waterfall Loading)
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, Computed
 
@@ -446,19 +449,22 @@ async def main():
         company = company_resource.value()
         print(f"Company: {company['name']}")  # "Company 102"
 
-asyncio.run(main())
+    user_resource.destroy()
+    company_resource.destroy()
+
+await main()
 ```
 
 ### 5. Polling / Real-time Updates
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal
 
 async def fetch_server_status(params):
     """Check server status."""
     server_id = params.params["server_id"]
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.05)
     
     # Simulate random status
     import random
@@ -477,24 +483,25 @@ async def main():
         loader=fetch_server_status
     )
     
-    # Poll every 2 seconds
+    # Poll quickly for this browser demo
     async def poll_status():
         while True:
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.1)
             server_status.reload()  # Manual refresh
     
     poll_task = asyncio.create_task(poll_status())
     
-    # Monitor for 6 seconds
+    # Monitor a few refreshes
     for _ in range(4):
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(0.12)
         if server_status.has_value():
             status = server_status.value()
             print(f"Status: {status['status']} at {status['timestamp']:.2f}")
     
     poll_task.cancel()
+    server_status.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ---
@@ -505,7 +512,7 @@ asyncio.run(main())
 
 Update UI immediately while the server request is in progress:
 
-```python
+```pyodide install="reaktiv" assets="no" height="40" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, ResourceStatus
 
@@ -514,7 +521,7 @@ async def save_user(params):
     user_data = params.params["user"]
     
     # Simulate network delay
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.05)
     
     # Simulate occasional failures
     if user_data.get("email") == "invalid":
@@ -530,7 +537,7 @@ async def main():
         loader=save_user
     )
     
-    await asyncio.sleep(0.6)
+    await asyncio.sleep(0.1)
     
     # Optimistic update: set local value immediately
     new_data = {"name": "Alice Updated", "email": "alice@example.com"}
@@ -542,20 +549,21 @@ async def main():
     
     # Trigger actual save
     user_data.set(new_data)
-    await asyncio.sleep(0.6)
+    await asyncio.sleep(0.1)
     
     # Now status is RESOLVED with server response
     print(f"Status: {save_resource.status()}")  # RESOLVED
     print(f"Value: {save_resource.value()}")
+    save_resource.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ### Pattern 2: Request Deduplication
 
 Prevent redundant requests when params haven't actually changed:
 
-```python
+```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, Computed
 
@@ -595,13 +603,14 @@ async def main():
     signal_a.set(3)
     await asyncio.sleep(0.2)
     print(f"Requests: {request_count}")  # 2 (new request)
+    data_resource.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ### Pattern 3: Error Handling with Retry
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, ResourceStatus
 
@@ -649,13 +658,14 @@ async def main():
         print(f"Error after retries: {data_resource.error()}")
     elif data_resource.has_value():
         print(f"Success: {data_resource.value()}")
+    data_resource.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ### Pattern 4: Caching with Previous State
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, ResourceStatus
 
@@ -705,13 +715,14 @@ async def main():
     item_id.set(1)
     await asyncio.sleep(0.3)
     print(f"Cached load: {item_resource.value()}")
+    item_resource.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ### Pattern 5: Conditional Loading
 
-```python
+```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
 from reaktiv import Resource, Signal, Computed
 
@@ -756,8 +767,9 @@ async def main():
     await asyncio.sleep(0.3)
     print(f"Status: {user_details.status()}")  # RESOLVED
     print(f"Value: {user_details.value()}")
+    user_details.destroy()
 
-asyncio.run(main())
+await main()
 ```
 
 ---

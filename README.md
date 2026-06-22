@@ -32,6 +32,7 @@ uv pip install reaktiv
 - ⚡ **Better performance**: Only recalculates what actually changed (fine-grained reactivity)
 - 🔄 **Automatic updates**: Dependencies are tracked and updated automatically
 - 🎯 **Python-native**: Built for Python's patterns with full async support
+- 🧩 **Application-ready models**: Group state, derived values, effects, resources, and cleanup
 - 🔒 **Type safe**: Full type hint support with automatic inference
 - 🚀 **Lazy evaluation**: Computed values are only calculated when needed
 - 💾 **Smart memoization**: Results are cached and only recalculated when dependencies change
@@ -346,6 +347,69 @@ def increment_age(current: int) -> int:
 
 age.update(increment_age)  # Type checked!
 ```
+
+## ReactiveModel For Application State
+
+`ReactiveModel` groups a related signal graph into a reusable Python object.
+Each model instance owns independent fields, derived values, effects, and async
+resources.
+
+- `field(...)` declares per-instance writable signals.
+- `@computed` derives cached values.
+- `@linked` creates editable derived state.
+- `@effect` runs model-owned side effects.
+- `@resource` loads asynchronous data from reactive parameters.
+- `dispose()` cleans up all effects and resources owned by the instance.
+
+```python
+from reaktiv import ReactiveModel, computed, effect, field
+
+
+class ShoppingCart(ReactiveModel):
+    unit_price = field(12.50)
+    quantity = field(1)
+    discount = field(0.0)
+
+    @computed
+    def subtotal(self) -> float:
+        return self.unit_price() * self.quantity()
+
+    @computed
+    def total(self) -> float:
+        return self.subtotal() * (1 - self.discount())
+
+    @effect
+    def show_total(self) -> None:
+        print(f"{self.quantity()} item(s): ${self.total():.2f}")
+
+
+cart = ShoppingCart()       # Prints: 1 item(s): $12.50
+cart.quantity.set(3)        # Prints: 3 item(s): $37.50
+cart.discount.set(0.10)     # Prints: 3 item(s): $33.75
+
+cart.dispose()
+```
+
+Each declared field creates a separate `Signal` for every model instance. Use a
+factory for mutable defaults and `field[T]` when the intended type is not clear
+from the value:
+
+```python
+from typing import Optional
+
+
+class SearchModel(ReactiveModel):
+    query = field("")
+    selected_id = field[Optional[str]](None)
+    history = field[list[str]](factory=list)
+```
+
+Read the [ReactiveModel API guide](https://reaktiv.bui.app/docs/api/reactive-model/)
+for fields, typing, linked state, async resources, cleanup, inheritance, and
+mixin patterns. Complete examples:
+
+- [`reactive_model_cart.py`](examples/reactive_model_cart.py)
+- [`reactive_model_linked_resource.py`](examples/reactive_model_linked_resource.py)
 
 ## Why This Pattern?
 

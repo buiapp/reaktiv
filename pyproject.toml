@@ -34,6 +34,7 @@ dev = [
 docs = [
     "markdown-exec>=1.12.1; python_version >= '3.10'",
     "mkdocs-material>=9.6",
+    "mkdocs-mermaid2-plugin>=1.2.3",
     "mkdocstrings[python]>=0.29",
 ]
 

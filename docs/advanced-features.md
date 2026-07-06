@@ -6,7 +6,7 @@ This page covers advanced features and techniques in reaktiv for building more s
 
 By default, reaktiv uses identity comparison (`is`) to determine if a signal's value has changed. For more complex types, you can provide custom equality functions:
 
-```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="22" theme="github,one_dark"
 from reaktiv import signal
 
 # Custom equality for dictionaries
@@ -40,7 +40,7 @@ Custom equality functions are especially useful for:
 
 Effects can register cleanup functions that will run before the next execution or when the effect is disposed:
 
-```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="30" theme="github,one_dark"
 from reaktiv import signal, effect
 
 counter = signal(0)
@@ -85,7 +85,7 @@ This pattern is useful for:
 
 The `to_async_iter` utility lets you use signals with `async for` loops:
 
-```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="25" theme="github,one_dark"
 import asyncio
 from reaktiv import signal, to_async_iter
 
@@ -129,7 +129,7 @@ This is useful for:
 
 You can selectively control which signals create dependencies using `untracked`:
 
-```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="28" theme="github,one_dark"
 from reaktiv import signal, effect, untracked
 
 user_id = signal(123)

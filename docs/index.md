@@ -57,7 +57,7 @@ derived values lazily, and runs the relevant effects.
 Edit the code and press **Run**. The example runs entirely in your browser with
 Pyodide.
 
-```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="22" theme="github,one_dark"
 from reaktiv import computed, effect, signal
 
 unit_price = signal(12.50)
@@ -126,7 +126,7 @@ lowercase primitives intentionally.
 After learning the primitives, use `ReactiveModel` to keep a related graph and
 its lifecycle in one object:
 
-```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="28" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, effect, field
 
 

@@ -15,7 +15,7 @@ value until a dependency changes.
 
 Create a computed signal from a callable:
 
-```pyodide install="reaktiv" height="12" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="12" theme="github,one_dark"
 from reaktiv import computed, signal
 
 price = signal(10)
@@ -31,7 +31,7 @@ print(total())  # 20
 
 Use typed decorator syntax when you want to state the result type explicitly:
 
-```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="12" theme="github,one_dark"
 from reaktiv import computed, signal
 
 name = signal("Ada")
@@ -46,7 +46,7 @@ print(normalized_name())  # ada
 Custom equality can suppress downstream updates when two computed values should
 be treated as equivalent:
 
-```pyodide install="reaktiv" assets="no" height="14" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="14" theme="github,one_dark"
 from reaktiv import computed, signal
 
 temperature = signal(21.04)

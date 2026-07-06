@@ -3,7 +3,7 @@
 Use `effect(...)` or `@effect` to run side effects when the signals read by the
 effect change:
 
-```pyodide install="reaktiv" height="16" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="16" theme="github,one_dark"
 from reaktiv import effect, signal
 
 count = signal(0)

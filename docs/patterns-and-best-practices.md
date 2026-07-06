@@ -8,7 +8,7 @@ This guide covers common patterns, best practices, and real-world examples for u
 
 **Important:** Signal dependencies are established when signals are called within the effect function. Call dependent signals at the beginning of your effect to ensure proper dependency tracking.
 
-```pyodide install="reaktiv" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="24" theme="github,one_dark"
 from reaktiv import signal, effect
 
 name = signal("Alice")
@@ -37,7 +37,7 @@ effect.dispose()
 - Conditional signal reads can lead to inconsistent dependencies
 - Reading signals early ensures they're always tracked
 
-```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
 from reaktiv import effect, signal
 
 name = signal("Alice")
@@ -94,7 +94,7 @@ To prevent memory leaks:
 2. Call `dispose()` when you're done with the effect
 3. Avoid creating effects inside loops or frequently-called functions without disposing of them
 
-```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="28" theme="github,one_dark"
 from reaktiv import signal, effect
 
 def create_temporary_effect(s):
@@ -130,7 +130,7 @@ component.destroy()
 
 When multiple signals change, their effects are batched to avoid unnecessary executions:
 
-```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="25" theme="github,one_dark"
 from reaktiv import signal, effect, batch
 
 x = signal(1)

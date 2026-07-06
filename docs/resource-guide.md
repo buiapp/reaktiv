@@ -288,7 +288,7 @@ asyncio.run(main())
 
 ### 2. Database Queries
 
-```pyodide install="reaktiv" height="36" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="36" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, computed
 
@@ -340,7 +340,7 @@ await main()
 
 ### 3. Search/Filter with Debouncing
 
-```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="38" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal
 
@@ -394,7 +394,7 @@ await main()
 
 ### 4. Dependent Resources (Waterfall Loading)
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, computed
 
@@ -459,7 +459,7 @@ await main()
 
 ### 5. Polling / Real-time Updates
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal
 
@@ -514,7 +514,7 @@ await main()
 
 Update UI immediately while the server request is in progress:
 
-```pyodide install="reaktiv" assets="no" height="40" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="40" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, ResourceStatus
 
@@ -565,7 +565,7 @@ await main()
 
 Prevent redundant requests when params haven't actually changed:
 
-```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="38" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, computed
 
@@ -614,7 +614,7 @@ await main()
 
 ### Pattern 3: Error Handling with Retry
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, ResourceStatus
 
@@ -669,7 +669,7 @@ await main()
 
 ### Pattern 4: Caching with Previous State
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, ResourceStatus
 
@@ -726,7 +726,7 @@ await main()
 
 ### Pattern 5: Conditional Loading
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 from reaktiv import resource, signal, computed
 

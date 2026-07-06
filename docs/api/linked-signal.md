@@ -3,7 +3,7 @@
 Use `linked(...)` or `@linked` for writable derived state: a value can be
 overridden manually, then reset when its source context changes.
 
-```pyodide install="reaktiv" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="18" theme="github,one_dark"
 from reaktiv import linked, signal
 
 page = signal(1)

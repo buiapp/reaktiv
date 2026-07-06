@@ -24,7 +24,7 @@ uv pip install reaktiv
 
 Here's a simple example showing the core functionality:
 
-```pyodide install="reaktiv" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="18" theme="github,one_dark"
 from reaktiv import computed, effect, signal
 
 # Create a signal with initial value
@@ -52,7 +52,7 @@ greeter.dispose()
 
 Let's look at a more practical example. Imagine you're calculating the total price of items in a shopping cart:
 
-```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="28" theme="github,one_dark"
 from reaktiv import computed, effect, signal
 
 # Create signals for our base values
@@ -98,7 +98,7 @@ Notice how we never needed to manually recalculate the total! reaktiv automatica
 Computed signals let you derive values from other signals using the
 `@computed` decorator:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import computed, signal
 
 # Create base signals
@@ -120,7 +120,7 @@ print(total())  # 125.0
 ```
 
 You can also use the factory function style if you prefer:
-```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="12" theme="github,one_dark"
 # Alternative: factory function style
 from reaktiv import computed, signal
 
@@ -138,7 +138,7 @@ print(total())  # 120.0
 
 Instead of using `set(new_value)`, you can use `update()` to modify a signal based on its current value:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal
 
 counter = signal(0)
@@ -156,7 +156,7 @@ print(counter())  # 2
 
 When making multiple signal updates, you can batch them together to optimize performance:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal, computed, batch
 
 x = signal(10)
@@ -183,7 +183,7 @@ print(sum_xy())  # 40
 
 By default, signals use identity (`is`) for equality checking. You can provide a custom equality function:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal
 
 # Custom equality function for case-insensitive string comparison
@@ -206,7 +206,7 @@ print(name())  # Bob
 
 Recommendation: Prefer synchronous effects for predictable behavior. If you need to integrate with asyncio, either spawn a background task from a sync effect, or (advanced) use an async effect.
 
-```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
 import asyncio
 from reaktiv import signal, effect
 

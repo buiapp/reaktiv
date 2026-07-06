@@ -57,7 +57,7 @@ The diagram above illustrates the core **Push-Pull** pattern:
 
 Signals are containers for values that can change over time. They notify interested parties (subscribers) when their values change.
 
-```pyodide install="reaktiv" height="15" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="15" theme="github,one_dark"
 from reaktiv import signal
 
 # Create a signal with initial value
@@ -86,7 +86,7 @@ Signals are the fundamental building blocks in reaktiv. They:
 
 Computed signals derive their values from other signals. They automatically update when their dependencies change.
 
-```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="20" theme="github,one_dark"
 from reaktiv import signal, computed
 
 # Base signals
@@ -108,7 +108,7 @@ print(sum_xy())  # 35
 ```
 
 You can also use the factory function style:
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 # Alternative: factory function style
 from reaktiv import computed, signal
 
@@ -135,7 +135,7 @@ Key characteristics of computed signals:
 
 Effects run side effects (like updating UI, logging, or network calls) when signals change.
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal, effect
 
 name = signal("Alice")
@@ -165,7 +165,7 @@ Effects:
 
 Effects work with both synchronous and asynchronous functions, giving you flexibility based on your needs:
 
-```pyodide install="reaktiv" assets="no" height="10" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="10" theme="github,one_dark"
 from reaktiv import effect, signal
 
 
@@ -198,7 +198,7 @@ Common use cases:
 
 **Simple pattern** (auto-reset to default when any dependency used inside lambda changes):
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import linked, signal
 
 page = signal(1)
@@ -251,7 +251,7 @@ Notes:
 
 reaktiv automatically tracks dependencies between signals, computed values, and effects:
 
-```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="20" theme="github,one_dark"
 from reaktiv import signal, computed, effect
 
 first_name = signal("John")
@@ -284,7 +284,7 @@ The dependency tracking works by:
 
 When multiple signals change, reaktiv can batch the updates to avoid unnecessary recalculations:
 
-```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
 from reaktiv import signal, computed, batch, effect
 
 x = signal(10)
@@ -360,7 +360,7 @@ monitor.dispose()
 
 Use `untracked()` as a context manager to read signals without creating dependencies. This is useful for logging, debugging, or conditional logic inside an effect without adding extra dependencies.
 
-```pyodide install="reaktiv" assets="no" height="35" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="35" theme="github,one_dark"
 from reaktiv import signal, computed, effect, untracked
 
 name = signal("Alice")
@@ -418,7 +418,7 @@ With the default identity comparison:
   - Creating a new object with the same content will be detected as a change
   - Modifying an object in-place won't be detected as a change
 
-```pyodide install="reaktiv" assets="no" height="16" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="16" theme="github,one_dark"
 from reaktiv import signal
 
 
@@ -437,7 +437,7 @@ current.append(4)  # Signal doesn't detect this change
 
 For collections or custom objects, you can provide a custom equality function:
 
-```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="20" theme="github,one_dark"
 from reaktiv import signal
 
 
@@ -461,7 +461,7 @@ print(items())
 
 For dictionaries:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal
 
 
@@ -485,7 +485,7 @@ When working with mutable objects, you have two options:
 
 The immutable approach is often cleaner and less error-prone:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal
 
 

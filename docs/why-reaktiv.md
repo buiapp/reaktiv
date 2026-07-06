@@ -28,7 +28,7 @@ Without a reactive system, developers typically face these challenges:
 
 #### Before reaktiv: Manual State Propagation
 
-```pyodide install="reaktiv" height="20" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="20" theme="github,one_dark"
 # Traditional approach with manual propagation
 user_name = "Alice"
 user_age = 30
@@ -46,7 +46,7 @@ greeting = f"Hello, {user_name}! You are {user_age} years old."  # Manual update
 
 #### After reaktiv: Automatic Propagation
 
-```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="22" theme="github,one_dark"
 from reaktiv import signal, computed
 
 # State as signals
@@ -69,7 +69,7 @@ print(greeting())  # "Hello, Bob! You are 30 years old."
 
 Many developers don't realize how much "hidden state" exists in their applications. Every time you compute a value based on other values, you're creating state that needs to be managed.
 
-```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="30" theme="github,one_dark"
 # Without reaktiv: Hidden state management
 def get_total_price(items, tax_rate):
     subtotal = sum(item["price"] for item in items)
@@ -81,7 +81,7 @@ def get_total_price(items, tax_rate):
 
 #### After reaktiv: Making Hidden State Explicit
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal, computed
 
 # Make state explicit with signals
@@ -109,7 +109,7 @@ print(total_price())  # 36.0 - automatically recalculated
 
 Manually tracking which parts of your code depend on which data becomes increasingly complex as applications grow.
 
-```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="30" theme="github,one_dark"
 # Traditional approach with manual tracking
 class ShoppingCart:
     def __init__(self, items=None):
@@ -136,7 +136,7 @@ class ShoppingCart:
 
 #### After reaktiv: Automatic Dependency Tracking
 
-```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="32" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, field
 
 class ReactiveShoppingCart(ReactiveModel):
@@ -180,7 +180,7 @@ print(cart.final_price())
 
 #### Before reaktiv:
 
-```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
 def load_config():
     default_config = {"timeout": 30, "retries": 3, "debug": False}
     try:
@@ -207,7 +207,7 @@ def load_config():
 
 #### After reaktiv:
 
-```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="32" theme="github,one_dark"
 from reaktiv import signal, computed
 
 default_config = signal({"timeout": 30, "retries": 3, "debug": False})
@@ -235,7 +235,7 @@ print(connection_settings())  # connect_timeout is now 60
 
 #### Before reaktiv:
 
-```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="32" theme="github,one_dark"
 class DataProcessor:
     def __init__(self, raw_data):
         self.raw_data = raw_data
@@ -266,7 +266,7 @@ class DataProcessor:
 
 #### After reaktiv:
 
-```pyodide install="reaktiv" assets="no" height="36" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="36" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, field
 
 class ReactiveDataProcessor(ReactiveModel):

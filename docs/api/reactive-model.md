@@ -17,7 +17,7 @@ view model, workflow, or service.
 
 ## Complete Example
 
-```pyodide install="reaktiv" height="30" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="30" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, effect, field
 
 
@@ -53,7 +53,7 @@ The fields, formulas, and side effects stay together, while every
 
 `field(default)` declares a writable signal owned by each model instance:
 
-```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="22" theme="github,one_dark"
 from reaktiv import ReactiveModel, field
 
 
@@ -74,7 +74,7 @@ print(right.quantity())  # 1
 Every field requires exactly one default value or a factory. Use a factory for
 mutable defaults so each instance receives a new object:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import ReactiveModel, field
 
 
@@ -93,7 +93,7 @@ print(right.items())  # []
 Types are inferred from defaults and annotated factories. Use `field[T]` when
 the intended type is wider than the default:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from typing import Optional
 from reaktiv import ReactiveModel, field
 
@@ -137,7 +137,7 @@ ordinary attributes they read before calling `super().__init__()`.
 Decorated methods become per-instance computed signals. Pyright infers the
 computed value type from the method implementation:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, field
 
 
@@ -156,7 +156,7 @@ print(cart.total())  # 20.0
 
 Use `computed[T]` when you want to provide the result type explicitly:
 
-```pyodide install="reaktiv" assets="no" height="15" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="15" theme="github,one_dark"
 from reaktiv import ReactiveModel, computed, field
 
 
@@ -181,7 +181,7 @@ Custom equality functions are supported with
 Use `linked` for state that starts from another signal, can be edited locally,
 and resets when the source changes.
 
-```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
 from reaktiv import ReactiveModel, field, linked
 
 
@@ -212,7 +212,7 @@ Model effects start eagerly and are retained by the model. Unlike standalone
 effects, they do not need to be assigned to a separate variable. Return a
 callable when the effect needs cleanup:
 
-```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import ReactiveModel, effect, field
 
 
@@ -243,7 +243,7 @@ A model with resources must be created while an asyncio event loop is running.
 The first type argument describes the parameter value and the second describes
 the loaded value.
 
-```pyodide install="reaktiv" assets="no" height="40" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="40" theme="github,one_dark"
 import asyncio
 
 from reaktiv import (
@@ -314,7 +314,7 @@ and cancels pending work.
 Disposal is idempotent. Prefer explicit disposal when a model has effects or
 resources instead of relying on garbage collection.
 
-```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="12" theme="github,one_dark"
 from reaktiv import ReactiveModel, field
 
 
@@ -336,7 +336,7 @@ With cooperative multiple inheritance, use `super()` normally. When another
 base class does not call `super()`, initialize both bases explicitly and call
 `ReactiveModel.__init__` last:
 
-```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="25" theme="github,one_dark"
 from reaktiv import ReactiveModel, effect, field
 
 

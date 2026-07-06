@@ -2,7 +2,7 @@
 
 Use `signal(...)` to create writable reactive state in new code:
 
-```pyodide install="reaktiv" height="12" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="12" theme="github,one_dark"
 from reaktiv import signal
 
 count = signal(0)

@@ -17,7 +17,7 @@ This section contains practical examples of using reaktiv in real-world scenario
 
 Managing configuration from multiple sources (defaults, user settings, environment) with automatic priority resolution:
 
-```pyodide install="reaktiv" height="35" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" height="35" theme="github,one_dark"
 from reaktiv import signal, computed, effect
 
 # Different configuration sources
@@ -79,7 +79,7 @@ config_monitor.dispose()
 
 Building a multi-stage data processing pipeline where each step depends on the previous one:
 
-```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="32" theme="github,one_dark"
 from reaktiv import signal, computed
 import json
 
@@ -129,7 +129,7 @@ print(stats())
 
 Smart cache invalidation system that automatically refreshes cached data when dependencies change:
 
-```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="32" theme="github,one_dark"
 from reaktiv import signal, computed, effect
 import time
 
@@ -174,7 +174,7 @@ cache_logger.dispose()
 
 Complex form validation with interdependent fields:
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 from reaktiv import signal, computed, effect
 
 # Form fields
@@ -257,7 +257,7 @@ submission_monitor.dispose()
 Keep request parameters, loading state, errors, and automatic refresh together
 in a reactive model:
 
-```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="42" theme="github,one_dark"
 import asyncio
 
 from reaktiv import (
@@ -330,7 +330,7 @@ store.dispose()
 
 Building a reactive system monitoring dashboard:
 
-```pyodide install="reaktiv" assets="no" height="45" theme="github_light_default,github_dark"
+```pyodide install="reaktiv" assets="no" height="45" theme="github,one_dark"
 from reaktiv import signal, computed, effect
 
 # System metrics (in a real app, these would be updated from actual monitoring)

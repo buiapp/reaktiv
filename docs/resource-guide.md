@@ -74,9 +74,9 @@ class UserComponent:
 
 **Reactive (declarative):**
 ```python
-user_id = Signal("user123")
+user_id = signal("user123")
 
-user_resource = Resource(
+user_resource = resource(
     params=lambda: {"id": user_id()},
     loader=fetch_user
 )
@@ -95,12 +95,12 @@ Resources must be created within an async context (when an event loop is running
 
 ```python
 import asyncio
-from reaktiv import Resource, Signal
+from reaktiv import resource, signal
 
 async def main():
-    user_id = Signal(1)
+    user_id = signal(1)
     
-    user_resource = Resource(
+    user_resource = resource(
         params=lambda: {"user_id": user_id()},
         loader=fetch_user_data
     )
@@ -118,22 +118,22 @@ The `params` function is a reactive computation—like a computed signal—that 
 
 ```python
 # Simple static params
-Resource(
+resource(
     params=lambda: {"user_id": 123},
     loader=fetch_user
 )
 
 # Reactive params - reloads when user_id changes
-user_id = Signal(1)
-Resource(
+user_id = signal(1)
+resource(
     params=lambda: {"user_id": user_id()},
     loader=fetch_user
 )
 
 # Multi-dependency params
-user_id = Signal(1)
-include_posts = Signal(True)
-Resource(
+user_id = signal(1)
+include_posts = signal(True)
+resource(
     params=lambda: {
         "user_id": user_id(),
         "include_posts": include_posts()
@@ -142,8 +142,8 @@ Resource(
 )
 
 # Conditional params - returning None prevents loading
-user_id = Signal(None)
-Resource(
+user_id = signal(None)
+resource(
     params=lambda: {"user_id": user_id()} if user_id() is not None else None,
     loader=fetch_user
 )
@@ -240,7 +240,7 @@ match snapshot.status:
 ```python
 import asyncio
 import aiohttp
-from reaktiv import Resource, Signal
+from reaktiv import resource, signal
 
 async def fetch_github_user(params):
     """Fetch user data from GitHub API."""
@@ -259,10 +259,10 @@ async def fetch_github_user(params):
 
 async def main():
     # Reactive username
-    username = Signal("torvalds")
+    username = signal("torvalds")
     
     # Create resource
-    github_user = Resource(
+    github_user = resource(
         params=lambda: {"username": username()},
         loader=fetch_github_user
     )
@@ -290,7 +290,7 @@ asyncio.run(main())
 
 ```pyodide install="reaktiv" height="36" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, Computed
+from reaktiv import resource, signal, computed
 
 # Simulated async database
 class AsyncDB:
@@ -310,20 +310,22 @@ async def query_user_from_db(params):
 
 async def main():
     db = AsyncDB()
-    selected_user_id = Signal(1)
+    selected_user_id = signal(1)
     
     # Resource automatically re-queries when ID changes
-    user_resource = Resource(
+    user_resource = resource(
         params=lambda: {"user_id": selected_user_id()},
         loader=query_user_from_db
     )
     
     # Computed signal that depends on resource
-    user_email = Computed(lambda: (
-        user_resource.value()["email"]
-        if user_resource.has_value()
-        else "No user selected"
-    ))
+    @computed
+    def user_email():
+        return (
+            user_resource.value()["email"]
+            if user_resource.has_value()
+            else "No user selected"
+        )
     
     await asyncio.sleep(0.2)
     print(user_email())  # "user1@example.com"
@@ -340,7 +342,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal
+from reaktiv import resource, signal
 
 async def search_products(params):
     """Search products with simulated API delay."""
@@ -365,9 +367,9 @@ async def search_products(params):
     return [p for p in all_products if query.lower() in p.lower()]
 
 async def main():
-    search_query = Signal("")
+    search_query = signal("")
     
-    search_results = Resource(
+    search_results = resource(
         params=lambda: {"query": search_query()} if search_query() else None,
         loader=search_products
     )
@@ -394,7 +396,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, Computed
+from reaktiv import resource, signal, computed
 
 async def fetch_user(params):
     """Fetch user by ID."""
@@ -416,16 +418,16 @@ async def fetch_company(params):
     }
 
 async def main():
-    user_id = Signal(1)
+    user_id = signal(1)
     
     # First resource: fetch user
-    user_resource = Resource(
+    user_resource = resource(
         params=lambda: {"user_id": user_id()},
         loader=fetch_user
     )
     
     # Second resource: fetch company (depends on user data)
-    company_resource = Resource(
+    company_resource = resource(
         params=lambda: (
             {"company_id": user_resource.value()["company_id"]}
             if user_resource.has_value()
@@ -459,7 +461,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal
+from reaktiv import resource, signal
 
 async def fetch_server_status(params):
     """Check server status."""
@@ -476,9 +478,9 @@ async def fetch_server_status(params):
     }
 
 async def main():
-    server_id = Signal("server-1")
+    server_id = signal("server-1")
     
-    server_status = Resource(
+    server_status = resource(
         params=lambda: {"server_id": server_id()},
         loader=fetch_server_status
     )
@@ -514,7 +516,7 @@ Update UI immediately while the server request is in progress:
 
 ```pyodide install="reaktiv" assets="no" height="40" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, ResourceStatus
+from reaktiv import resource, signal, ResourceStatus
 
 async def save_user(params):
     """Save user to server."""
@@ -530,9 +532,9 @@ async def save_user(params):
     return {**user_data, "saved_at": "2024-01-22"}
 
 async def main():
-    user_data = Signal({"name": "Alice", "email": "alice@example.com"})
+    user_data = signal({"name": "Alice", "email": "alice@example.com"})
     
-    save_resource = Resource(
+    save_resource = resource(
         params=lambda: {"user": user_data()} if user_data() else None,
         loader=save_user
     )
@@ -565,7 +567,7 @@ Prevent redundant requests when params haven't actually changed:
 
 ```pyodide install="reaktiv" assets="no" height="38" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, Computed
+from reaktiv import resource, signal, computed
 
 request_count = 0
 
@@ -580,13 +582,15 @@ async def fetch_data(params):
 async def main():
     global request_count
     
-    signal_a = Signal(1)
-    signal_b = Signal(2)
+    signal_a = signal(1)
+    signal_b = signal(2)
     
     # Computed params - only changes when result changes
-    combined_key = Computed(lambda: f"{signal_a()}-{signal_b()}")
+    @computed
+    def combined_key():
+        return f"{signal_a()}-{signal_b()}"
     
-    data_resource = Resource(
+    data_resource = resource(
         params=lambda: {"key": combined_key()},
         loader=fetch_data
     )
@@ -612,7 +616,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, ResourceStatus
+from reaktiv import resource, signal, ResourceStatus
 
 async def fetch_with_retry(params):
     """Fetch with automatic retry logic."""
@@ -644,9 +648,9 @@ async def fetch_with_retry(params):
     raise RuntimeError("Should not reach here")
 
 async def main():
-    url = Signal("https://api.example.com/data")
+    url = signal("https://api.example.com/data")
     
-    data_resource = Resource(
+    data_resource = resource(
         params=lambda: {"url": url()},
         loader=fetch_with_retry
     )
@@ -667,7 +671,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, ResourceStatus
+from reaktiv import resource, signal, ResourceStatus
 
 # Simulated cache
 cache = {}
@@ -696,9 +700,9 @@ async def fetch_with_cache(params):
     return result
 
 async def main():
-    item_id = Signal(1)
+    item_id = signal(1)
     
-    item_resource = Resource(
+    item_resource = resource(
         params=lambda: {"item_id": item_id()},
         loader=fetch_with_cache
     )
@@ -724,7 +728,7 @@ await main()
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Resource, Signal, Computed
+from reaktiv import resource, signal, computed
 
 async def fetch_user_details(params):
     """Fetch detailed user information."""
@@ -736,15 +740,15 @@ async def fetch_user_details(params):
     }
 
 async def main():
-    user_id = Signal(None)  # Start with no selection
-    fetch_enabled = Signal(False)
+    user_id = signal(None)  # Start with no selection
+    fetch_enabled = signal(False)
     
     # Only fetch when both conditions are met
-    should_fetch = Computed(lambda: (
-        user_id() is not None and fetch_enabled()
-    ))
+    @computed
+    def should_fetch():
+        return user_id() is not None and fetch_enabled()
     
-    user_details = Resource(
+    user_details = resource(
         params=lambda: (
             {"user_id": user_id()}
             if should_fetch()
@@ -781,8 +785,8 @@ await main()
 ✅ **Good:**
 ```python
 async def main():
-    user_id = Signal(1)
-    user_resource = Resource(
+    user_id = signal(1)
+    user_resource = resource(
         params=lambda: {"id": user_id()},
         loader=fetch_user
     )
@@ -794,8 +798,8 @@ asyncio.run(main())
 ❌ **Bad:**
 ```python
 # This will raise RuntimeError - no event loop running
-user_id = Signal(1)
-user_resource = Resource(
+user_id = signal(1)
+user_resource = resource(
     params=lambda: {"id": user_id()},
     loader=fetch_user
 )
@@ -805,21 +809,25 @@ user_resource = Resource(
 
 ✅ **Good:**
 ```python
-user_name = Computed(lambda: (
-    user_resource.value()["name"]
-    if user_resource.has_value()
-    else "Loading..."
-))
+@computed
+def user_name():
+    return (
+        user_resource.value()["name"]
+        if user_resource.has_value()
+        else "Loading..."
+    )
 ```
 
 ❌ **Bad:**
 ```python
 # This can throw if resource is in error state!
-user_name = Computed(lambda: (
-    user_resource.value()["name"]
-    if user_resource.value() is not None
-    else "Loading..."
-))
+@computed
+def user_name():
+    return (
+        user_resource.value()["name"]
+        if user_resource.value() is not None
+        else "Loading..."
+    )
 ```
 
 ### 3. Check Cancellation in Long-Running Loaders
@@ -887,9 +895,9 @@ def display_user():
 
 ✅ **Good:**
 ```python
-user_id = Signal(None)
+user_id = signal(None)
 
-user_resource = Resource(
+user_resource = resource(
     params=lambda: (
         {"id": user_id()}
         if user_id() is not None
@@ -902,7 +910,7 @@ user_resource = Resource(
 ❌ **Bad:**
 ```python
 # Always passes params, even with invalid data
-user_resource = Resource(
+user_resource = resource(
     params=lambda: {"id": user_id()},  # Passes None to loader
     loader=fetch_user  # Has to handle None case
 )
@@ -913,7 +921,7 @@ user_resource = Resource(
 ✅ **Good:**
 ```python
 async def main():
-    resource = Resource(params=..., loader=...)
+    resource = resource(params=..., loader=...)
     
     try:
         # Use resource
@@ -925,7 +933,7 @@ async def main():
 ❌ **Bad:**
 ```python
 async def main():
-    resource = Resource(params=..., loader=...)
+    resource = resource(params=..., loader=...)
     # Just let it go - might leave pending tasks
 ```
 
@@ -934,9 +942,11 @@ async def main():
 ✅ **Good:**
 ```python
 # Only reloads when the computed key actually changes
-filter_key = Computed(lambda: f"{category()}-{sort_order()}")
+@computed
+def filter_key():
+    return f"{category()}-{sort_order()}"
 
-results = Resource(
+results = resource(
     params=lambda: {"key": filter_key()},
     loader=fetch_results
 )
@@ -945,7 +955,7 @@ results = Resource(
 ❌ **Bad:**
 ```python
 # Reloads on every signal change, even if result is the same
-results = Resource(
+results = resource(
     params=lambda: {"cat": category(), "sort": sort_order()},
     loader=fetch_results
 )
@@ -955,7 +965,7 @@ results = Resource(
 
 ## API Reference
 
-For complete API documentation, see [Resource API Reference](api/resource-signal.md).
+For complete API documentation, see the [`resource` API reference](api/resource-signal.md).
 
 ---
 

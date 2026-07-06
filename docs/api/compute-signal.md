@@ -1,50 +1,40 @@
-# Computed Signal API
+# `computed` API
 
-`Computed` and `computed` create computed signals: reactive values that derive
-from other signals, recompute lazily, and cache their latest value until a
-dependency changes.
+Use `computed(...)` or `@computed` to create reactive derived values. Computed
+signals derive from other signals, recompute lazily, and cache their latest
+value until a dependency changes.
 
-`Computed` is kept as the uppercase constructor-style API. `computed` is the
-preferred lowercase decorator/factory spelling for new code, especially inside
-`ReactiveModel` classes.
+!!! note "Naming"
 
-## Computed / computed Factory
+    Prefer `computed(...)` and `@computed` in application code. `Computed`
+    remains supported for existing uppercase constructor/decorator-style code.
+    `ComputeSignal` is the concrete readable signal type returned by the
+    factory.
+
+## Create Derived State
 
 Create a computed signal from a callable:
 
 ```pyodide install="reaktiv" height="12" theme="github_light_default,github_dark"
-from reaktiv import Computed, Signal
+from reaktiv import computed, signal
 
-price = Signal(10)
-quantity = Signal(2)
-
-total = Computed(lambda: price() * quantity())
-
-print(total())  # 20
-```
-
-Use lowercase decorator syntax for new code:
-
-```pyodide install="reaktiv" assets="no" height="14" theme="github_light_default,github_dark"
-from reaktiv import Signal, computed
-
-price = Signal(10)
-quantity = Signal(2)
+price = signal(10)
+quantity = signal(2)
 
 @computed
-def total() -> int:
+def total():
     return price() * quantity()
 
 print(total())  # 20
 ```
 
-When omitting a return annotation, use typed decorator syntax so type checkers
-can preserve the returned signal type:
+
+Use typed decorator syntax when you want to state the result type explicitly:
 
 ```pyodide install="reaktiv" assets="no" height="12" theme="github_light_default,github_dark"
-from reaktiv import Signal, computed
+from reaktiv import computed, signal
 
-name = Signal("Ada")
+name = signal("Ada")
 
 @computed[str]
 def normalized_name():
@@ -57,9 +47,9 @@ Custom equality can suppress downstream updates when two computed values should
 be treated as equivalent:
 
 ```pyodide install="reaktiv" assets="no" height="14" theme="github_light_default,github_dark"
-from reaktiv import Signal, computed
+from reaktiv import computed, signal
 
-temperature = Signal(21.04)
+temperature = signal(21.04)
 
 @computed[float](equal=lambda left, right: round(left, 1) == round(right, 1))
 def rounded_temperature():

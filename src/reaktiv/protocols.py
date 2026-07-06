@@ -15,14 +15,23 @@ class ReadableSignal(Protocol[T]):
     (Signal, ReadonlySignal, ComputeSignal, LinkedSignal) must implement.
     
     Usage:
+        from reaktiv import computed, linked, signal
+
         def consume_signal(sig: Readable[int]) -> int:
             return sig()  # Read the signal value
         
         # Works with any signal type:
-        s = Signal(42)
-        c = Computed(lambda: s() * 2)
+        s = signal(42)
+
+        @computed
+        def c():
+            return s() * 2
+
         r = s.as_readonly()
-        l = LinkedSignal(lambda: s())
+
+        @linked
+        def l():
+            return s()
         
         consume_signal(s)
         consume_signal(c)
@@ -64,19 +73,26 @@ class WritableSignal(ReadableSignal[T_inv], Protocol[T_inv]):
     Read-only signals (ReadonlySignal, ComputeSignal) do not.
     
     Usage:
+        from reaktiv import computed, linked, signal
+
         def increment(sig: Writable[int]) -> None:
             sig.set(sig() + 1)
             # or: sig.update(lambda x: x + 1)
         
         # Works with writable signal types:
-        s = Signal(42)
-        l = LinkedSignal(lambda: 0)
+        s = signal(42)
+
+        @linked
+        def l():
+            return 0
         
         increment(s)
         increment(l)
         
         # Does NOT work with read-only signals:
-        c = Computed(lambda: s() * 2)
+        @computed
+        def c():
+            return s() * 2
         r = s.as_readonly()
         
         increment(c)  # Type error

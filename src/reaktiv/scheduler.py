@@ -53,15 +53,15 @@ def batch() -> Generator[None, None, None]:
     Examples:
         Without batching:
         ```python
-        from reaktiv import Signal, Effect
+        from reaktiv import effect, signal
         
-        x = Signal(1)
-        y = Signal(2)
+        x = signal(1)
+        y = signal(2)
         
         def log_values():
             print(f"x: {x()}, y: {y()}")
         
-        Effect(log_values)
+        values_effect = effect(log_values)
         # Prints: "x: 1, y: 2"
         
         x.set(10)  # Effect runs
@@ -73,15 +73,15 @@ def batch() -> Generator[None, None, None]:
         
         With batching:
         ```python
-        from reaktiv import Signal, Effect, batch
+        from reaktiv import batch, effect, signal
         
-        x = Signal(1)
-        y = Signal(2)
+        x = signal(1)
+        y = signal(2)
         
         def log_values():
             print(f"x: {x()}, y: {y()}")
         
-        Effect(log_values)
+        values_effect = effect(log_values)
         # Prints: "x: 1, y: 2"
         
         with batch():
@@ -93,14 +93,14 @@ def batch() -> Generator[None, None, None]:
         
         Multiple updates:
         ```python
-        from reaktiv import Signal, Effect, batch
+        from reaktiv import batch, effect, signal
         
-        items = Signal([])
+        items = signal([])
         
         def log_count():
             print(f"Items: {len(items())}")
         
-        Effect(log_count)
+        count_effect = effect(log_count)
         # Prints: "Items: 0"
         
         # Without batch, effect would run 3 times
@@ -114,10 +114,14 @@ def batch() -> Generator[None, None, None]:
         
         Nested batches:
         ```python
-        from reaktiv import Signal, Effect, batch
+        from reaktiv import batch, effect, signal
         
-        x = Signal(0)
-        effect = Effect(lambda: print(f"x={x()}"))  # retain reference
+        x = signal(0)
+
+        def print_x():
+            print(f"x={x()}")
+
+        x_effect = effect(print_x)  # retain reference
         # Prints: "x=0"
         
         with batch():

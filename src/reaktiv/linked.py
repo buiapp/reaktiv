@@ -78,12 +78,14 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
     Examples:
         Simple pattern (automatic derivation):
         ```python
-        from reaktiv import Signal, LinkedSignal
+        from reaktiv import linked, signal
         
-        fahrenheit = Signal(32)
+        fahrenheit = signal(32)
         
         # Celsius automatically computes from Fahrenheit
-        celsius = LinkedSignal(lambda: (fahrenheit() - 32) * 5/9)
+        @linked
+        def celsius():
+            return (fahrenheit() - 32) * 5 / 9
         
         print(celsius())  # 0.0
         
@@ -101,16 +103,21 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         
         Form input pattern:
         ```python
-        from reaktiv import Signal, LinkedSignal, Effect
+        from reaktiv import effect, linked, signal
         
         # Server data
-        server_name = Signal("John Doe")
+        server_name = signal("John Doe")
         
         # Form input linked to server data
-        input_value = LinkedSignal(lambda: server_name())
+        @linked
+        def input_value():
+            return server_name()
         
         # Track changes (keep reference to prevent GC)
-        effect = Effect(lambda: print(f"Input: {input_value()}"))
+        def print_input():
+            print(f"Input: {input_value()}")
+
+        input_effect = effect(print_input)
         # Prints: "Input: John Doe"
         
         # User edits the input
@@ -124,9 +131,9 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         
         Advanced pattern (with previous state):
         ```python
-        from reaktiv import Signal, LinkedSignal, PreviousState
+        from reaktiv import PreviousState, linked, signal
         
-        total_pages = Signal(10)
+        total_pages = signal(10)
         
         def clamp_page(page_num, prev):
             max_page = total_pages()
@@ -141,7 +148,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             # Clamp to valid range
             return max(1, min(prev.value, max_page))
         
-        current_page = LinkedSignal(
+        current_page = linked(
             source=total_pages,
             computation=clamp_page
         )
@@ -157,11 +164,11 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         
         As decorator:
         ```python
-        from reaktiv import Signal, LinkedSignal
+        from reaktiv import linked, signal
         
-        source = Signal(0)
+        source = signal(0)
         
-        @LinkedSignal
+        @linked
         def derived():
             return source() * 2
         
@@ -256,7 +263,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             and source is None
             and computation is None
         ):
-            # Parameterized decorator: @Linked(equal=...)
+            # Parameterized decorator: @linked(equal=...)
             def decorator(
                 f: Union[Callable[[], T], Callable[[Any], T]],
             ) -> Union[LinkedSignal[T], LinkedDescriptor[T]]:
@@ -275,7 +282,7 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
                 cast(Callable[[Any], T], computation_or_source), equal=equal
             )
 
-        # Direct call: Linked(lambda: ...) or @Linked decorator
+        # Direct call: linked(lambda: ...) or @linked decorator
         return super().__new__(cls)
 
     def __init__(
@@ -307,8 +314,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         else:
             raise ValueError(
                 "LinkedSignal requires either:\n"
-                "1. A computation function: LinkedSignal(lambda: source())\n"
-                "2. Source and computation: LinkedSignal(source=signal, computation=func)"
+                "1. A computation function: linked(lambda: source())\n"
+                "2. Source and computation: linked(source=signal, computation=func)"
             )
 
         # Previous-source tracking (prev.value comes from ComputeSignal _value)
@@ -484,7 +491,13 @@ class _LinkedFactory:
             equal=equal,
         )
 
-    def __getitem__(self, value_type: type[T]) -> _TypedLinkedFactory[T]:
+    @overload
+    def __getitem__(self, value_type: type[T]) -> _TypedLinkedFactory[T]: ...
+
+    @overload
+    def __getitem__(self, value_type: object) -> _TypedLinkedFactory[Any]: ...
+
+    def __getitem__(self, value_type: object) -> _TypedLinkedFactory[Any]:
         del value_type
         return _TypedLinkedFactory()
 

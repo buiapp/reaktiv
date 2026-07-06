@@ -1,13 +1,24 @@
-from reaktiv import Signal, Computed, Effect, batch
+from reaktiv import signal, computed, effect, batch
 from time import sleep
 
 
-candidate_a = Signal(100)
-candidate_b = Signal(100)
+candidate_a = signal(100)
+candidate_b = signal(100)
 
-total_votes = Computed(lambda: candidate_a() + candidate_b())
-percent_a = Computed(lambda: (candidate_a() / total_votes()) * 100)
-percent_b = Computed(lambda: (candidate_b() / total_votes()) * 100)
+
+@computed
+def total_votes():
+    return candidate_a() + candidate_b()
+
+
+@computed
+def percent_a():
+    return (candidate_a() / total_votes()) * 100
+
+
+@computed
+def percent_b():
+    return (candidate_b() / total_votes()) * 100
 
 
 def display_results():
@@ -24,8 +35,8 @@ def check_dominance():
 
 
 # Assign effects to variables to ensure they are retained
-_display_effect = Effect(display_results)
-_alert_effect = Effect(check_dominance)
+_display_effect = effect(display_results)
+_alert_effect = effect(check_dominance)
 
 for _ in range(3):
     sleep(1)

@@ -92,7 +92,7 @@ class Effect:
           Call dispose() explicitly when done to ensure immediate cleanup.
           
         Best practices:
-        - Store Effect references: ``self.effect = Effect(...)``
+        - Store effect references: ``self.effect = effect(...)``
         - Call dispose() explicitly: ``self.effect.dispose()``
         - Cleanup functions run automatically on GC, but prefer explicit dispose()
     
@@ -116,13 +116,16 @@ class Effect:
     Examples:
         Basic effect:
         ```python
-        from reaktiv import Signal, Effect
+        from reaktiv import effect, signal
         
-        counter = Signal(0)
+        counter = signal(0)
         
         # Effect runs immediately and on every change
         # Must retain reference to prevent garbage collection
-        effect = Effect(lambda: print(f"Counter: {counter()}"))
+        def print_counter():
+            print(f"Counter: {counter()}")
+
+        counter_effect = effect(print_counter)
         # Prints: "Counter: 0"
         
         counter.set(1)
@@ -134,9 +137,9 @@ class Effect:
         
         Effect with cleanup:
         ```python
-        from reaktiv import Signal, Effect
+        from reaktiv import effect, signal
         
-        user_id = Signal(1)
+        user_id = signal(1)
         
         def subscribe_to_user():
             uid = user_id()
@@ -147,29 +150,29 @@ class Effect:
                 print(f"Unsubscribing from user {uid}")
             return cleanup
         
-        effect = Effect(subscribe_to_user)
+        subscription = effect(subscribe_to_user)
         # Prints: "Subscribing to user 1"
         
         user_id.set(2)
         # Prints: "Unsubscribing from user 1"
         # Prints: "Subscribing to user 2"
         
-        effect.dispose()
+        subscription.dispose()
         # Prints: "Unsubscribing from user 2"
         ```
         
         Effect with on_cleanup parameter:
         ```python
-        from reaktiv import Signal, Effect
+        from reaktiv import effect, signal
         
-        enabled = Signal(True)
+        enabled = signal(True)
         
         def my_effect(on_cleanup):
             if enabled():
                 print("Starting...")
                 on_cleanup(lambda: print("Stopping..."))
         
-        effect = Effect(my_effect)
+        runner = effect(my_effect)
         # Prints: "Starting..."
         
         enabled.set(False)
@@ -178,17 +181,20 @@ class Effect:
         
         Manual disposal:
         ```python
-        from reaktiv import Signal, Effect
+        from reaktiv import effect, signal
         
-        count = Signal(0)
+        count = signal(0)
         
-        effect = Effect(lambda: print(count()))
+        def print_count():
+            print(count())
+
+        count_effect = effect(print_count)
         # Prints: 0
         
         count.set(1)
         # Prints: 1
         
-        effect.dispose()
+        count_effect.dispose()
         
         count.set(2)
         # No print - effect is disposed
@@ -435,17 +441,20 @@ class Effect:
         
         Examples:
             ```python
-            from reaktiv import Signal, Effect
+            from reaktiv import effect, signal
             
-            counter = Signal(0)
+            counter = signal(0)
             
-            effect = Effect(lambda: print(f"Count: {counter()}"))
+            def print_count():
+                print(f"Count: {counter()}")
+
+            count_effect = effect(print_count)
             # Prints: "Count: 0"
             
             counter.set(1)
             # Prints: "Count: 1"
             
-            effect.dispose()
+            count_effect.dispose()
             
             counter.set(2)
             # No output - effect is disposed

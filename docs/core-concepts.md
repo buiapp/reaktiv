@@ -58,10 +58,10 @@ The diagram above illustrates the core **Push-Pull** pattern:
 Signals are containers for values that can change over time. They notify interested parties (subscribers) when their values change.
 
 ```pyodide install="reaktiv" height="15" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 # Create a signal with initial value
-counter = Signal(0)
+counter = signal(0)
 
 # Get the current value
 value = counter()  # 0
@@ -87,14 +87,14 @@ Signals are the fundamental building blocks in reaktiv. They:
 Computed signals derive their values from other signals. They automatically update when their dependencies change.
 
 ```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 
 # Base signals
-x = Signal(10)
-y = Signal(20)
+x = signal(10)
+y = signal(20)
 
 # Computed signal using decorator
-@Computed
+@computed
 def sum_xy():
     return x() + y()
 
@@ -110,11 +110,14 @@ print(sum_xy())  # 35
 You can also use the factory function style:
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
 # Alternative: factory function style
-from reaktiv import Computed, Signal
+from reaktiv import computed, signal
 
-x = Signal(10)
-y = Signal(20)
-sum_xy = Computed(lambda: x() + y())
+x = signal(10)
+y = signal(20)
+
+@computed
+def sum_xy():
+    return x() + y()
 
 print(sum_xy())  # 30
 ```
@@ -133,15 +136,15 @@ Key characteristics of computed signals:
 Effects run side effects (like updating UI, logging, or network calls) when signals change.
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-name = Signal("Alice")
+name = signal("Alice")
 
 def log_name():
     print(f"Name changed to: {name()}")
 
 # Create and schedule the effect
-logger = Effect(log_name)  # Prints: "Name changed to: Alice"
+logger = effect(log_name)  # Prints: "Name changed to: Alice"
 
 # Change the signal
 name.set("Bob")  # Prints: "Name changed to: Bob"
@@ -163,12 +166,16 @@ Effects:
 Effects work with both synchronous and asynchronous functions, giving you flexibility based on your needs:
 
 ```pyodide install="reaktiv" assets="no" height="10" theme="github_light_default,github_dark"
-from reaktiv import Effect, Signal
+from reaktiv import effect, signal
 
 
 # Synchronous effect (no asyncio needed)
-counter = Signal(0)
-sync_effect = Effect(lambda: print(f"Counter: {counter()}"))  # Runs immediately
+counter = signal(0)
+
+def print_counter():
+    print(f"Counter: {counter()}")
+
+sync_effect = effect(print_counter)  # Runs immediately
 
 counter.set(1)  # Effect runs synchronously
 counter.set(2)  # Effect runs synchronously again
@@ -178,7 +185,10 @@ Choose synchronous effects when you don't need async functionality, and async ef
 
 ### 4. Linked Signals
 
-`LinkedSignal` is a writable computed signal that can be manually set by users but will automatically reset when its source context changes. Use it for "user overrides with sane defaults" that should survive some changes but reset on others.
+`linked` creates writable derived state that can be manually set by users but
+automatically resets when its source context changes. Use it for "user
+overrides with sane defaults" that should survive some changes but reset on
+others.
 
 Common use cases:
 - Pagination: selection resets when page changes
@@ -189,12 +199,12 @@ Common use cases:
 **Simple pattern** (auto-reset to default when any dependency used inside lambda changes):
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
-from reaktiv import Signal, LinkedSignal
+from reaktiv import linked, signal
 
-page = Signal(1)
+page = signal(1)
 
 # Writable derived state that resets whenever page changes
-selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+selection = linked(lambda: f"default-for-page-{page()}")
 
 selection.set("custom-choice")   # user override
 print(selection())                # "custom-choice"
@@ -206,12 +216,12 @@ print(selection())                # "default-for-page-2"
 **Advanced pattern** (explicit source and previous-state aware computation):
 
 ```python
-from reaktiv import Signal, LinkedSignal, PreviousState
+from reaktiv import linked, signal, PreviousState
 
 # Source contains (query, page). We want selection to persist across page changes
 # but reset when the query string changes.
-query = Signal("shoes")
-page = Signal(1)
+query = signal("shoes")
+page = signal(1)
 
 def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
     current_query, _ = src
@@ -221,7 +231,7 @@ def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> 
     # Otherwise, provide a new default for the new query
     return f"default-for-{current_query}"
 
-selection = LinkedSignal(source=lambda: (query(), page()), computation=compute_selection)
+selection = linked(source=lambda: (query(), page()), computation=compute_selection)
 
 print(selection())  # "default-for-shoes"
 selection.set("red-sneakers")
@@ -239,21 +249,24 @@ Notes:
 
 ## Dependency Tracking
 
-reaktiv automatically tracks dependencies between Signals, Computed and Effects:
+reaktiv automatically tracks dependencies between signals, computed values, and effects:
 
 ```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
-first_name = Signal("John")
-last_name = Signal("Doe")
+first_name = signal("John")
+last_name = signal("Doe")
 
 # This computed signal depends on both first_name and last_name
-@Computed
+@computed
 def full_name():
     return f"{first_name()} {last_name()}"
 
 # This effect depends on full_name (and indirectly on first_name and last_name)
-display = Effect(lambda: print(f"Full name: {full_name()}"))
+def display_full_name():
+    print(f"Full name: {full_name()}")
+
+display = effect(display_full_name)
 
 # Changing either first_name or last_name will update full_name and trigger the effect
 first_name.set("Jane")  # Effect runs
@@ -272,19 +285,19 @@ The dependency tracking works by:
 When multiple signals change, reaktiv can batch the updates to avoid unnecessary recalculations:
 
 ```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, batch, Effect
+from reaktiv import signal, computed, batch, effect
 
-x = Signal(10)
-y = Signal(20)
+x = signal(10)
+y = signal(20)
 
-@Computed
+@computed
 def sum_xy():
     return x() + y()
 
 def log_sum():
     print(f"Sum: {sum_xy()}")
 
-logger = Effect(log_sum)  # Prints: "Sum: 30"
+logger = effect(log_sum)  # Prints: "Sum: 30"
 
 # Without batching, each signal change would trigger the effect
 # With batching, the effect runs only once after all changes
@@ -305,14 +318,17 @@ reaktiv uses weak references for its internal subscriber tracking, which means:
 
 ### Retaining Effects
 
-It's critical to retain (assign to a variable) all Effects to prevent garbage collection. If you create an Effect without assigning it to a variable, it may be immediately garbage collected:
+It's critical to retain (assign to a variable) effects to prevent garbage collection. If you create an effect without assigning it to a variable, it may be immediately garbage collected:
 
 ```python
-# INCORRECT: Effect will be garbage collected immediately
-Effect(lambda: print(f"Value changed: {my_signal()}"))
+# INCORRECT: effect will be garbage collected immediately
+def print_value():
+    print(f"Value changed: {my_signal()}")
 
-# CORRECT: Effect is retained
-my_effect = Effect(lambda: print(f"Value changed: {my_signal()}"))
+effect(print_value)
+
+# CORRECT: effect is retained
+my_effect = effect(print_value)
 ```
 
 When using Effects in classes, assign them to instance attributes in the constructor to ensure they're retained throughout the object's lifecycle:
@@ -320,7 +336,7 @@ When using Effects in classes, assign them to instance attributes in the constru
 ```python
 class TemperatureMonitor:
     def __init__(self, initial_temp=0):
-        self._temperature = Signal(initial_temp)
+        self._temperature = signal(initial_temp)
 
         def _handle_temperature_change():
             current_temp = self._temperature()
@@ -328,8 +344,8 @@ class TemperatureMonitor:
             if current_temp > 30:
                 print("Warning: Temperature too high!")
 
-        # Assign Effect to self._effect to prevent garbage collection
-        self._effect = Effect(_handle_temperature_change)
+        # Assign the effect to self._effect to prevent garbage collection
+        self._effect = effect(_handle_temperature_change)
 
     def dispose(self):
         self._effect.dispose()
@@ -345,13 +361,15 @@ monitor.dispose()
 Use `untracked()` as a context manager to read signals without creating dependencies. This is useful for logging, debugging, or conditional logic inside an effect without adding extra dependencies.
 
 ```pyodide install="reaktiv" assets="no" height="35" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect, untracked
+from reaktiv import signal, computed, effect, untracked
 
-name = Signal("Alice")
-is_logging_enabled = Signal(False)
-log_level = Signal("INFO")
+name = signal("Alice")
+is_logging_enabled = signal(False)
+log_level = signal("INFO")
 
-greeting = Computed(lambda: f"Hello, {name()}!")
+@computed
+def greeting():
+    return f"Hello, {name()}!"
 
 # An effect that depends on `greeting`, but reads other signals untracked
 def display_greeting():
@@ -368,7 +386,7 @@ def display_greeting():
     print(current_greeting)
 
 # MUST assign to variable!
-greeting_effect = Effect(display_greeting)
+greeting_effect = effect(display_greeting)
 # Initial run prints: "Hello, Alice"
 
 name.set("Bob")
@@ -401,11 +419,11 @@ With the default identity comparison:
   - Modifying an object in-place won't be detected as a change
 
 ```pyodide install="reaktiv" assets="no" height="16" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 
 # With default identity equality
-items = Signal([1, 2, 3])
+items = signal([1, 2, 3])
 
 # This WILL trigger updates (different list instance)
 items.set([1, 2, 3])  
@@ -420,7 +438,7 @@ current.append(4)  # Signal doesn't detect this change
 For collections or custom objects, you can provide a custom equality function:
 
 ```pyodide install="reaktiv" assets="no" height="20" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 
 # Custom equality for comparing lists by value
@@ -430,7 +448,7 @@ def list_equal(a, b):
     return all(a_item == b_item for a_item, b_item in zip(a, b))
 
 # Create a signal with custom equality
-items = Signal([1, 2, 3], equal=list_equal)
+items = signal([1, 2, 3], equal=list_equal)
 
 # This won't trigger updates because the lists have the same values
 items.set([1, 2, 3])
@@ -444,13 +462,13 @@ print(items())
 For dictionaries:
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 
 def dict_equal(a, b):
     return a.keys() == b.keys() and all(a[k] == b[k] for k in a.keys())
 
-config = Signal({"theme": "dark", "font_size": 12}, equal=dict_equal)
+config = signal({"theme": "dark", "font_size": 12}, equal=dict_equal)
 
 # Won't trigger updates (same content)
 config.set({"theme": "dark", "font_size": 12})
@@ -468,17 +486,17 @@ When working with mutable objects, you have two options:
 The immutable approach is often cleaner and less error-prone:
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 
 # Immutable approach with lists
-items = Signal([1, 2, 3])
+items = signal([1, 2, 3])
 
 # Create a new list when updating
 items.update(lambda current: current + [4])  # [1, 2, 3, 4]
 
 # Immutable approach with dictionaries
-config = Signal({"theme": "dark"})
+config = signal({"theme": "dark"})
 
 # Create a new dict when updating
 config.update(lambda current: {**current, "font_size": 14})

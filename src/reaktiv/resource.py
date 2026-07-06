@@ -488,11 +488,13 @@ class Resource(Generic[P, T]):
         
         Example:
             ```python
-            name = Computed(lambda: (
-                resource.value()()['name'] 
-                if resource.has_value() 
-                else 'Loading...'
-            ))
+            @computed
+            def name():
+                return (
+                    resource.value()["name"]
+                    if resource.has_value()
+                    else "Loading..."
+                )
             ```
         """
         return (
@@ -576,9 +578,15 @@ class _ResourceFactory:
             return Resource(params)
         return Resource(params, loader=loader)
 
+    @overload
     def __getitem__(
         self, types: tuple[type[P], type[T]]
-    ) -> _TypedResourceFactory[P, T]:
+    ) -> _TypedResourceFactory[P, T]: ...
+
+    @overload
+    def __getitem__(self, types: object) -> _TypedResourceFactory[Any, Any]: ...
+
+    def __getitem__(self, types: object) -> _TypedResourceFactory[Any, Any]:
         del types
         return _TypedResourceFactory()
 

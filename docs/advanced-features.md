@@ -7,7 +7,7 @@ This page covers advanced features and techniques in reaktiv for building more s
 By default, reaktiv uses identity comparison (`is`) to determine if a signal's value has changed. For more complex types, you can provide custom equality functions:
 
 ```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
-from reaktiv import Signal
+from reaktiv import signal
 
 # Custom equality for dictionaries
 def dict_equal(a, b):
@@ -18,7 +18,7 @@ def dict_equal(a, b):
     return all(a[k] == b[k] for k in a)
 
 # Create a signal with custom equality
-user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
+user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
 
 # This won't trigger updates because the dictionaries are equal by value
 user.set({"name": "Alice", "age": 30})
@@ -41,9 +41,9 @@ Custom equality functions are especially useful for:
 Effects can register cleanup functions that will run before the next execution or when the effect is disposed:
 
 ```pyodide install="reaktiv" assets="no" height="30" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-counter = Signal(0)
+counter = signal(0)
 
 def counter_effect(on_cleanup):
     value = counter()
@@ -60,7 +60,7 @@ def counter_effect(on_cleanup):
     on_cleanup(cleanup)
 
 # Create and schedule the effect
-logger = Effect(counter_effect)
+logger = effect(counter_effect)
 
 # Prints: "Setting up for counter value: 0"
 
@@ -87,10 +87,10 @@ The `to_async_iter` utility lets you use signals with `async for` loops:
 
 ```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
 import asyncio
-from reaktiv import Signal, to_async_iter
+from reaktiv import signal, to_async_iter
 
 async def main():
-    counter = Signal(0)
+    counter = signal(0)
     
     # Start a task that increments the counter
     async def increment_counter():
@@ -130,11 +130,11 @@ This is useful for:
 You can selectively control which signals create dependencies using `untracked`:
 
 ```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect, untracked
+from reaktiv import signal, effect, untracked
 
-user_id = Signal(123)
-user_data = Signal({"name": "Alice"})
-show_details = Signal(False)
+user_id = signal(123)
+user_data = signal({"name": "Alice"})
+show_details = signal(False)
 
 def render_user():
     # Always creates a dependency on user_id
@@ -148,7 +148,7 @@ def render_user():
         print(f"User {id_value}")
 
 # Create and schedule the effect
-display = Effect(render_user)
+display = effect(render_user)
 
 # Update dependencies will trigger the effect
 user_id.set(456)

@@ -9,11 +9,11 @@ This guide covers common patterns, best practices, and real-world examples for u
 **Important:** Signal dependencies are established when signals are called within the effect function. Call dependent signals at the beginning of your effect to ensure proper dependency tracking.
 
 ```pyodide install="reaktiv" height="24" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-name = Signal("Alice")
-age = Signal(30)
-enabled = Signal(True)
+name = signal("Alice")
+age = signal(30)
+enabled = signal(True)
 
 def my_effect():
     # ✅ GOOD: Call all dependent signals first
@@ -26,7 +26,7 @@ def my_effect():
         print(f"{current_name} is {current_age} years old")
 
 # Keep reference to prevent GC
-effect = Effect(my_effect)
+effect = effect(my_effect)
 name.set("Grace")
 effect.dispose()
 ```
@@ -38,10 +38,10 @@ effect.dispose()
 - Reading signals early ensures they're always tracked
 
 ```pyodide install="reaktiv" assets="no" height="24" theme="github_light_default,github_dark"
-from reaktiv import Effect, Signal
+from reaktiv import effect, signal
 
-name = Signal("Alice")
-enabled = Signal(True)
+name = signal("Alice")
+enabled = signal(True)
 
 # ❌ AVOID: Conditional dependency tracking
 def problematic_effect():
@@ -63,7 +63,7 @@ def better_effect():
         print(current_name)
 
 
-effect = Effect(better_effect)
+effect = effect(better_effect)
 enabled.set(False)
 name.set("Grace")
 effect.dispose()
@@ -74,15 +74,18 @@ effect.dispose()
 **⚠️ CRITICAL:** Effects must be retained in a variable to prevent garbage collection. An effect created without storing the reference will be immediately garbage collected and won't work.
 
 ```python
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
-counter = Signal(0)
+counter = signal(0)
 
 # ❌ WRONG: Effect will be garbage collected immediately
-Effect(lambda: print(counter()))
+def print_counter():
+    print(counter())
+
+effect(print_counter)
 
 # ✅ CORRECT: Store reference to prevent GC
-effect = Effect(lambda: print(counter()))
+counter_effect = effect(print_counter)
 ```
 
 To prevent memory leaks:
@@ -92,11 +95,14 @@ To prevent memory leaks:
 3. Avoid creating effects inside loops or frequently-called functions without disposing of them
 
 ```pyodide install="reaktiv" assets="no" height="28" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect
+from reaktiv import signal, effect
 
 def create_temporary_effect(s):
     # Store reference while needed
-    temp_effect = Effect(lambda: print(f"Value: {s()}"))
+    def print_value():
+        print(f"Value: {s()}")
+
+    temp_effect = effect(print_value)
     # ... do something ...
     temp_effect.dispose()  # Clean up properly
 
@@ -105,7 +111,7 @@ class MyComponent:
     def __init__(self, s):
         self.s = s
         # Store as instance variable
-        self.effect_instance = Effect(self._render)
+        self.effect_instance = effect(self._render)
     
     def _render(self):
         print(f"Rendering: {self.s()}")
@@ -114,7 +120,7 @@ class MyComponent:
         self.effect_instance.dispose()
 
 
-signal = Signal("ready")
+signal = signal("ready")
 component = MyComponent(signal)
 signal.set("updated")
 component.destroy()
@@ -125,16 +131,16 @@ component.destroy()
 When multiple signals change, their effects are batched to avoid unnecessary executions:
 
 ```pyodide install="reaktiv" assets="no" height="25" theme="github_light_default,github_dark"
-from reaktiv import Signal, Effect, batch
+from reaktiv import signal, effect, batch
 
-x = Signal(1)
-y = Signal(2)
+x = signal(1)
+y = signal(2)
 
 def log_values():
     print(f"x: {x()}, y: {y()}")
 
 # Keep reference to prevent GC
-logger = Effect(log_values)  # Prints: "x: 1, y: 2"
+logger = effect(log_values)  # Prints: "x: 1, y: 2"
 
 # Without batching, the effect would run twice:
 # x.set(10)  # Effect runs

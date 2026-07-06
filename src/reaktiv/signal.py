@@ -33,10 +33,10 @@ class Signal(Generic[T]):
     Examples:
         Basic usage:
         ```python
-        from reaktiv import Signal
+        from reaktiv import signal
         
         # Create a signal with an initial value
-        counter = Signal(0)
+        counter = signal(0)
         
         # Get the current value
         value = counter()  # 0
@@ -50,13 +50,13 @@ class Signal(Generic[T]):
         
         Custom equality:
         ```python
-        from reaktiv import Signal
+        from reaktiv import signal
         
         # Custom equality function for dictionaries
         def dict_equal(a, b):
             return isinstance(a, dict) and isinstance(b, dict) and a == b
         
-        user = Signal({"name": "Alice", "age": 30}, equal=dict_equal)
+        user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
         
         # This won't trigger updates (same key-value pairs)
         user.set({"name": "Alice", "age": 30})
@@ -67,10 +67,10 @@ class Signal(Generic[T]):
         
         Readonly wrapper:
         ```python
-        from reaktiv import Signal
+        from reaktiv import signal
         
         # Internal writable signal
-        _counter = Signal(0)
+        _counter = signal(0)
         
         # Expose readonly view
         counter = _counter.as_readonly()
@@ -162,7 +162,7 @@ class Signal(Generic[T]):
             
         Examples:
             ```python
-            counter = Signal(42)
+            counter = signal(42)
             value = counter.get()  # 42
             # Or use the callable syntax
             value = counter()      # 42
@@ -198,15 +198,15 @@ class Signal(Generic[T]):
             
         Examples:
             ```python
-            counter = Signal(0)
+            counter = signal(0)
             counter.set(5)
             print(counter())  # 5
             
             # Setting the same value (by identity) won't trigger updates
             obj = {"x": 1}
-            signal = Signal(obj)
-            signal.set(obj)  # No notification
-            signal.set({"x": 1})  # Notification (different object)
+            value = signal(obj)
+            value.set(obj)  # No notification
+            value.set({"x": 1})  # Notification (different object)
             ```
         """
         debug_log(
@@ -282,7 +282,7 @@ class Signal(Generic[T]):
             
         Examples:
             ```python
-            counter = Signal(0)
+            counter = signal(0)
             counter.update(lambda x: x + 1)
             print(counter())  # 1
             
@@ -290,7 +290,7 @@ class Signal(Generic[T]):
             print(counter())  # 2
             
             # Works with any type
-            name = Signal("Alice")
+            name = signal("Alice")
             name.update(lambda s: s.upper())
             print(name())  # "ALICE"
             ```
@@ -318,7 +318,7 @@ class Signal(Generic[T]):
         Examples:
             ```python
             # Keep internal signal private
-            _counter = Signal(0)
+            _counter = signal(0)
             
             # Expose readonly view
             counter = _counter.as_readonly()
@@ -337,6 +337,20 @@ class Signal(Generic[T]):
         return self._readonly_cache
 
 
+def signal(
+    value: T,
+    /,
+    *,
+    equal: Optional[Callable[[T, T], bool]] = None,
+) -> Signal[T]:
+    """Create a writable signal.
+
+    Lowercase factory-style spelling for user code that prefers function-based
+    primitive creation. Equivalent to ``Signal(value, equal=equal)``.
+    """
+    return Signal(value, equal=equal)
+
+
 class ReadonlySignal(Generic[T]):
     """A readonly wrapper around a Signal that prevents modification.
     
@@ -349,9 +363,9 @@ class ReadonlySignal(Generic[T]):
         
     Examples:
         ```python
-        from reaktiv import Signal
+        from reaktiv import signal
         
-        _counter = Signal(0)
+        _counter = signal(0)
         counter = _counter.as_readonly()
         
         # Can read
@@ -399,13 +413,14 @@ class ComputeSignal(Signal[T]):
     Examples:
         Basic computed signal:
         ```python
-        from reaktiv import Signal, Computed
+        from reaktiv import computed, signal
         
-        first_name = Signal("John")
-        last_name = Signal("Doe")
+        first_name = signal("John")
+        last_name = signal("Doe")
         
-        # Create computed signal
-        full_name = Computed(lambda: f"{first_name()} {last_name()}")
+        @computed
+        def full_name():
+            return f"{first_name()} {last_name()}"
         
         print(full_name())  # "John Doe"
         
@@ -415,16 +430,16 @@ class ComputeSignal(Signal[T]):
         
         Lazy computation:
         ```python
-        from reaktiv import Signal, Computed
+        from reaktiv import computed, signal
         
-        x = Signal(10)
-        y = Signal(20)
+        x = signal(10)
+        y = signal(20)
         
         def expensive_computation():
             print("Computing...")
             return x() * y()
         
-        result = Computed(expensive_computation)
+        result = computed(expensive_computation)
         
         # Nothing happens yet - computation is lazy
         
@@ -443,12 +458,12 @@ class ComputeSignal(Signal[T]):
         
         Decorator pattern:
         ```python
-        from reaktiv import Signal, Computed
+        from reaktiv import computed, signal
         
-        price = Signal(100)
-        quantity = Signal(2)
+        price = signal(100)
+        quantity = signal(2)
         
-        @Computed
+        @computed
         def total():
             return price() * quantity()
         
@@ -457,12 +472,14 @@ class ComputeSignal(Signal[T]):
         
         Error handling:
         ```python
-        from reaktiv import Signal, Computed
+        from reaktiv import computed, signal
         
-        x = Signal(10)
+        x = signal(10)
         
         # Computed signal with potential error
-        result = Computed(lambda: 100 / x())
+        @computed
+        def result():
+            return 100 / x()
         
         print(result())  # 10.0 (100 / 10)
         
@@ -835,7 +852,13 @@ class _ComputedFactory:
 
         return decorator
 
-    def __getitem__(self, value_type: type[T]) -> _TypedComputedFactory[T]:
+    @overload
+    def __getitem__(self, value_type: type[T]) -> _TypedComputedFactory[T]: ...
+
+    @overload
+    def __getitem__(self, value_type: object) -> _TypedComputedFactory[Any]: ...
+
+    def __getitem__(self, value_type: object) -> _TypedComputedFactory[Any]:
         del value_type
         return _TypedComputedFactory()
 

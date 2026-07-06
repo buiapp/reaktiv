@@ -1,27 +1,32 @@
 import asyncio
-from reaktiv import batch, Signal, Computed, Effect
+from typing import Dict
+
+from reaktiv import Signal, batch, computed, effect, signal
 
 
-async def main():
+Shares = Dict[str, int]
+
+
+async def main() -> None:
     # Real-time stock prices
-    apple_price = Signal(195.00)
-    google_price = Signal(2750.00)
+    apple_price = signal(195.00)
+    google_price = signal(2750.00)
 
     # User's portfolio
-    shares = Signal({"AAPL": 100, "GOOGL": 50})
+    shares: Signal[Shares] = signal({"AAPL": 100, "GOOGL": 50})
 
     # Computed total portfolio value
-    portfolio_value = Computed(
-        lambda: (shares()["AAPL"] * apple_price() + shares()["GOOGL"] * google_price())
-    )
+    @computed
+    def portfolio_value() -> float:
+        return shares()["AAPL"] * apple_price() + shares()["GOOGL"] * google_price()
 
     # Price alert system
-    def check_alerts():
+    def check_alerts() -> None:
         # create a snapshot of the signal values
         apple_price_value = apple_price()
         google_price_value = google_price()
 
-        async def print_alert():
+        async def print_alert() -> None:
             if apple_price_value > 200:
                 print("📈 AAPL alert: Above $200!")
             if google_price_value < 2700:
@@ -31,7 +36,7 @@ async def main():
         asyncio.create_task(print_alert())
 
     # Automatic updates
-    async def live_updates():
+    async def live_updates() -> None:
         # Simulate real-time updates
         while True:
             await asyncio.sleep(1)
@@ -42,12 +47,12 @@ async def main():
             print(f"🍏 AAPL: ${apple_price():,.2f}  🌐 GOOGL: ${google_price():,.2f}")
 
     # Track portfolio value
-    def monitor_portfolio():
+    def monitor_portfolio() -> None:
         print(f"💰 Current value: ${portfolio_value():,.2f}")
 
     # Set up effects
-    _alerts_effect = Effect(check_alerts)
-    _portfolio_effect = Effect(monitor_portfolio)
+    _alerts_effect = effect(check_alerts)
+    _portfolio_effect = effect(monitor_portfolio)
 
     # Start live updates
     _updates_task = asyncio.create_task(live_updates())

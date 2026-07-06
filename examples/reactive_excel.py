@@ -1,21 +1,29 @@
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 from time import sleep
 
 
 # Define input cells (cells you can edit)
-A1 = Signal(10)  # Cell A1
-B1 = Signal(20)  # Cell B1
-C1 = Signal(30)  # Cell C1
+A1 = signal(10)  # Cell A1
+B1 = signal(20)  # Cell B1
+C1 = signal(30)  # Cell C1
 
 # Define computed (formula) cells:
 # D1 simulates "=SUM(A1, B1, C1)"
-D1 = Computed(lambda: A1() + B1() + C1())
+@computed
+def D1():
+    return A1() + B1() + C1()
+
 
 # E1 simulates "=AVERAGE(A1, B1, C1)"
-E1 = Computed(lambda: (A1() + B1() + C1()) / 3)
+@computed
+def E1():
+    return (A1() + B1() + C1()) / 3
+
 
 # F1 simulates "=PRODUCT(A1, B1, C1)"
-F1 = Computed(lambda: A1() * B1() * C1())
+@computed
+def F1():
+    return A1() * B1() * C1()
 
 
 # Effect to print a simple spreadsheet view whenever any cell changes.
@@ -32,7 +40,7 @@ def print_spreadsheet():
 
 # Schedule the spreadsheet printing effect.
 # (Assigning it to a variable ensures it won't be garbage collected.)
-_sheet_effect = Effect(print_spreadsheet)
+_sheet_effect = effect(print_spreadsheet)
 
 # Simulate editing cells with delays so the editing messages are visible.
 sleep(2)

@@ -1,22 +1,44 @@
 #!/usr/bin/env python3
 """Reactive napkin calculator using reaktiv"""
 
-from reaktiv import Signal as S, Computed as C, Effect as E
+from reaktiv import computed, effect, signal
 
 # Input values
-salary = S(50000)
-bonus = S(5000)
-tax_rate = S(0.22)
-expenses = S(2500)
-months = S(12)
+salary = signal(50000)
+bonus = signal(5000)
+tax_rate = signal(0.22)
+expenses = signal(2500)
+months = signal(12)
 
 # Derived calculations
-income = C(lambda: salary() + bonus())
-taxes = C(lambda: income() * tax_rate())
-net = C(lambda: income() - taxes())
-annual_expenses = C(lambda: expenses() * months())
-savings = C(lambda: net() - annual_expenses())
-savings_rate = C(lambda: savings() / net() * 100)
+@computed
+def income():
+    return salary() + bonus()
+
+
+@computed
+def taxes():
+    return income() * tax_rate()
+
+
+@computed
+def net():
+    return income() - taxes()
+
+
+@computed
+def annual_expenses():
+    return expenses() * months()
+
+
+@computed
+def savings():
+    return net() - annual_expenses()
+
+
+@computed
+def savings_rate():
+    return savings() / net() * 100
 
 
 def display():
@@ -31,7 +53,7 @@ def display():
     print(f"{'Savings Rate':<20} {f'{savings_rate():.1f}%':>10}")
 
 
-table = E(display)
+table = effect(display)
 
 print("\n--- Initial Values ---")
 

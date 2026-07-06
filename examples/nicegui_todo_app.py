@@ -10,36 +10,47 @@ To run this example:
 2. python nicegui_todo_app.py
 """
 
-from reaktiv import Signal, Computed, Effect
+from typing import Literal, TypedDict
+
+from reaktiv import ReactiveModel, computed, effect, field
 from nicegui import ui
 
 
+class Todo(TypedDict):
+    text: str
+    completed: bool
+
+
+TodoFilter = Literal["all", "active", "completed"]
+
+
 # State module - completely independent from UI
-class TodoState:
-    def __init__(self):
-        self.todos = Signal([])
-        self.filter = Signal("all")  # all, active, completed
+class TodoState(ReactiveModel):
+    todos = field[list[Todo]](factory=list)
+    filter = field[TodoFilter]("all")
 
-        self.filtered_todos = Computed(
-            lambda: [
-                todo
-                for todo in self.todos()
-                if self.filter() == "all"
-                or (self.filter() == "active" and not todo["completed"])
-                or (self.filter() == "completed" and todo["completed"])
-            ]
-        )
-        self.active_count = Computed(
-            lambda: sum(1 for todo in self.todos() if not todo["completed"])
-        )
-        self.completed_count = Computed(
-            lambda: sum(1 for todo in self.todos() if todo["completed"])
-        )
+    @computed
+    def filtered_todos(self) -> list[Todo]:
+        return [
+            todo
+            for todo in self.todos()
+            if self.filter() == "all"
+            or (self.filter() == "active" and not todo["completed"])
+            or (self.filter() == "completed" and todo["completed"])
+        ]
 
-    def add_todo(self, text):
+    @computed
+    def active_count(self) -> int:
+        return sum(1 for todo in self.todos() if not todo["completed"])
+
+    @computed
+    def completed_count(self) -> int:
+        return sum(1 for todo in self.todos() if todo["completed"])
+
+    def add_todo(self, text: str) -> None:
         self.todos.update(lambda todos: todos + [{"text": text, "completed": False}])
 
-    def toggle_todo(self, index):
+    def toggle_todo(self, index: int) -> None:
         self.todos.update(
             lambda todos: [
                 {**todo, "completed": not todo["completed"]} if i == index else todo
@@ -47,7 +58,7 @@ class TodoState:
             ]
         )
 
-    def clear_completed(self):
+    def clear_completed(self) -> None:
         self.todos.update(
             lambda todos: [todo for todo in todos if not todo["completed"]]
         )
@@ -71,7 +82,7 @@ with ui.card():
     # Todo list - connected to state via Effect
     todo_container = ui.column()
 
-    def render_todos():
+    def render_todos() -> None:
         todo_container.clear()
         for i, todo in enumerate(state.filtered_todos()):
             with todo_container:
@@ -85,7 +96,7 @@ with ui.card():
                     )
 
     # Effect connects state to UI
-    render_effect = Effect(render_todos)
+    render_effect = effect(render_todos)
 
     # Filter controls
     with ui.row():
@@ -96,10 +107,12 @@ with ui.card():
 
     # Status display - automatically updates
     status_label = ui.label()
-    status_effect = Effect(
-        lambda: status_label.set_text(
+
+    def update_status() -> None:
+        status_label.set_text(
             f"{state.active_count()} active, {state.completed_count()} completed"
         )
-    )
+
+    status_effect = effect(update_status)
 
 ui.run()

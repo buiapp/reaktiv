@@ -38,9 +38,9 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
         Basic usage:
         ```python
         import asyncio
-        from reaktiv import Signal, to_async_iter
+        from reaktiv import signal, to_async_iter
         
-        counter = Signal(0)
+        counter = signal(0)
         
         async def watch_counter():
             async for value in to_async_iter(counter):
@@ -73,9 +73,9 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
         Skip initial value:
         ```python
         import asyncio
-        from reaktiv import Signal, to_async_iter
+        from reaktiv import signal, to_async_iter
         
-        status = Signal("idle")
+        status = signal("idle")
         
         async def watch_status():
             # Only yield on changes, not initial value
@@ -100,9 +100,9 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
         Integration with async frameworks:
         ```python
         import asyncio
-        from reaktiv import Signal, to_async_iter
+        from reaktiv import signal, to_async_iter
         
-        data_signal = Signal(None)
+        data_signal = signal(None)
         
         async def process_data_stream():
             async for data in to_async_iter(data_signal):

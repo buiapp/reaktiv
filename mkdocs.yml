@@ -79,15 +79,15 @@ nav:
     - Advanced Features: advanced-features.md
     - Patterns & Best Practices: patterns-and-best-practices.md
     - Resource Guide: resource-guide.md
-  - API Reference:
-    - Signal: api/signal.md
-    - Computed Signal: api/compute-signal.md
-    - Effect: api/effect.md
-    - ReactiveModel: api/reactive-model.md
-    - LinkedSignal: api/linked-signal.md
-    - Resource: api/resource-signal.md
-    - Utils: api/utils.md
   - Examples: examples/index.md
+  - API Reference:
+    - signal: api/signal.md
+    - computed: api/compute-signal.md
+    - effect: api/effect.md
+    - ReactiveModel: api/reactive-model.md
+    - linked: api/linked-signal.md
+    - resource: api/resource-signal.md
+    - Utils: api/utils.md
 
 watch:
   - docs

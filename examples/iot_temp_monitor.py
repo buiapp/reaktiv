@@ -1,17 +1,27 @@
 import random
-from reaktiv import Signal, Computed, Effect, batch
+from reaktiv import signal, computed, effect, batch
 from time import sleep
 
 
 # Initialize sensor readings (in °C)
-sensor1 = Signal(20.0)
-sensor2 = Signal(21.0)
-sensor3 = Signal(19.5)
+sensor1 = signal(20.0)
+sensor2 = signal(21.0)
+sensor3 = signal(19.5)
 
 # Compute aggregates: average, minimum, and maximum temperature.
-avg_temp = Computed(lambda: (sensor1() + sensor2() + sensor3()) / 3)
-min_temp = Computed(lambda: min(sensor1(), sensor2(), sensor3()))
-max_temp = Computed(lambda: max(sensor1(), sensor2(), sensor3()))
+@computed
+def avg_temp():
+    return (sensor1() + sensor2() + sensor3()) / 3
+
+
+@computed
+def min_temp():
+    return min(sensor1(), sensor2(), sensor3())
+
+
+@computed
+def max_temp():
+    return max(sensor1(), sensor2(), sensor3())
 
 
 # Effect to display current sensor readings and computed statistics.
@@ -24,7 +34,7 @@ def display_aggregates():
 
 
 # Schedule the display effect.
-_display_effect = Effect(display_aggregates)
+_display_effect = effect(display_aggregates)
 
 
 # Effect to trigger alerts when values exceed safe limits.
@@ -38,7 +48,7 @@ def temperature_alert():
 
 
 # Schedule the alert effect.
-_alert_effect = Effect(temperature_alert)
+_alert_effect = effect(temperature_alert)
 
 
 def update_sensor(sensor, sensor_name: str):

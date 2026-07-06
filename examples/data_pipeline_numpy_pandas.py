@@ -11,7 +11,7 @@ Run with:
 
 import numpy as np
 import pandas as pd
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 
 def create_data() -> pd.DataFrame:
@@ -30,44 +30,42 @@ def main():
     print("Reactive Data Pipeline Example")
 
     # Reactive data sources
-    data = Signal(create_data())
-    window_size = Signal(10)
-    threshold = Signal(2.0)
+    data = signal(create_data())
+    window_size = signal(10)
+    threshold = signal(2.0)
 
     # Stage 1: Basic preprocessing - LAZY: not computed until accessed
-    basic_stats = Computed(
-        lambda: data().assign(
+    @computed
+    def basic_stats():
+        return data().assign(
             temp_mean=data()["temperature"].mean(),
             temp_std=data()["temperature"].std(),
             temp_smooth=data()["temperature"].rolling(window_size()).mean(),
         )
-    )
 
-    # Stage 2: Z-score calculation - depends only on basic_stats
-    with_zscore = Computed(
-        lambda: basic_stats().assign(
+    @computed
+    def with_zscore():
+        return basic_stats().assign(
             temp_zscore=(basic_stats()["temperature"] - basic_stats()["temp_mean"])
             / basic_stats()["temp_std"]
         )
-    )
 
     # Stage 3: Outlier detection - depends on with_zscore AND threshold
-    with_outliers = Computed(
-        lambda: with_zscore().assign(
+    @computed
+    def with_outliers():
+        return with_zscore().assign(
             is_outlier=np.abs(with_zscore()["temp_zscore"]) > threshold()
         )
-    )
 
     # Stage 4: Summary analysis - MEMOIZED: result cached until dependencies change
-    def calculate_summary():
+    @computed
+    def summary():
         df = with_outliers()
         return {
             "mean_temp": df["temperature"].mean(),
             "outliers": df["is_outlier"].sum(),
             "sensor_counts": df.groupby("sensor").size().to_dict(),
         }
-
-    summary = Computed(calculate_summary)
 
     # Auto-updating report - triggers initial computation
     def print_summary():
@@ -76,7 +74,7 @@ def main():
             f"Mean: {s['mean_temp']:.1f}°C, Outliers: {s['outliers']}, Sensors: {s['sensor_counts']}"
         )
 
-    _report = Effect(print_summary)
+    _report = effect(print_summary)
 
     # Demonstrate fine-grained reactive updates
     print(

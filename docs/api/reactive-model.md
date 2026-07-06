@@ -4,6 +4,14 @@
 class. Every instance owns an independent graph of writable fields, computed
 values, linked state, effects, and resources.
 
+!!! note "Primitive naming"
+
+    Reactive models use the lowercase primitive API: `field(...)`,
+    `@computed`, `@linked`, `@effect`, and `@resource`. Uppercase names such as
+    `Signal`, `ComputeSignal`, `LinkedSignal`, `Effect`, and `Resource` are
+    concrete classes or compatibility entry points, not the style to copy for
+    new model code.
+
 Use it when a graph represents an application concept such as a form, store,
 view model, workflow, or service.
 
@@ -43,7 +51,7 @@ The fields, formulas, and side effects stay together, while every
 
 ## Fields
 
-`field(default)` declares a writable `Signal` owned by each model instance:
+`field(default)` declares a writable signal owned by each model instance:
 
 ```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
 from reaktiv import ReactiveModel, field

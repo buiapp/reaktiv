@@ -17,26 +17,34 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 from matplotlib.patches import Rectangle
 
-from reaktiv import Signal, Computed, Effect, batch
+from reaktiv import ReactiveModel, batch, computed, effect, field
 
 
-class ReactiveMatrixVisualizer:
+class ReactiveMatrixVisualizer(ReactiveModel):
+    # Input parameters - changing these triggers recalculation
+    matrix_size = field(100)
+    seed = field(42)
+    noise_scale = field(0.5)
+    filter_size = field(5)
+
+    # Visualization parameters - changing these doesn't trigger recalculation
+    colormap_name = field("viridis")
+    show_contour = field(False)
+    contour_levels = field(10)
+    title_text = field("Reactive Matrix Visualization")
+
+    # UI and computation state
+    status_message = field("")
+    is_computing = field(False)
+    computing_matrix = field(False)
+    computing_filter = field(False)
+    computation_status = field("")
+    matrix_computation_time = field(0.0)
+    filter_computation_time = field(0.0)
+    last_computation_time = field(0.0)
+
     def __init__(self):
-        # Input parameters - changing these triggers recalculation
-        self.matrix_size = Signal(100)
-        self.seed = Signal(42)
-        self.noise_scale = Signal(0.5)
-        self.filter_size = Signal(5)
-
-        # Visualization parameters - changing these doesn't trigger recalculation
-        self.colormap_name = Signal("viridis")
-        self.show_contour = Signal(False)
-        self.contour_levels = Signal(10)
-        self.title_text = Signal("Reactive Matrix Visualization")
-
-        # Add status signals for UI feedback
-        self.status_message = Signal("")
-        self.is_computing = Signal(False)
+        super().__init__()
 
         # Setup the figure with a fixed layout
         self.fig = plt.figure(figsize=(10, 8))
@@ -73,53 +81,50 @@ class ReactiveMatrixVisualizer:
         )
         self.ax.add_patch(self.highlight_rect)
 
-        # Add computation state signals
-        self.computing_matrix = Signal(False)
-        self.computing_filter = Signal(False)
-        self.computation_status = Signal("")
-
-        # Combine all input parameters into a single computed value
-        self.input_parameters = Computed(
-            lambda: {
-                "size": self.matrix_size(),
-                "seed": self.seed(),
-                "noise": self.noise_scale(),
-                "filter_size": self.filter_size(),
-            }
-        )
-
-        # Computation time tracking
-        self.matrix_computation_time = Signal(0.0)
-        self.filter_computation_time = Signal(0.0)
-        self.last_computation_time = Signal(0.0)  # Combined time
-
-        # Now the expensive computations are TRULY pure functions (no signal setting)
-        self.random_matrix_with_time = Computed(self._generate_random_matrix_pure)
-        self.filtered_matrix_with_time = Computed(self._apply_filter_pure)
-
-        # Computed signals for just the matrix data
-        self.random_matrix = Computed(lambda: self.random_matrix_with_time()["matrix"])
-        self.filtered_matrix = Computed(
-            lambda: self.filtered_matrix_with_time()["filtered"]
-        )
-
         # Effects to handle UI updates and status messages
-        self._status_effect = Effect(self._update_status_display)
+        self._status_effect = effect(self._update_status_display)
 
         # Effects to handle setting time signals
-        self._matrix_time_effect = Effect(self._update_matrix_time)
-        self._filter_time_effect = Effect(self._update_filter_time)
-        self._total_time_effect = Effect(self._update_total_time)
+        self._matrix_time_effect = effect(self._update_matrix_time)
+        self._filter_time_effect = effect(self._update_filter_time)
+        self._total_time_effect = effect(self._update_total_time)
 
         # Add effects to track computation status
-        self._matrix_status_effect = Effect(self._track_matrix_computation)
-        self._filter_status_effect = Effect(self._track_filter_computation)
+        self._matrix_status_effect = effect(self._track_matrix_computation)
+        self._filter_status_effect = effect(self._track_filter_computation)
 
         # Add UI controls
         self._setup_controls()
 
         # Effect to update the plot when computed values or visualization params change
-        self._plot_effect = Effect(self._update_plot)
+        self._plot_effect = effect(self._update_plot)
+
+    @computed
+    def input_parameters(self):
+        return {
+            "size": self.matrix_size(),
+            "seed": self.seed(),
+            "noise": self.noise_scale(),
+            "filter_size": self.filter_size(),
+        }
+
+    # Now the expensive computations are TRULY pure functions (no signal setting)
+    @computed
+    def random_matrix_with_time(self):
+        return self._generate_random_matrix_pure()
+
+    @computed
+    def filtered_matrix_with_time(self):
+        return self._apply_filter_pure()
+
+    # Computed signals for just the matrix data
+    @computed
+    def random_matrix(self):
+        return self.random_matrix_with_time()["matrix"]
+
+    @computed
+    def filtered_matrix(self):
+        return self.filtered_matrix_with_time()["filtered"]
 
     def _generate_random_matrix_pure(self):
         """Generate a random matrix - TRULY PURE function (no signal setting)"""

@@ -18,40 +18,48 @@ This section contains practical examples of using reaktiv in real-world scenario
 Managing configuration from multiple sources (defaults, user settings, environment) with automatic priority resolution:
 
 ```pyodide install="reaktiv" height="35" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Different configuration sources
-default_config = Signal({
+default_config = signal({
     "timeout": 30,
     "retries": 3,
     "debug": False,
     "log_level": "INFO"
 })
 
-user_config = Signal({})
-env_config = Signal({})
+user_config = signal({})
+env_config = signal({})
 
-# Effective config merges all sources with proper priority
-effective_config = Computed(lambda: {
-    **default_config(),
-    **user_config(),
-    **env_config()  # Environment overrides everything
-})
+@computed
+def effective_config():
+    return {
+        **default_config(),
+        **user_config(),
+        **env_config(),  # Environment overrides everything
+    }
 
 # Derived settings that automatically update when any config changes
-connection_settings = Computed(lambda: {
-    "connect_timeout": effective_config()["timeout"],
-    "max_attempts": effective_config()["retries"],
-    "verbose": effective_config()["debug"]
-})
+@computed
+def connection_settings():
+    return {
+        "connect_timeout": effective_config()["timeout"],
+        "max_attempts": effective_config()["retries"],
+        "verbose": effective_config()["debug"],
+    }
 
-logger_settings = Computed(lambda: {
-    "level": effective_config()["log_level"],
-    "debug_mode": effective_config()["debug"]
-})
+@computed
+def logger_settings():
+    return {
+        "level": effective_config()["log_level"],
+        "debug_mode": effective_config()["debug"],
+    }
 
 # Effect to log when settings change
-config_monitor = Effect(lambda: print(f"Config updated: {effective_config()}"))
+def print_config():
+    print(f"Config updated: {effective_config()}")
+
+config_monitor = effect(print_config)
 
 # Update a specific config source
 user_config.set({"timeout": 60, "log_level": "DEBUG"})
@@ -72,30 +80,41 @@ config_monitor.dispose()
 Building a multi-stage data processing pipeline where each step depends on the previous one:
 
 ```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 import json
 
 # Raw data source
-raw_data = Signal('{"values": [1, 2, 3, -4, 5, -6]}')
+raw_data = signal('{"values": [1, 2, 3, -4, 5, -6]}')
 
 # Parsing stage
-parsed_data = Computed(lambda: json.loads(raw_data()))
+@computed
+def parsed_data():
+    return json.loads(raw_data())
 
 # Extraction stage
-values = Computed(lambda: parsed_data()["values"])
+@computed
+def values():
+    return parsed_data()["values"]
 
 # Filtering stage
-positive_values = Computed(lambda: [x for x in values() if x > 0])
+@computed
+def positive_values():
+    return [x for x in values() if x > 0]
 
 # Transformation stage
-squared_values = Computed(lambda: [x * x for x in positive_values()])
+@computed
+def squared_values():
+    return [x * x for x in positive_values()]
 
 # Aggregation stage
-stats = Computed(lambda: {
-    "count": len(squared_values()),
-    "sum": sum(squared_values()),
-    "average": sum(squared_values()) / len(squared_values()) if squared_values() else 0
-})
+@computed
+def stats():
+    values = squared_values()
+    return {
+        "count": len(values),
+        "sum": sum(values),
+        "average": sum(values) / len(values) if values else 0,
+    }
 
 print(stats())
 # {'count': 4, 'sum': 39, 'average': 9.75}
@@ -111,31 +130,36 @@ print(stats())
 Smart cache invalidation system that automatically refreshes cached data when dependencies change:
 
 ```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 import time
 
 # Simulated database
 db = {"user1": {"name": "Alice"}, "user2": {"name": "Bob"}}
 
 # Cache version signal - incremented when database changes
-cache_version = Signal(1)
+cache_version = signal(1)
 
 # Active user ID
-user_id = Signal("user1")
+user_id = signal("user1")
 
 # This computed value acts as our cache with automatic invalidation
-user_data = Computed(lambda: {
-    "id": user_id(),
-    "data": db[user_id()],  # In real code, this would be a database query
-    "cached_at": time.time(),
-    "version": cache_version()  # Including version causes cache refresh when version changes
-})
+@computed
+def user_data():
+    return {
+        "id": user_id(),
+        "data": db[user_id()],  # In real code, this would be a database query
+        "cached_at": time.time(),
+        "version": cache_version(),  # Including version causes cache refresh when version changes
+    }
 
 # Cache monitor
-cache_logger = Effect(lambda: print(
-    f"Cache data for user {user_data()['id']}: {user_data()['data']} "
-    f"(version: {user_data()['version']})"
-))
+def print_cache_entry():
+    print(
+        f"Cache data for user {user_data()['id']}: {user_data()['data']} "
+        f"(version: {user_data()['version']})"
+    )
+
+cache_logger = effect(print_cache_entry)
 
 # Change user - cache recomputes automatically
 user_id.set("user2")
@@ -151,62 +175,73 @@ cache_logger.dispose()
 Complex form validation with interdependent fields:
 
 ```pyodide install="reaktiv" assets="no" height="42" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Form fields
-username = Signal("")
-password = Signal("")
-password_confirm = Signal("")
-email = Signal("")
-terms_accepted = Signal(False)
+username = signal("")
+password = signal("")
+password_confirm = signal("")
+email = signal("")
+terms_accepted = signal(False)
 
 # Individual field validations
-username_error = Computed(lambda: 
-    "Username is required" if not username() else
-    "Username must be at least 3 characters" if len(username()) < 3 else
-    None
-)
+@computed
+def username_error():
+    if not username():
+        return "Username is required"
+    if len(username()) < 3:
+        return "Username must be at least 3 characters"
+    return None
 
-password_error = Computed(lambda:
-    "Password is required" if not password() else
-    "Password must be at least 8 characters" if len(password()) < 8 else
-    None
-)
+@computed
+def password_error():
+    if not password():
+        return "Password is required"
+    if len(password()) < 8:
+        return "Password must be at least 8 characters"
+    return None
 
-password_match_error = Computed(lambda:
-    "Passwords don't match" if password() != password_confirm() else None
-)
+@computed
+def password_match_error():
+    return "Passwords don't match" if password() != password_confirm() else None
 
-email_error = Computed(lambda:
-    "Email is required" if not email() else
-    "Invalid email format" if "@" not in email() else
-    None
-)
+@computed
+def email_error():
+    if not email():
+        return "Email is required"
+    if "@" not in email():
+        return "Invalid email format"
+    return None
 
-terms_error = Computed(lambda:
-    "You must accept the terms" if not terms_accepted() else None
-)
+@computed
+def terms_error():
+    return "You must accept the terms" if not terms_accepted() else None
 
 # Combined form validation status
-form_errors = Computed(lambda: {
-    "username": username_error(),
-    "password": password_error(),
-    "password_confirm": password_match_error(),
-    "email": email_error(),
-    "terms": terms_error()
-})
+@computed
+def form_errors():
+    return {
+        "username": username_error(),
+        "password": password_error(),
+        "password_confirm": password_match_error(),
+        "email": email_error(),
+        "terms": terms_error(),
+    }
 
-has_errors = Computed(lambda: any(
-    error is not None for error in form_errors().values()
-))
+@computed
+def has_errors():
+    return any(error is not None for error in form_errors().values())
 
 # Form submission state
-can_submit = Computed(lambda: not has_errors() and terms_accepted())
+@computed
+def can_submit():
+    return not has_errors() and terms_accepted()
 
 # Monitor submission state
-submission_monitor = Effect(lambda: print(
-    f"Form can be submitted: {can_submit()}"
-))
+def print_submission_state():
+    print(f"Form can be submitted: {can_submit()}")
+
+submission_monitor = effect(print_submission_state)
 
 # User interaction simulation
 username.set("bob")
@@ -296,57 +331,68 @@ store.dispose()
 Building a reactive system monitoring dashboard:
 
 ```pyodide install="reaktiv" assets="no" height="45" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # System metrics (in a real app, these would be updated from actual monitoring)
-cpu_usage = Signal(25.0)  # percentage
-memory_usage = Signal(40.0)  # percentage
-disk_usage = Signal(60.0)  # percentage
-error_count = Signal(0)
-request_count = Signal(1000)
+cpu_usage = signal(25.0)  # percentage
+memory_usage = signal(40.0)  # percentage
+disk_usage = signal(60.0)  # percentage
+error_count = signal(0)
+request_count = signal(1000)
 
 # Derived metrics
-error_rate = Computed(lambda: 
-    (error_count() / request_count() * 100) if request_count() > 0 else 0
-)
+@computed
+def error_rate():
+    return (error_count() / request_count() * 100) if request_count() > 0 else 0
 
 # Status thresholds
-cpu_status = Computed(lambda:
-    "critical" if cpu_usage() > 90 else
-    "warning" if cpu_usage() > 70 else
-    "normal"
-)
+@computed
+def cpu_status():
+    if cpu_usage() > 90:
+        return "critical"
+    if cpu_usage() > 70:
+        return "warning"
+    return "normal"
 
-memory_status = Computed(lambda:
-    "critical" if memory_usage() > 90 else
-    "warning" if memory_usage() > 70 else
-    "normal"
-)
+@computed
+def memory_status():
+    if memory_usage() > 90:
+        return "critical"
+    if memory_usage() > 70:
+        return "warning"
+    return "normal"
 
-disk_status = Computed(lambda:
-    "critical" if disk_usage() > 90 else
-    "warning" if disk_usage() > 80 else
-    "normal"
-)
+@computed
+def disk_status():
+    if disk_usage() > 90:
+        return "critical"
+    if disk_usage() > 80:
+        return "warning"
+    return "normal"
 
-error_status = Computed(lambda:
-    "critical" if error_rate() > 5 else
-    "warning" if error_rate() > 1 else
-    "normal"
-)
+@computed
+def error_status():
+    if error_rate() > 5:
+        return "critical"
+    if error_rate() > 1:
+        return "warning"
+    return "normal"
 
 # Overall system status (worst of any individual status)
-system_status = Computed(lambda: 
-    "critical" if any(s() == "critical" for s in (cpu_status, memory_status, disk_status, error_status)) else
-    "warning" if any(s() == "warning" for s in (cpu_status, memory_status, disk_status, error_status)) else
-    "normal"
-)
+@computed
+def system_status():
+    statuses = (cpu_status, memory_status, disk_status, error_status)
+    if any(status() == "critical" for status in statuses):
+        return "critical"
+    if any(status() == "warning" for status in statuses):
+        return "warning"
+    return "normal"
 
 # Alert system
 def alert_system():
     status = system_status()
     components = []
-    
+
     if cpu_status() != "normal":
         components.append(f"CPU: {cpu_usage():.1f}%")
     if memory_status() != "normal":
@@ -355,7 +401,7 @@ def alert_system():
         components.append(f"Disk: {disk_usage():.1f}%")
     if error_status() != "normal":
         components.append(f"Error rate: {error_rate():.2f}%")
-    
+
     if status != "normal":
         print(f"❗ System status: {status.upper()}")
         print(f"   Affected components: {', '.join(components)}")
@@ -363,7 +409,7 @@ def alert_system():
         print("✓ System status: NORMAL - All systems operational")
 
 # Monitor status changes
-status_monitor = Effect(alert_system)
+status_monitor = effect(alert_system)
 
 # Initial output: "✓ System status: NORMAL - All systems operational"
 

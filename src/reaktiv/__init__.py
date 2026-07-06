@@ -2,7 +2,7 @@
 
 from .context import untracked
 from .scheduler import batch
-from .signal import Signal, Computed, computed, ComputeSignal, ReadonlySignal
+from .signal import Signal, signal, Computed, computed, ComputeSignal, ReadonlySignal
 from .linked import LinkedSignal, Linked, linked, PreviousState
 from .effect import Effect, effect
 from .model import ReactiveModel, field
@@ -26,6 +26,7 @@ T = TypeVar("T")
 __version__ = "0.23.0"
 __all__ = [
     "Signal",
+    "signal",
     "ReadonlySignal",
     "ComputeSignal",
     "Computed",

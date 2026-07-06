@@ -7,77 +7,93 @@ This example demonstrates the basics of Resource in the simplest way possible:
 """
 
 import asyncio
-from reaktiv import Signal, Resource
+from typing import TypedDict
+
+from reaktiv import Resource, ResourceLoaderParams, resource, signal
+
+
+class UserParams(TypedDict):
+    id: int
+
+
+class User(TypedDict):
+    id: int
+    name: str
+    email: str
 
 
 # Simulated API function
-async def fetch_user_from_api(user_id: int):
+async def fetch_user_from_api(user_id: int) -> User:
     """Simulate fetching user data from an API."""
     print(f"  Fetching user {user_id}...")
     await asyncio.sleep(0.5)  # Simulate network delay
-    
+
     return {
         "id": user_id,
         "name": f"User {user_id}",
-        "email": f"user{user_id}@example.com"
+        "email": f"user{user_id}@example.com",
     }
 
 
-async def main():
+async def load_user(params: ResourceLoaderParams[UserParams]) -> User:
+    return await fetch_user_from_api(params.params["id"])
+
+
+async def main() -> None:
     print("=== Simple Resource Example ===\n")
-    
+
     # Step 1: Create a reactive parameter
-    user_id = Signal(1)
-    
-    # Step 2: Create a Resource that fetches data
-    user_resource = Resource(
+    user_id = signal(1)
+
+    # Step 2: Create a resource that fetches data
+    user_resource: Resource[UserParams, User] = resource(
         # Params: what data to fetch (reactive - reloads when user_id changes)
-        params=lambda: {"id": user_id()},
-        
+        lambda: {"id": user_id()},
         # Loader: how to fetch the data (async function)
-        loader=lambda p: fetch_user_from_api(p.params["id"])
+        load_user,
     )
-    
+
     # Wait for initial load
     print("Step 1: Initial load")
     await asyncio.sleep(0.6)
-    
+
     # Step 3: Access the data safely
-    if user_resource.has_value():
-        user = user_resource.value()
+    user = user_resource.value()
+    if user is not None:
         print(f"  Loaded: {user['name']} ({user['email']})")
-    
-    # Step 4: Change the parameter - Resource automatically reloads!
+
+    # Step 4: Change the parameter - resource automatically reloads!
     print("\nStep 2: Change user_id to 2")
     user_id.set(2)
-    
+
     # Show loading status
     if user_resource.is_loading():
         print("  Loading...")
-    
+
     await asyncio.sleep(0.6)
-    
-    if user_resource.has_value():
-        user = user_resource.value()
+
+    user = user_resource.value()
+    if user is not None:
         print(f"  Loaded: {user['name']} ({user['email']})")
-    
+
     # Step 5: Manual reload (same data)
     print("\nStep 3: Manual reload")
     user_resource.reload()
     await asyncio.sleep(0.6)
-    
-    if user_resource.has_value():
-        user = user_resource.value()
+
+    user = user_resource.value()
+    if user is not None:
         print(f"  Reloaded: {user['name']} ({user['email']})")
-    
+
     # Step 6: Optimistic update (set value locally)
     print("\nStep 4: Optimistic update")
     user_resource.set({"id": 999, "name": "Edited User", "email": "edited@example.com"})
-    
+
     user = user_resource.value()
     status = user_resource.status()
-    print(f"  Local value: {user['name']} (status: {status})")
-    
+    if user is not None:
+        print(f"  Local value: {user['name']} (status: {status})")
+
     print("\nDone!")
 
 

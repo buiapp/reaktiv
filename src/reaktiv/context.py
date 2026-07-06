@@ -41,10 +41,10 @@ def untracked(
     Examples:
         As a context manager (recommended):
         ```python
-        from reaktiv import Signal, Effect, untracked
+        from reaktiv import effect, signal, untracked
         
-        count = Signal(0)
-        other = Signal(100)
+        count = signal(0)
+        other = signal(100)
         
         def my_effect():
             # Tracked read
@@ -57,7 +57,7 @@ def untracked(
             print(f"Count: {c}, Other: {o}")
         
         # Keep reference to prevent GC
-        effect = Effect(my_effect)
+        runner = effect(my_effect)
         # Prints: "Count: 0, Other: 100"
         
         other.set(200)
@@ -66,10 +66,10 @@ def untracked(
         
         As a function wrapper:
         ```python
-        from reaktiv import Signal, Effect, untracked
+        from reaktiv import effect, signal, untracked
         
-        count = Signal(0)
-        other = Signal(100)
+        count = signal(0)
+        other = signal(100)
         
         def my_effect():
             # This creates a dependency
@@ -81,7 +81,7 @@ def untracked(
             print(f"Count: {c}, Other: {o}")
         
         # Keep reference to prevent GC
-        effect = Effect(my_effect)
+        runner = effect(my_effect)
         # Prints: "Count: 0, Other: 100"
         
         count.set(1)

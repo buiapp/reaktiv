@@ -24,19 +24,31 @@ Then:
 
 import asyncio
 import json
-from typing import Dict, Set
+from typing import AsyncIterator, Dict, Optional, Set, TypedDict
 from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-from reaktiv import Signal, Computed, Effect
+from reaktiv import Effect, ReactiveModel, computed, effect, field
+
+
+class AppSnapshot(TypedDict):
+    counter: int
+    messages: list[str]
+    active_users: int
+    last_message: Optional[str]
+
+
+class MessagePayload(TypedDict):
+    text: str
 
 
 # Create a lifespan context manager
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    del app
     # Setup code - runs before the application starts receiving requests
     print("Starting up: Setting up reactive effects...")
     manager.setup_effect()
@@ -51,52 +63,56 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Reaktiv FastAPI WebSocket Example", lifespan=lifespan)
 
 # State management with Reaktiv
-counter = Signal(0)
-messages = Signal([])
-active_users = Signal(0)
+class AppState(ReactiveModel):
+    counter = field(0)
+    messages = field[list[str]](factory=list)
+    active_users = field(0)
 
-# Computed values
-state = Computed(
-    lambda: {
-        "counter": counter(),
-        "messages": messages(),
-        "active_users": active_users(),
-        "last_message": messages()[-1] if messages() else None,
-    }
-)
+    @computed
+    def snapshot(self) -> AppSnapshot:
+        messages = self.messages()
+        return {
+            "counter": self.counter(),
+            "messages": messages,
+            "active_users": self.active_users(),
+            "last_message": messages[-1] if messages else None,
+        }
+
+
+app_state = AppState()
 
 
 # WebSocket connection manager
 class ConnectionManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.active_connections: Set[WebSocket] = set()
-        self._broadcast_effect = None  # Don't create Effect at import time
+        self._broadcast_effect: Optional[Effect] = None  # Don't create Effect at import time
 
-    def setup_effect(self):
+    def setup_effect(self) -> None:
         """Create the Effect when we're in an asyncio context"""
         if self._broadcast_effect is None:
-            self._broadcast_effect = Effect(self._broadcast_state)
+            self._broadcast_effect = effect(self._broadcast_state)
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket) -> None:
         # Create the Effect when we have a websocket connection (inside asyncio context)
         self.setup_effect()
 
         await websocket.accept()
         self.active_connections.add(websocket)
-        active_users.set(len(self.active_connections))
+        app_state.active_users.set(len(self.active_connections))
 
         # Send initial state
         await self._send_state(websocket)
 
-    def disconnect(self, websocket: WebSocket):
+    def disconnect(self, websocket: WebSocket) -> None:
         self.active_connections.remove(websocket)
-        active_users.set(len(self.active_connections))
+        app_state.active_users.set(len(self.active_connections))
 
-    def _broadcast_state(self):
+    def _broadcast_state(self) -> None:
         """Effect that broadcasts state when it changes"""
-        current_state = state()
+        current_state = app_state.snapshot()
 
-        async def _broadcast_state(self):
+        async def _broadcast_state() -> None:
             if self.active_connections:
                 data = json.dumps(current_state)
                 # Create tasks for each connection to avoid blocking
@@ -105,11 +121,11 @@ class ConnectionManager:
                     return_exceptions=True,
                 )
 
-        asyncio.create_task(_broadcast_state(self))
+        asyncio.create_task(_broadcast_state())
 
-    async def _send_state(self, websocket: WebSocket):
+    async def _send_state(self, websocket: WebSocket) -> None:
         """Send current state to a specific client"""
-        current_state = state()
+        current_state = app_state.snapshot()
         await websocket.send_text(json.dumps(current_state))
 
 
@@ -187,13 +203,13 @@ html = """
 
 
 @app.get("/")
-async def get():
+async def get() -> HTMLResponse:
     """Serve a simple HTML client for testing"""
     return HTMLResponse(html)
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket) -> None:
     """WebSocket endpoint that reflects reaktiv state"""
     await manager.connect(websocket)
     try:
@@ -205,32 +221,32 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.get("/increment")
-async def increment():
+async def increment() -> Dict[str, object]:
     """Increment the counter"""
-    counter.update(lambda c: c + 1)
-    return {"status": "incremented", "value": counter()}
+    app_state.counter.update(lambda c: c + 1)
+    return {"status": "incremented", "value": app_state.counter()}
 
 
 @app.get("/decrement")
-async def decrement():
+async def decrement() -> Dict[str, object]:
     """Decrement the counter"""
-    counter.update(lambda c: c - 1)
-    return {"status": "decremented", "value": counter()}
+    app_state.counter.update(lambda c: c - 1)
+    return {"status": "decremented", "value": app_state.counter()}
 
 
 @app.get("/reset")
-async def reset():
+async def reset() -> Dict[str, object]:
     """Reset the counter to zero"""
-    counter.set(0)
-    return {"status": "reset", "value": counter()}
+    app_state.counter.set(0)
+    return {"status": "reset", "value": app_state.counter()}
 
 
 @app.post("/message")
-async def add_message(message: Dict[str, str]):
+async def add_message(message: MessagePayload) -> Dict[str, str]:
     """Add a message to the list"""
     text = message.get("text", "").strip()
     if text:
-        messages.update(lambda msgs: msgs + [text])
+        app_state.messages.update(lambda msgs: msgs + [text])
     return {"status": "message added"}
 
 

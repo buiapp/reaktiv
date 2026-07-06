@@ -47,14 +47,16 @@ greeting = f"Hello, {user_name}! You are {user_age} years old."  # Manual update
 #### After reaktiv: Automatic Propagation
 
 ```pyodide install="reaktiv" assets="no" height="22" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 
 # State as signals
-user_name = Signal("Alice")
-user_age = Signal(30)
+user_name = signal("Alice")
+user_age = signal(30)
 
 # Derived state automatically updates when dependencies change
-greeting = Computed(lambda: f"Hello, {user_name()}! You are {user_age()} years old.")
+@computed
+def greeting():
+    return f"Hello, {user_name()}! You are {user_age()} years old."
 
 print(greeting())  # "Hello, Alice! You are 30 years old."
 
@@ -80,15 +82,20 @@ def get_total_price(items, tax_rate):
 #### After reaktiv: Making Hidden State Explicit
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 
 # Make state explicit with signals
-items = Signal([])
-tax_rate = Signal(0.1)
+items = signal([])
+tax_rate = signal(0.1)
 
 # Hidden state becomes explicit computed values
-subtotal = Computed(lambda: sum(item["price"] for item in items()))
-total_price = Computed(lambda: subtotal() * (1 + tax_rate()))
+@computed
+def subtotal():
+    return sum(item["price"] for item in items())
+
+@computed
+def total_price():
+    return subtotal() * (1 + tax_rate())
 
 # Now when items or tax_rate changes, total_price updates automatically
 items.set([{"price": 10}, {"price": 20}])
@@ -130,27 +137,38 @@ class ShoppingCart:
 #### After reaktiv: Automatic Dependency Tracking
 
 ```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import ReactiveModel, computed, field
 
-class ReactiveShoppingCart:
-    def __init__(self, initial_items=None):
-        self.items = Signal(initial_items or [])
-        
-        # Dependencies are automatically tracked
-        self.subtotal = Computed(lambda: sum(item["price"] for item in self.items()))
-        self.tax = Computed(lambda: self.subtotal() * 0.1)  # Automatically depends on subtotal
-        self.total = Computed(lambda: self.subtotal() + self.tax())  # Automatically depends on both
+class ReactiveShoppingCart(ReactiveModel):
+    items = field(factory=list)
 
-        # Adding more derived values is easy and doesn't increase complexity
-        self.discount = Computed(lambda: 0.05 if self.subtotal() > 100 else 0)
-        self.final_price = Computed(lambda: self.total() * (1 - self.discount()))
-        
+    @computed
+    def subtotal(self):
+        return sum(item["price"] for item in self.items())
+
+    @computed
+    def tax(self):
+        return self.subtotal() * 0.1
+
+    @computed
+    def total(self):
+        return self.subtotal() + self.tax()
+
+    # Adding more derived values is easy and doesn't increase complexity
+    @computed
+    def discount(self):
+        return 0.05 if self.subtotal() > 100 else 0
+
+    @computed
+    def final_price(self):
+        return self.total() * (1 - self.discount())
+
     def add_item(self, item):
         # Just update the source data
         self.items.update(lambda items: items + [item])
         # No need to manually update dependencies - they update automatically!
 
-cart = ReactiveShoppingCart([{"name": "Notebook", "price": 12.50}])
+cart = ReactiveShoppingCart(items=[{"name": "Notebook", "price": 12.50}])
 print(cart.final_price())
 cart.add_item({"name": "Pen", "price": 2.50})
 print(cart.final_price())
@@ -190,19 +208,23 @@ def load_config():
 #### After reaktiv:
 
 ```pyodide install="reaktiv" assets="no" height="32" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 
-default_config = Signal({"timeout": 30, "retries": 3, "debug": False})
-user_config = Signal({})
+default_config = signal({"timeout": 30, "retries": 3, "debug": False})
+user_config = signal({})
 
 # Derived values automatically stay in sync
-effective_config = Computed(lambda: {**default_config(), **user_config()})
+@computed
+def effective_config():
+    return {**default_config(), **user_config()}
 
-connection_settings = Computed(lambda: {
-    "connect_timeout": effective_config()["timeout"],
-    "max_attempts": effective_config()["retries"],
-    "verbose": effective_config()["debug"],
-})
+@computed
+def connection_settings():
+    return {
+        "connect_timeout": effective_config()["timeout"],
+        "max_attempts": effective_config()["retries"],
+        "verbose": effective_config()["debug"],
+    }
 
 # When config changes, everything updates automatically
 user_config.set({"timeout": 60})
@@ -245,27 +267,35 @@ class DataProcessor:
 #### After reaktiv:
 
 ```pyodide install="reaktiv" assets="no" height="36" theme="github_light_default,github_dark"
-from reaktiv import Signal, Computed
+from reaktiv import ReactiveModel, computed, field
 
-class ReactiveDataProcessor:
-    def __init__(self, initial_data):
-        self.raw_data = Signal(initial_data)
-        
-        # Each step automatically updates when dependencies change
-        self.filtered_data = Computed(lambda: [x for x in self.raw_data() if x > 0])
-        self.transformed_data = Computed(lambda: [x * 2 for x in self.filtered_data()])
-        self.summary = Computed(lambda: {
-            "count": len(self.transformed_data()),
-            "sum": sum(self.transformed_data()),
-            "avg": sum(self.transformed_data()) / len(self.transformed_data()) if self.transformed_data() else 0
-        })
-    
+class ReactiveDataProcessor(ReactiveModel):
+    raw_data = field[list[int]](factory=list)
+
+    # Each step automatically updates when dependencies change
+    @computed
+    def filtered_data(self):
+        return [x for x in self.raw_data() if x > 0]
+
+    @computed
+    def transformed_data(self):
+        return [x * 2 for x in self.filtered_data()]
+
+    @computed
+    def summary(self):
+        values = self.transformed_data()
+        return {
+            "count": len(values),
+            "sum": sum(values),
+            "avg": sum(values) / len(values) if values else 0,
+        }
+
     def update_data(self, new_data):
         # Just update the source data - everything else updates automatically
         self.raw_data.set(new_data)
         
 # Usage
-processor = ReactiveDataProcessor([1, -2, 3, -4, 5])
+processor = ReactiveDataProcessor(raw_data=[1, -2, 3, -4, 5])
 print(processor.summary())  # Computed from the chain
 processor.update_data([10, 20, 30])  # Everything recalculates automatically
 print(processor.summary())

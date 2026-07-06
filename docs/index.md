@@ -31,10 +31,20 @@ Without a reactive graph, every mutation needs to remember what else to update.
 With reaktiv, each value declares what it depends on:
 
 ```python
-query = Signal("")
-results = Computed(lambda: search(query()))
-summary = Computed(lambda: f"{len(results())} matches")
-display = Effect(lambda: render(summary(), results()))
+query = signal("")
+
+@computed
+def results():
+    return search(query())
+
+@computed
+def summary():
+    return f"{len(results())} matches"
+
+def display_results():
+    render(summary(), results())
+
+display = effect(display_results)
 
 query.set("python")
 ```
@@ -48,15 +58,19 @@ Edit the code and press **Run**. The example runs entirely in your browser with
 Pyodide.
 
 ```pyodide install="reaktiv" height="22" theme="github_light_default,github_dark"
-from reaktiv import Computed, Effect, Signal
+from reaktiv import computed, effect, signal
 
-unit_price = Signal(12.50)
-quantity = Signal(1)
+unit_price = signal(12.50)
+quantity = signal(1)
 
-total = Computed(lambda: unit_price() * quantity())
-receipt = Effect(
-    lambda: print(f"{quantity()} item(s): ${total():.2f}")
-)
+@computed
+def total():
+    return unit_price() * quantity()
+
+def print_receipt():
+    print(f"{quantity()} item(s): ${total():.2f}")
+
+receipt = effect(print_receipt)
 
 quantity.set(3)
 unit_price.set(10.00)
@@ -69,15 +83,30 @@ the browser.
 
 ## Three Building Blocks
 
-1. **`Signal` stores changing state.**
+1. **`signal` stores changing state.**
    Read it by calling it and update it with `set()` or `update()`.
-2. **`Computed` describes derived state.**
+2. **`computed` describes derived state.**
    Dependencies are discovered automatically; results are lazy and cached.
-3. **`Effect` reacts to changes.**
+3. **`effect` reacts to changes.**
    It reruns when a signal or computed value read by the effect changes.
 
 That small vocabulary scales from a total in a form to branching dependency
 graphs, async resources, and independently updating threaded workloads.
+
+## Naming Convention
+
+Copy the lowercase API in new code:
+
+- `signal(...)` for writable state
+- `@computed` or `computed(...)` for derived state
+- `@linked` or `linked(...)` for writable derived state
+- `@resource` or `resource(...)` for async state
+- `@effect` or `effect(...)` for side effects
+
+Uppercase names such as `Signal`, `ComputeSignal`, `LinkedSignal`, `Resource`,
+and `Effect` are concrete classes or compatibility entry points. They remain
+documented for type references and existing code, but the examples use the
+lowercase primitives intentionally.
 
 ## Why reaktiv?
 

@@ -46,48 +46,59 @@ For a comprehensive guide, check out [The Missing Manual for Signals: State Mana
 ## Quick Start
 
 ```python
-from reaktiv import Signal, Computed, Effect
+from reaktiv import computed, effect, signal
 
 # Your reactive data sources
-name = Signal("Alice")
-age = Signal(30)
+name = signal("Alice")
+age = signal(30)
 
 # Reactive derived data - automatically stays in sync
-@Computed
+@computed
 def greeting():
     return f"Hello, {name()}! You are {age()} years old."
 
 # Reactive side effects - automatically run when data changes
 # IMPORTANT: Must assign to variable to prevent garbage collection
-greeting_effect = Effect(lambda: print(f"Updated: {greeting()}"))
+def print_greeting():
+    print(f"Updated: {greeting()}")
+
+greeting_effect = effect(print_greeting)
 
 # Just change your base data - everything reacts automatically
 name.set("Bob")  # Prints: "Updated: Hello, Bob! You are 30 years old."
 age.set(31)      # Prints: "Updated: Hello, Bob! You are 31 years old."
 ```
 
+Use lowercase primitives in new code: `signal(...)`, `computed(...)`,
+`linked(...)`, `resource(...)`, and `effect(...)`. Uppercase names such as
+`Signal`, `ComputeSignal`, `LinkedSignal`, `Resource`, and `Effect` are the
+concrete classes or compatibility entry points you may see in API references
+and older examples.
+
 ## Core Concepts
 
 `reaktiv` provides three simple building blocks for reactive programming - just like Excel has cells and formulas:
 
-1. **Signal**: Holds a reactive value that can change (like an Excel cell with a value)
-2. **Computed**: Automatically derives a reactive value from other signals/computed values (like an Excel formula)
-3. **Effect**: Runs reactive side effects when signals/computed values change (like Excel charts that update when data changes)
+1. **signal**: Holds a reactive value that can change (like an Excel cell with a value)
+2. **computed**: Automatically derives a reactive value from other signals/computed values (like an Excel formula)
+3. **effect**: Runs reactive side effects when signals/computed values change (like Excel charts that update when data changes)
 
 ```python
-# Signal: wraps a reactive value (like Excel cell A1 = 5)
-counter = Signal(0)
+from reaktiv import computed, effect, signal
 
-# Computed: derives from other reactive values (like Excel cell B1 = A1 * 2)
-@Computed
+# signal: wraps a reactive value (like Excel cell A1 = 5)
+counter = signal(0)
+
+# computed: derives from other reactive values (like Excel cell B1 = A1 * 2)
+@computed
 def doubled():
     return counter() * 2
 
-# Effect: reactive side effects (like Excel chart that updates when cells change)
+# effect: reactive side effects (like Excel chart that updates when cells change)
 def print_values():
     print(f"Counter: {counter()}, Doubled: {doubled()}")
 
-counter_effect = Effect(print_values)
+counter_effect = effect(print_values)
 
 counter.set(5)  # Reactive update: prints "Counter: 5, Doubled: 10"
 ```
@@ -98,26 +109,31 @@ If you've ever used Excel, you already understand reactive programming:
 
 | Cell | Value/Formula | reaktiv Equivalent |
 |------|---------------|-------------------|
-| A1   | `5`           | `Signal(5)`       |
-| B1   | `=A1 * 2`     | `Computed(lambda: a1() * 2)` |
-| C1   | `=A1 + B1`    | `Computed(lambda: a1() + b1())` |
+| A1   | `5`           | `signal(5)`       |
+| B1   | `=A1 * 2`     | `@computed def b1(): ...` |
+| C1   | `=A1 + B1`    | `@computed def c1(): ...` |
 
 When you change A1 in Excel, B1 and C1 automatically recalculate. That's exactly what happens with reaktiv:
 
 ```python
 # Excel-style reactive programming in Python
-a1 = Signal(5)  # A1 = 5
+from reaktiv import computed, effect, signal
 
-@Computed  # B1 = A1 * 2
+a1 = signal(5)  # A1 = 5
+
+@computed  # B1 = A1 * 2
 def b1() -> int:
     return a1() * 2
 
-@Computed  # C1 = A1 + B1
+@computed  # C1 = A1 + B1
 def c1() -> int:
     return a1() + b1()
 
 # Display effect (like Excel showing the values)
-display_effect = Effect(lambda: print(f"A1={a1()}, B1={b1()}, C1={c1()}"))
+def display_cells():
+    print(f"A1={a1()}, B1={b1()}, C1={c1()}")
+
+display_effect = effect(display_cells)
 
 a1.set(10)  # Change A1 - everything recalculates automatically!
 # Prints: A1=10, B1=20, C1=30
@@ -133,53 +149,53 @@ graph TD
         S2[Signal B]
         S3[Signal C]
     end
-    
+
     subgraph "Derived Values"
         C1[Computed X]
         C2[Computed Y]
     end
-    
+
     subgraph "Side Effects"
         E1[Effect 1]
         E2[Effect 2]
     end
-    
+
     subgraph "External Systems"
         EXT1[UI Update]
         EXT2[API Call]
         EXT3[Database Write]
     end
-    
+
     %% Define relationships between nodes
     S1 -->|"get()"| C1
     S2 -->|"get()"| C1
     S2 -->|"get()"| C2
     S3 -->|"get()"| C2
-    
+
     C1 -->|"get()"| E1
     C2 -->|"get()"| E1
     S3 -->|"get()"| E2
     C2 -->|"get()"| E2
-    
+
     E1 --> EXT1
     E1 --> EXT2
     E2 --> EXT3
-    
+
     %% Change propagation path
     S1 -.-> |"1\. set()"| C1
     C1 -.->|"2\. recompute"| E1
     E1 -.->|"3\. execute"| EXT1
-    
+
     %% Style nodes by type
     classDef signal fill:#4CAF50,color:white,stroke:#388E3C,stroke-width:1px
     classDef computed fill:#2196F3,color:white,stroke:#1976D2,stroke-width:1px
     classDef effect fill:#FF9800,color:white,stroke:#F57C00,stroke-width:1px
-    
+
     %% Apply styles to nodes
     class S1,S2,S3 signal
     class C1,C2 computed
     class E1,E2 effect
-    
+
     %% Legend node
     LEGEND[" Legend:
     • Signal: Stores a value, notifies dependents
@@ -197,7 +213,7 @@ graph TD
 **Lazy Evaluation** - Computations only happen when results are actually needed:
 ```python
 # This expensive computation isn't calculated until you access it
-@Computed
+@computed
 def expensive_calc():
     return sum(range(1000000))  # Not calculated yet!
 
@@ -208,9 +224,9 @@ print(expensive_calc())  # Instant! (cached result)
 **Memoization** - Results are cached until dependencies change:
 ```python
 # Results are automatically cached for efficiency
-a1 = Signal(5)
+a1 = signal(5)
 
-@Computed
+@computed
 def b1():
     return a1() * 2  # Define the computation
 
@@ -224,18 +240,18 @@ result3 = b1()  # Recalculates: 6 * 2 = 12
 **Fine-Grained Reactivity** - Only affected computations recalculate:
 ```python
 # Independent data sources don't affect each other
-a1 = Signal(5)    # Independent signal
-d2 = Signal(100)  # Another independent signal
+a1 = signal(5)    # Independent signal
+d2 = signal(100)  # Another independent signal
 
-@Computed  # Depends only on a1
+@computed  # Depends only on a1
 def b1():
     return a1() * 2
 
-@Computed  # Depends on a1 and b1
+@computed  # Depends on a1 and b1
 def c1():
     return a1() + b1()
 
-@Computed  # Depends only on d2
+@computed  # Depends only on d2
 def e2():
     return d2() / 10
 
@@ -257,15 +273,15 @@ class Order:
         self.quantity = 2
         self.tax_rate = 0.1
         self._update_totals()  # Must remember to call this
-    
+
     def set_price(self, price):
         self.price = price
         self._update_totals()  # Must remember to call this
-    
+
     def set_quantity(self, quantity):
         self.quantity = quantity
         self._update_totals()  # Must remember to call this
-    
+
     def _update_totals(self):
         # Must update in the correct order
         self.subtotal = self.price * self.quantity
@@ -278,28 +294,31 @@ class Order:
 This is like Excel - change a cell and everything recalculates automatically:
 
 ```python
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Base values (like Excel input cells)
-price = Signal(100.0)      # A1
-quantity = Signal(2)       # A2  
-tax_rate = Signal(0.1)     # A3
+price = signal(100.0)      # A1
+quantity = signal(2)       # A2
+tax_rate = signal(0.1)     # A3
 
 # Formulas (like Excel computed cells)
-@Computed  # B1 = A1 * A2
+@computed  # B1 = A1 * A2
 def subtotal():
     return price() * quantity()
 
-@Computed  # B2 = B1 * A3
+@computed  # B2 = B1 * A3
 def tax():
     return subtotal() * tax_rate()
 
-@Computed  # B3 = B1 + B2
+@computed  # B3 = B1 + B2
 def total():
     return subtotal() + tax()
 
 # Auto-display (like Excel chart that updates automatically)
-total_effect = Effect(lambda: print(f"Order total: ${total():.2f}"))
+def print_total():
+    print(f"Order total: ${total():.2f}")
+
+total_effect = effect(print_total)
 
 # Just change the input - everything recalculates like Excel!
 price.set(120.0)  # Change A1 - B1, B2, B3 all update automatically
@@ -317,28 +336,26 @@ Benefits:
 `reaktiv` provides full type hint support, making it compatible with static type checkers like ruff, mypy and pyright. This enables better IDE autocompletion, early error detection, and improved code maintainability.
 
 ```python
-from reaktiv import Signal, Computed, Effect
-
-# Explicit type annotations
-name: Signal[str] = Signal("Alice")
-age: Signal[int] = Signal(30)
-active: Signal[bool] = Signal(True)
+from reaktiv import signal, computed, effect
 
 # Type inference works automatically
-score = Signal(100.0)  # Inferred as Signal[float]
-items = Signal([1, 2, 3])  # Inferred as Signal[list[int]]
+name = signal("Alice")
+age = signal(30)
+active = signal(True)
+score = signal(100.0)
+items = signal([1, 2, 3])
 
 # Computed values preserve and infer types
-@Computed
-def name_length():  # Type is automatically ComputeSignal[int]
+@computed
+def name_length():
     return len(name())
 
-@Computed
-def greeting():  # Type is automatically ComputeSignal[str]
+@computed
+def greeting():
     return f"Hello, {name()}!"
 
-@Computed
-def total_score():  # Type is automatically ComputeSignal[float]
+@computed
+def total_score():
     return score() * 1.5
 
 # Type-safe update functions
@@ -390,7 +407,7 @@ cart.discount.set(0.10)     # Prints: 3 item(s): $33.75
 cart.dispose()
 ```
 
-Each declared field creates a separate `Signal` for every model instance. Use a
+Each declared field creates a separate writable signal for every model instance. Use a
 factory for mutable defaults and `field[T]` when the intended type is not clear
 from the value:
 
@@ -417,29 +434,29 @@ mixin patterns. Complete examples:
 graph TD
     subgraph "Traditional Approach"
         T1[Manual Updates]
-        T2[Scattered Logic] 
+        T2[Scattered Logic]
         T3[Easy to Forget]
         T4[Hard to Debug]
-        
+
         T1 --> T2
         T2 --> T3
         T3 --> T4
     end
-    
+
     subgraph "Reactive Approach"
         R1[Declare Relationships]
         R2[Automatic Updates]
         R3[Centralized Logic]
         R4[Guaranteed Consistency]
-        
+
         R1 --> R2
         R2 --> R3
         R3 --> R4
     end
-    
+
     classDef traditional fill:#f44336,color:white
     classDef reactive fill:#4CAF50,color:white
-    
+
     class T1,T2,T3,T4 traditional
     class R1,R2,R3,R4 reactive
 ```
@@ -457,15 +474,15 @@ The reactive pattern is particularly valuable in Python applications for:
 
 ### Reactive Configuration Management
 ```python
-from reaktiv import Signal, Computed
+from reaktiv import signal, computed
 
 # Multiple reactive config sources
-defaults = Signal({"timeout": 30, "retries": 3})
-user_prefs = Signal({"timeout": 60})
-feature_flags = Signal({"new_retry_logic": True})
+defaults = signal({"timeout": 30, "retries": 3})
+user_prefs = signal({"timeout": 60})
+feature_flags = signal({"new_retry_logic": True})
 
 # Automatically reactive merged config
-@Computed
+@computed
 def config():
     return {
         **defaults(),
@@ -483,21 +500,21 @@ print(config())  # Now includes max_connections
 ### Reactive Data Processing Pipeline
 ```python
 import time
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Reactive raw data stream
-raw_data = Signal([])
+raw_data = signal([])
 
 # Reactive processing pipeline
-@Computed
+@computed
 def filtered_data():
     return [x for x in raw_data() if x > 0]
 
-@Computed
+@computed
 def processed_data():
     return [x * 2 for x in filtered_data()]
 
-@Computed
+@computed
 def summary():
     data = processed_data()
     return {
@@ -507,7 +524,10 @@ def summary():
     }
 
 # Reactive monitoring - MUST assign to variable!
-summary_effect = Effect(lambda: print(f"Summary: {summary()}"))
+def print_summary():
+    print(f"Summary: {summary()}")
+
+summary_effect = effect(print_summary)
 
 # Add data - entire reactive pipeline recalculates automatically
 raw_data.set([1, -2, 3, 4])  # Prints summary
@@ -523,25 +543,25 @@ graph LR
         FD[filtered_data<br/>Computed&lt;list&gt;]
         PD[processed_data<br/>Computed&lt;list&gt;]
         SUM[summary<br/>Computed&lt;dict&gt;]
-        
+
         RD -->|reactive filter x > 0| FD
         FD -->|reactive map x * 2| PD
         PD -->|reactive aggregate| SUM
-        
+
         SUM --> EFF[Effect: print summary]
     end
-    
+
     NEW[New Data] -.->|"raw_data.set()"| RD
     RD -.->|reactive update| FD
     FD -.->|reactive update| PD
     PD -.->|reactive update| SUM
     SUM -.->|reactive trigger| EFF
-    
+
     classDef signal fill:#4CAF50,color:white
     classDef computed fill:#2196F3,color:white
     classDef effect fill:#FF9800,color:white
     classDef input fill:#9C27B0,color:white
-    
+
     class RD signal
     class FD,PD,SUM computed
     class EFF effect
@@ -550,32 +570,40 @@ graph LR
 
 ### Reactive System Monitoring
 ```python
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Reactive system metrics
-cpu_usage = Signal(20)
-memory_usage = Signal(60)
-disk_usage = Signal(80)
+cpu_usage = signal(20)
+memory_usage = signal(60)
+disk_usage = signal(80)
 
-# Reactive health calculation
-system_health = Computed(lambda: 
-    "critical" if any(x > 90 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
-    "warning" if any(x > 75 for x in [cpu_usage(), memory_usage(), disk_usage()]) else
-    "healthy"
-)
+@computed
+def system_health():
+    metrics = [cpu_usage(), memory_usage(), disk_usage()]
+    if any(value > 90 for value in metrics):
+        return "critical"
+    if any(value > 75 for value in metrics):
+        return "warning"
+    return "healthy"
 
 # Reactive automatic alerting - MUST assign to variable!
-alert_effect = Effect(lambda: print(f"System status: {system_health()}") 
-                     if system_health() != "healthy" else None)
+def print_alert():
+    if system_health() != "healthy":
+        print(f"System status: {system_health()}")
+
+alert_effect = effect(print_alert)
 
 cpu_usage.set(95)  # Reactive system automatically prints: "System status: critical"
 ```
 
 ## Advanced Features
 
-### LinkedSignal (Writable derived state)
+### linked (Writable Derived State)
 
-`LinkedSignal` is a writable computed signal that can be manually set by users but will automatically reset when its source context changes. Use it for “user overrides with sane defaults” that should survive some changes but reset on others.
+`linked` creates writable derived state that can be manually set by users but
+automatically resets when its source context changes. Use it for “user
+overrides with sane defaults” that should survive some changes but reset on
+others.
 
 Common use cases:
 - Pagination: selection resets when page changes
@@ -583,15 +611,15 @@ Common use cases:
 - Filters & search: user-picked value persists across pagination, resets when query changes
 - Forms: default values computed from context but user can override temporarily
 
-**Using the @Linked decorator:**
+**Using the @linked decorator:**
 
 ```python
-from reaktiv import Signal, Linked
+from reaktiv import signal, linked
 
-page = Signal(1)
+page = signal(1)
 
 # Writable derived state that resets whenever page changes
-@Linked
+@linked
 def selection() -> str:
     return f"default-for-page-{page()}"
 
@@ -604,19 +632,18 @@ print(selection())                # "default-for-page-2"
 
 **Alternative: factory function style:**
 ```python
-# Still supported
-selection = LinkedSignal(lambda: f"default-for-page-{page()}")
+selection = linked(lambda: f"default-for-page-{page()}")
 ```
 
 Advanced pattern (explicit source and previous-state aware computation):
 
 ```python
-from reaktiv import Signal, LinkedSignal, PreviousState
+from reaktiv import linked, signal, PreviousState
 
 # Source contains (query, page). We want selection to persist across page changes
 # but reset when the query string changes.
-query = Signal("shoes")
-page = Signal(1)
+query = signal("shoes")
+page = signal(1)
 
 def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
     current_query, _ = src
@@ -626,7 +653,7 @@ def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> 
     # Otherwise, provide a new default for the new query
     return f"default-for-{current_query}"
 
-selection = LinkedSignal(source=lambda: (query(), page()), computation=compute_selection)
+selection = linked(source=lambda: (query(), page()), computation=compute_selection)
 
 print(selection())  # "default-for-shoes"
 selection.set("red-sneakers")
@@ -642,40 +669,42 @@ Notes:
 - It’s writable: call `selection.set(...)` or `selection.update(...)` to override.
 - It auto-resets based on the dependencies you read (simple pattern) or your custom `source` logic (advanced pattern).
 
-### Resource - Async Data Loading
+### resource - Async Data Loading
 
-`Resource` brings async operations into your reactive application with automatic dependency tracking, request cancellation, and comprehensive status management. Perfect for API calls and data fetching.
+`resource` brings async operations into your reactive application with automatic
+dependency tracking, request cancellation, and comprehensive status management.
+Perfect for API calls and data fetching.
 
 ```python
 import asyncio
-from reaktiv import Resource, Signal, ResourceStatus
+from reaktiv import resource, signal, ResourceStatus
 
 # Reactive parameter
-user_id = Signal(1)
+user_id = signal(1)
 
 # Async data loader
 async def fetch_user(params):
     # Check for cancellation
     if params.cancellation.is_set():
         return None
-    
+
     await asyncio.sleep(0.5)  # Simulate API call
     return {"id": params.params["user_id"], "name": f"User {params.params['user_id']}"}
 
 async def main():
     # Create resource
-    user_resource = Resource(
+    user_resource = resource(
         params=lambda: {"user_id": user_id()},  # When user_id changes, auto-reload
         loader=fetch_user
     )
-    
+
     # Wait for initial load
     await asyncio.sleep(0.6)
-    
+
     # Access data safely
     if user_resource.has_value():
         print(user_resource.value())  # {"id": 1, "name": "User 1"}
-    
+
     # Changing param automatically triggers reload
     user_id.set(2)
     await asyncio.sleep(0.6)
@@ -687,7 +716,7 @@ asyncio.run(main())
 **Key features:**
 - **6 status states**: IDLE, LOADING, RELOADING, RESOLVED, ERROR, LOCAL
 - **Automatic request cancellation** when parameters change (prevents race conditions)
-- **Seamless integration** with Computed and Effect
+- **Seamless integration** with `computed` and `effect`
 - **Manual control** via `reload()`, `set()`, and `update()` methods
 - **Atomic snapshots** for safe state access
 - **Automatic cleanup** when garbage collected
@@ -698,13 +727,13 @@ For complete documentation, examples, and design patterns, see the [Resource Use
 ### Custom Equality
 ```python
 # For objects where you want value-based comparison
-items = Signal([1, 2, 3], equal=lambda a, b: a == b)
+items = signal([1, 2, 3], equal=lambda a, b: a == b)
 items.set([1, 2, 3])  # Won't trigger updates (same values)
 ```
 
 ### Update Functions
 ```python
-counter = Signal(0)
+counter = signal(0)
 counter.update(lambda x: x + 1)  # Increment based on current value
 ```
 
@@ -715,22 +744,22 @@ counter.update(lambda x: x + 1)  # Increment based on current value
 ```python
 import asyncio
 
-my_signal = Signal("initial")
+my_signal = signal("initial")
 
 # ✅ RECOMMENDED: Synchronous effect with async task spawning
 def sync_effect():
     # Signal values captured at this moment - guaranteed consistency
     current_value = my_signal()
-    
+
     # Spawn async task if needed
     async def background_work():
         await asyncio.sleep(0.1)
         print(f"Processing: {current_value}")
-    
+
     asyncio.create_task(background_work())
 
 # MUST assign to variable!
-my_effect = Effect(sync_effect)
+my_effect = effect(sync_effect)
 ```
 
 **Experimental: Direct async effects**
@@ -745,7 +774,7 @@ async def async_effect():
     print(f"Async processing: {my_signal()}")
 
 # MUST assign to variable!
-my_async_effect = Effect(async_effect)
+my_async_effect = effect(async_effect)
 ```
 
 **Key differences:**
@@ -758,10 +787,10 @@ my_async_effect = Effect(async_effect)
 Use `untracked()` to read signals without creating dependencies:
 
 ```python
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
-user_id = Signal(1)
-debug_mode = Signal(False)
+user_id = signal(1)
+debug_mode = signal(False)
 
 # This computed only depends on user_id, not debug_mode
 def get_user_data():
@@ -770,7 +799,7 @@ def get_user_data():
         print(f"Loading user {uid}")
     return f"User data for {uid}"
 
-user_data = Computed(get_user_data)
+user_data = computed(get_user_data)
 
 debug_mode.set(True)   # Won't trigger recomputation
 user_id.set(2)         # Will trigger recomputation
@@ -781,30 +810,32 @@ user_id.set(2)         # Will trigger recomputation
 You can also use `untracked` as a context manager to read multiple signals without creating dependencies. This is useful for logging or conditional logic inside an effect without adding extra dependencies.
 
 ```python
-from reaktiv import Signal, Computed, Effect, untracked
+from reaktiv import signal, computed, effect, untracked
 
-name = Signal("Alice")
-is_logging_enabled = Signal(False)
-log_level = Signal("INFO")
+name = signal("Alice")
+is_logging_enabled = signal(False)
+log_level = signal("INFO")
 
-greeting = Computed(lambda: f"Hello, {name()}!")
+@computed
+def greeting():
+    return f"Hello, {name()}!"
 
 # An effect that depends on `greeting`, but reads other signals untracked
 def display_greeting():
     # Create a dependency on `greeting`
     current_greeting = greeting()
-    
+
     # Read multiple signals without creating dependencies
     with untracked():
         logging_active = is_logging_enabled()
         current_log_level = log_level()
         if logging_active:
             print(f"LOG [{current_log_level}]: Greeting updated to '{current_greeting}'")
-    
+
     print(current_greeting)
 
 # MUST assign to variable!
-greeting_effect = Effect(display_greeting)
+greeting_effect = effect(display_greeting)
 # Initial run prints: "Hello, Alice"
 
 name.set("Bob")
@@ -826,16 +857,16 @@ The context manager approach is particularly useful when you need to read multip
 Use `batch()` to group multiple updates and trigger effects only once:
 
 ```python
-from reaktiv import Signal, Effect, batch
+from reaktiv import signal, effect, batch
 
-name = Signal("Alice")
-age = Signal(30)
-city = Signal("New York")
+name = signal("Alice")
+age = signal(30)
+city = signal("New York")
 
 def print_info():
     print(f"{name()}, {age()}, {city()}")
 
-info_effect = Effect(print_info)
+info_effect = effect(print_info)
 # Effect prints one time on init
 
 # Without batch - prints 3 times
@@ -856,14 +887,16 @@ with batch():
 Proper error handling is crucial to prevent cascading failures:
 
 ```python
-from reaktiv import Signal, Computed, Effect
+from reaktiv import signal, computed, effect
 
 # Example: Division computation that can fail
-numerator = Signal(10)
-denominator = Signal(2)
+numerator = signal(10)
+denominator = signal(2)
 
 # Unsafe computation - can throw ZeroDivisionError
-unsafe_division = Computed(lambda: numerator() / denominator())
+@computed
+def unsafe_division():
+    return numerator() / denominator()
 
 # Safe computation with error handling
 def safe_divide():
@@ -872,7 +905,7 @@ def safe_divide():
     except ZeroDivisionError:
         return float('inf')  # or return 0, or handle as needed
 
-safe_division = Computed(safe_divide)
+safe_division = computed(safe_divide)
 
 # Error handling in effects
 def safe_print():
@@ -881,11 +914,11 @@ def safe_print():
         print(f"Unsafe result: {unsafe_result}")
     except ZeroDivisionError:
         print("Error: Division by zero!")
-    
+
     safe_result = safe_division()
     print(f"Safe result: {safe_result}")
 
-effect = Effect(safe_print)
+effect = effect(safe_print)
 
 # Test error scenarios
 denominator.set(0)  # Triggers ZeroDivisionError in unsafe computation
@@ -899,21 +932,34 @@ denominator.set(0)  # Triggers ZeroDivisionError in unsafe computation
 
 ```python
 # ❌ WRONG - effect gets garbage collected immediately and won't work
-Effect(lambda: print("This will never print"))
+def print_wrong():
+    print("This will never print")
+
+effect(print_wrong)
 
 # ✅ CORRECT - effect stays active
-my_effect = Effect(lambda: print("This works!"))
+def print_right():
+    print("This works!")
+
+my_effect = effect(print_right)
 
 # ✅ Also correct - store in a list or class attribute
 effects = []
-effects.append(Effect(lambda: print("This also works!")))
+
+def print_from_list():
+    print("This also works!")
+
+effects.append(effect(print_from_list))
 
 # ✅ In classes, assign to self
 class MyClass:
     def __init__(self):
-        self.counter = Signal(0)
+        self.counter = signal(0)
         # Keep effect alive by assigning to instance
-        self.effect = Effect(lambda: print(f"Counter: {self.counter()}"))
+        self.effect = effect(self.print_counter)
+
+    def print_counter(self):
+        print(f"Counter: {self.counter()}")
 ```
 
 **Why this design?** This explicit retention requirement prevents accidental memory leaks. Unlike some reactive systems that automatically keep effects alive indefinitely, `reaktiv` requires you to explicitly manage effect lifetimes. When you no longer need an effect, simply let the variable go out of scope or delete it - the effect will be automatically cleaned up. This gives you control over when reactive behavior starts and stops, preventing long-lived applications from accumulating abandoned effects.
@@ -921,7 +967,10 @@ class MyClass:
 **Manual cleanup:** You can also explicitly dispose of effects when you're done with them:
 
 ```python
-my_effect = Effect(lambda: print("This will run"))
+def print_value():
+    print("This will run")
+
+my_effect = effect(print_value)
 # ... some time later ...
 my_effect.dispose()  # Manually clean up the effect
 # Effect will no longer run when dependencies change
@@ -931,10 +980,10 @@ my_effect.dispose()  # Manually clean up the effect
 By default, reaktiv uses identity comparison. For mutable objects:
 
 ```python
-data = Signal([1, 2, 3])
+data = signal([1, 2, 3])
 
 # This triggers update (new list object)
-data.set([1, 2, 3])  
+data.set([1, 2, 3])
 
 # This doesn't trigger update (same object, modified in place)
 current = data()
@@ -947,7 +996,7 @@ When working with mutable objects like lists and dictionaries, you need to creat
 
 #### Lists
 ```python
-items = Signal([1, 2, 3])
+items = signal([1, 2, 3])
 
 # ❌ WRONG - modifies in place, no update triggered
 current = items()
@@ -969,7 +1018,7 @@ items.update(lambda lst: [0] + lst)                  # Prepend
 
 #### Dictionaries
 ```python
-config = Signal({"timeout": 30, "retries": 3})
+config = signal({"timeout": 30, "retries": 3})
 
 # ❌ WRONG - modifies in place, no update triggered
 current = config()
@@ -995,7 +1044,7 @@ If you prefer to modify objects in place, provide a custom equality function:
 def list_equal(a, b):
     return len(a) == len(b) and all(x == y for x, y in zip(a, b))
 
-items = Signal([1, 2, 3], equal=list_equal)
+items = signal([1, 2, 3], equal=list_equal)
 
 # Now you can modify in place and trigger updates manually
 current = items()
@@ -1006,7 +1055,7 @@ items.set(current)  # Triggers update because values changed
 def dict_equal(a, b):
     return a == b
 
-config = Signal({"timeout": 30}, equal=dict_equal)
+config = signal({"timeout": 30}, equal=dict_equal)
 
 current = config()
 current["retries"] = 3

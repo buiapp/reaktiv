@@ -337,49 +337,10 @@ class Signal(Generic[T]):
         return self._readonly_cache
 
 
-class _TypedSignalFactory(Generic[T]):
-    """Typed signal factory used by ``signal[T](...)`` syntax."""
-
-    def __call__(
-        self,
-        value: T,
-        /,
-        *,
-        equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Signal[T]:
-        return Signal(value, equal=equal)
-
-
-class _SignalFactory:
-    """Create writable signals with inferred or explicit value types."""
-
-    def __call__(
-        self,
-        value: T,
-        /,
-        *,
-        equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Signal[T]:
-        """Create a writable signal.
-
-        Lowercase factory-style spelling for user code that prefers
-        function-based primitive creation. Equivalent to
-        ``Signal(value, equal=equal)``.
-        """
-        return Signal(value, equal=equal)
-
-    @overload
-    def __getitem__(self, value_type: type[T]) -> _TypedSignalFactory[T]: ...
-
-    @overload
-    def __getitem__(self, value_type: object) -> _TypedSignalFactory[Any]: ...
-
-    def __getitem__(self, value_type: object) -> _TypedSignalFactory[Any]:
-        del value_type
-        return _TypedSignalFactory()
-
-
-signal = _SignalFactory()
+signal = Signal
+"""Lowercase factory-style spelling for user code that prefers
+function-based primitive creation. Equivalent to ``Signal``.
+"""
 
 
 class ReadonlySignal(Generic[T]):

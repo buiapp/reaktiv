@@ -1077,7 +1077,7 @@ Including integration examples with:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=buiapp/reaktiv&type=Date)](https://star-history.com/#buiapp/reaktiv&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=buiapp/reaktiv&type=Date)](https://star-history.dera.page/#buiapp/reaktiv&Date)
 
 ---
 

@@ -230,3 +230,137 @@ def test_linked_decorator_dict_return() -> None:
     x.set(5)
     # Should reset to computed value
     assert point() == {"x": 5, "y": 2}
+
+
+def test_linked_model_computation_uses_manual_previous_and_source():
+    from reaktiv import ReactiveModel, field, linked
+
+    class Model(ReactiveModel):
+        options = field([1, 2, 3])
+
+        def keep_selection(self, source, previous):
+            return previous.value if previous is not None and previous.value in source else source[0]
+
+        @linked(computation=keep_selection)
+        def selected(self):
+            return self.options()
+
+    first, second = Model(), Model()
+    assert first.selected() == second.selected() == 1
+    first.selected.set(2)
+    first.options.set([2, 3])
+    assert first.selected() == 2
+    first.options.set([3, 4])
+    assert first.selected() == 3
+    assert second.selected() == 1
+
+
+def test_linked_previous_none_is_a_value_not_initial_state():
+    from reaktiv import linked
+    source = Signal(1)
+    seen = []
+
+    def compute(current, previous):
+        seen.append(previous)
+        return None
+
+    value = linked(source=source, computation=compute)
+    assert value() is None
+    source.set(2)
+    assert value() is None
+    assert seen[0] is None
+    assert seen[1].value is None
+    assert seen[1].source == 1
+
+
+def test_typed_linked_model_computation_and_weak_owner():
+    import gc
+    import weakref
+    from reaktiv import ReactiveModel, field, linked
+
+    class Model(ReactiveModel):
+        limit = field(10)
+
+        def clamp(self, source, previous) -> int:
+            return 1 if previous is None else min(previous.value, source)
+
+        @linked[int](computation=clamp)
+        def page(self):
+            return self.limit()
+
+    model = Model()
+    node = model.page
+    assert node() == 1
+    node.set(8)
+    model.limit.set(5)
+    assert node() == 5
+    owner = weakref.ref(model)
+    del model
+    gc.collect()
+    assert owner() is None
+
+
+def test_linked_previous_state_survives_failed_source_and_computation():
+    import pytest
+    from reaktiv import linked
+    source = Signal(1)
+
+    def compute(current, previous):
+        if current == 2:
+            raise ValueError('failed computation')
+        return current if previous is None else previous.value + current
+
+    def read_source():
+        current = source()
+        if current == 4:
+            raise ValueError('failed source')
+        return current
+
+    value = linked(source=read_source, computation=compute)
+    assert value() == 1
+    value.set(10)
+    source.set(2)
+    with pytest.raises(ValueError):
+        value()
+    source.set(3)
+    assert value() == 13
+    source.set(4)
+    with pytest.raises(ValueError, match='failed source'):
+        value()
+    source.set(5)
+    assert value() == 18
+
+
+def test_parameterized_linked_decorator_on_plain_function():
+    from reaktiv import linked, signal
+
+    source = signal(3)
+
+    @linked(computation=lambda current, previous: current * 10)
+    def scaled():
+        return source()
+
+    assert scaled() == 30
+    scaled.set(1)
+    source.set(4)
+    assert scaled() == 40
+
+
+def test_linked_method_computation_does_not_depend_on_parameter_names():
+    from reaktiv import ReactiveModel, field, linked
+
+    def increment(owner, current, previous):
+        return current + owner.step()
+
+    class Model(ReactiveModel):
+        step = field(1)
+        count = field(1)
+
+        @linked(computation=increment)
+        def next_count(self):
+            return self.count()
+
+    model = Model()
+    assert model.next_count() == 2
+    model.count.set(5)
+    assert model.next_count() == 6

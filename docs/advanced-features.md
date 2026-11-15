@@ -159,3 +159,84 @@ show_details.set(True)
 user_data.set({"name": "Grace"})  # Now tracked because details are visible
 display.dispose()
 ```
+
+## Choosing Between Effects, Resources and Watchers
+
+Three tools react to changes. They differ in who decides *when* work runs and
+whether that work is asynchronous:
+
+| Use | For | When it runs |
+|---|---|---|
+| `effect` | Synchronous side effects: logging, writing other signals, updating a UI you own | Immediately after the write, or when the outermost `batch()` ends |
+| `resource` | Loading data asynchronously from reactive parameters, with status, errors, cancellation and reloads | The loader starts on the resource's event loop when its parameters change |
+| `reaktiv.subtle.Watcher` | Integrations that own scheduling (a UI frame, an event loop tick, a host's own queue) | Never by itself: you are notified and evaluate later, on your schedule |
+
+- **Prefer synchronous effects.** An async effect (`async def`) is supported,
+  but it re-runs as a whole on every change and has no status, error or
+  cancellation state of its own. To load data, use a `resource`. To react to
+  changes in async code, use `to_async_iter`.
+- **Use a `Watcher` only when you need custom scheduling.** It is a low-level
+  primitive for framework authors; see [subtle](api/subtle.md).
+
+## Threads and Event Loops
+
+- **Thread safety is enabled by default.** Signals, computed values and effects
+  use locks so they can be read and written from several threads.
+  `set_thread_safety(False)` removes that overhead for single-threaded programs.
+  It is startup configuration: each object allocates its locks when it is
+  created, so changing the setting later does not affect existing signals,
+  computed values or effects.
+- **Locks protect the graph, not your invariants.** They keep each read,
+  write and `update()` consistent. They do not make several reads an atomic
+  snapshot, and they do not move work between threads; event-loop affinity
+  (below) is a separate rule.
+- **An effect runs on the thread that first schedules it.** Usually that is the
+  thread that made the write, synchronously or when that thread's outermost
+  `batch()` ends. An effect that is already waiting in another thread's batch
+  is not scheduled again: it runs once, on that thread, when its batch ends. So
+  every write is eventually followed by a run of its effects, but not
+  necessarily on the writing thread or immediately. A `Watcher`'s `notify`
+  runs on the writing thread.
+- **Async effects and resources belong to the event loop they were created
+  on.** Both must be created while a loop is running. When a write on another
+  thread triggers them, the work is handed to that loop: async effects,
+  loaders, and cancelling a superseded load all run on the owner loop's thread.
+  Changing a resource's parameters is therefore safe from any thread, and so
+  is disposing an effect: a running async effect is cancelled on its loop.
+- **Call a resource's own methods on its loop**: `set()`, `update()`,
+  `reload()`, `cancel()` and `dispose()`. From another thread, schedule the
+  call there, for example `loop.call_soon_threadsafe(res.cancel)`.
+
+### What `batch()` does and does not do
+
+`batch()` defers effects until the outermost batch on the *current thread*
+ends, so each effect runs once with the final values. It is not a transaction:
+
+- **Writes apply immediately.** Reads inside the batch, including computed
+  values, already see the new values; only effects wait.
+- **There is no rollback.** If the block raises, the writes made before the
+  exception stay, and the deferred effects still run when the batch exits.
+- **It does not isolate threads.** Other threads see each write as it happens,
+  and multiple signals read from another thread are not an atomic snapshot.
+  A batch defers only effects that are pending in it: a write on another
+  thread still runs its other effects immediately on that thread.
+
+```python
+import threading
+from reaktiv import batch, effect, signal
+
+x, y = signal(0), signal(0)
+on_x = effect(lambda: print("on_x sees", x(), "on", threading.current_thread().name))
+on_y = effect(lambda: print("on_y sees", y(), "on", threading.current_thread().name))
+
+with batch():
+    x.set(1)  # on_x is now pending in this thread's batch
+    print("inside the batch, x reads", x())  # 1: writes apply immediately
+    writer = threading.Thread(target=lambda: y.set(2), name="writer")
+    writer.start()
+    writer.join()  # on_y already ran on the writer thread: it was not pending
+    print("batch still open")
+# The batch ends: on_x runs once, here.
+on_x.dispose()
+on_y.dispose()
+```

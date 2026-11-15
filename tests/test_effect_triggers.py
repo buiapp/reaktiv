@@ -781,3 +781,230 @@ async def test_async_effect_subscribes_to_signal_and_dependent_computed():
 
     # Cleanup
     eff.dispose()
+
+
+@pytest.mark.asyncio
+async def test_awaiting_async_effect_does_not_delay_unrelated_effects():
+    gate = asyncio.Event()
+    trigger, other = Signal(0), Signal(0)
+    seen: List[int] = []
+
+    async def slow():
+        trigger()
+        await gate.wait()
+
+    waiting = Effect(slow)
+    observer = Effect(lambda: seen.append(other()))
+    await asyncio.sleep(0.01)
+    other.set(1)
+    assert seen == [0, 1]  # not held back by the suspended async effect
+    gate.set()
+    await asyncio.sleep(0.01)
+    waiting.dispose()
+    observer.dispose()
+
+
+@pytest.mark.asyncio
+async def test_disposing_a_running_async_effect_cancels_it():
+    forever = asyncio.Event()
+    state: List[str] = []
+    other = Signal(0)
+    seen: List[int] = []
+
+    async def hang(on_cleanup):
+        on_cleanup(lambda: state.append("cleanup"))
+        state.append("start")
+        try:
+            await forever.wait()
+        except asyncio.CancelledError:
+            state.append("cancelled")
+            raise
+
+    running = Effect(hang)
+    observer = Effect(lambda: seen.append(other()))
+    await asyncio.sleep(0.01)
+    running.dispose()
+    await asyncio.sleep(0.01)
+    assert state == ["start", "cancelled", "cleanup"]
+    other.set(1)
+    assert seen == [0, 1]
+    observer.dispose()
+
+
+@pytest.mark.asyncio
+async def test_async_effect_reruns_when_a_dependency_changes_mid_run():
+    gate = asyncio.Event()
+    source = Signal(0)
+    runs: List[int] = []
+
+    async def track():
+        runs.append(source())
+        await gate.wait()
+
+    running = Effect(track)
+    await asyncio.sleep(0.01)
+    source.set(1)
+    gate.set()
+    await asyncio.sleep(0.05)
+    assert runs == [0, 1]
+    running.dispose()
+
+
+@pytest.mark.asyncio
+async def test_async_effect_triggered_from_another_thread_runs_on_its_loop():
+    import threading
+
+    source = Signal(0)
+    runs: List[tuple] = []
+
+    async def track():
+        runs.append((source(), threading.current_thread() is threading.main_thread()))
+
+    running = Effect(track)
+    await asyncio.sleep(0.01)
+    writer = threading.Thread(target=lambda: source.set(1))
+    writer.start()
+    writer.join()
+    await asyncio.sleep(0.05)
+    assert runs == [(0, True), (1, True)]
+    running.dispose()
+
+
+def test_async_effect_requires_a_running_event_loop():
+    async def track():
+        pass
+
+    with pytest.raises(RuntimeError, match="running asyncio event loop"):
+        Effect(track)
+
+
+def test_sync_effect_reruns_when_it_changes_its_own_dependency():
+    from reaktiv import effect, signal
+
+    source = signal(0)
+    seen = []
+
+    def normalize():
+        value = source()
+        seen.append(value)
+        if value == 0:
+            source.set(1)
+
+    runner = effect(normalize)
+    assert seen == [0, 1]
+    assert source() == 1
+
+    source.set(0)  # same feedback after a later write
+    assert seen == [0, 1, 0, 1]
+    runner.dispose()
+
+
+def test_effect_feedback_loop_raises_and_leaves_other_effects_runnable():
+    import pytest
+    from reaktiv import effect, signal
+
+    counter = signal(0)
+    with pytest.raises(RuntimeError, match="cycle"):
+        runaway = effect(lambda: counter.set(counter() + 1))
+    runaway = None  # noqa: F841
+
+    other = signal("a")
+    seen = []
+    observer = effect(lambda: seen.append(other()))
+    other.set("b")
+    assert seen == ["a", "b"]
+    observer.dispose()
+
+
+def test_effect_cycle_started_by_another_effect_reaches_the_writer():
+    import pytest
+    from reaktiv import effect, signal
+
+    trigger = signal(False)
+    counter = signal(0)
+    source = signal(0)
+    runaway = effect(lambda: counter.set(counter() + 1) if trigger() else None)
+    starter = effect(lambda: trigger.set(source() > 0))
+
+    with pytest.raises(RuntimeError, match="cycle"):
+        source.set(1)
+    starter.dispose()
+    runaway.dispose()
+
+
+def _dispose_from_worker(target) -> list:
+    import threading
+
+    errors = []
+
+    def run():
+        try:
+            target.dispose()
+        except BaseException as error:  # pragma: no cover - reported below
+            errors.append(error)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join()
+    return errors
+
+
+def test_async_effect_task_is_cancelled_on_its_loop_when_disposed_from_another_thread():
+    import asyncio
+    from reaktiv import effect, signal
+
+    async def main():
+        source = signal(0)
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def wait_forever():
+            source()
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        runner = effect(wait_forever)
+        await started.wait()
+        assert isinstance(runner._async_task, asyncio.Task)
+        assert _dispose_from_worker(runner) == []
+        await asyncio.wait_for(cancelled.wait(), timeout=2)
+
+    asyncio.run(main(), debug=True)
+
+
+def test_async_effect_future_is_cancelled_when_disposed_from_another_thread():
+    import asyncio
+    import concurrent.futures
+    import threading
+    from reaktiv import effect, signal
+
+    async def main():
+        source = signal(0)
+        rerun_started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def wait_on_rerun():
+            if source() == 0:
+                return
+            rerun_started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        runner = effect(wait_on_rerun)
+        await asyncio.sleep(0.01)
+        writer = threading.Thread(target=lambda: source.set(1))  # rerun scheduled cross-thread
+        writer.start()
+        writer.join()
+        await asyncio.wait_for(rerun_started.wait(), timeout=2)
+        assert isinstance(runner._async_task, concurrent.futures.Future)
+        assert _dispose_from_worker(runner) == []
+        await asyncio.wait_for(cancelled.wait(), timeout=2)
+
+    asyncio.run(main(), debug=True)

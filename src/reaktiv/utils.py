@@ -6,6 +6,7 @@ from typing import AsyncIterator, Generic, TypeVar, Union
 
 from .protocols import ReadableSignal
 from .effect import Effect, EffectDescriptor
+from . import scheduler as _sched
 
 T = TypeVar("T")
 
@@ -25,6 +26,14 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
     
     This utility allows you to use signals with Python's async iteration syntax,
     making it easy to integrate reaktiv with async code and frameworks.
+
+    The iterator buffers the values it *observes*, not every write: writes
+    inside one ``batch()`` are observed once, with the final value, and writes
+    of an equal value are not observed at all. Observed values are kept
+    without a bound and yielded in order, so a slow consumer holds its whole
+    backlog in memory.
+    Writes may come from any thread; values are delivered on the event loop
+    that iterates.
     
     Args:
         signal: The signal to convert into an async iterator
@@ -122,15 +131,17 @@ async def to_async_iter(signal: ReadableSignal[T], initial: bool = True) -> Asyn
         ```
     """
     queue = asyncio.Queue[Union[_SignalValue[T], _SignalError]]()
+    loop = asyncio.get_running_loop()
 
-    # Create an effect that pushes new values to the queue
+    # The effect runs on whichever thread writes the signal, but asyncio queues
+    # are not thread-safe: hand every item to the iterator's loop, in order.
     def push_to_queue():
+        item: Union[_SignalValue[T], _SignalError]
         try:
-            value = signal.get()
-            queue.put_nowait(_SignalValue(value))
+            item = _SignalValue(signal.get())
         except Exception as e:
-            # In case of errors, put the exception in the queue
-            queue.put_nowait(_SignalError(e))
+            item = _SignalError(e)
+        _sched.call_soon(loop, queue.put_nowait, item)
 
     # Create the effect
     effect = Effect(push_to_queue)

@@ -333,7 +333,7 @@ async def main():
     selected_user_id.set(42)
     await asyncio.sleep(0.2)
     print(user_email())  # "user42@example.com"
-    user_resource.destroy()
+    user_resource.dispose()
 
 await main()
 ```
@@ -387,7 +387,7 @@ async def main():
         print(f"Found: {results}")
         # Output: Found: ['Apple iPhone', 'Apple Watch', 'Apple AirPods']
 
-    search_results.destroy()
+    search_results.dispose()
 
 await main()
 ```
@@ -451,8 +451,8 @@ async def main():
         company = company_resource.value()
         print(f"Company: {company['name']}")  # "Company 102"
 
-    user_resource.destroy()
-    company_resource.destroy()
+    user_resource.dispose()
+    company_resource.dispose()
 
 await main()
 ```
@@ -501,7 +501,7 @@ async def main():
             print(f"Status: {status['status']} at {status['timestamp']:.2f}")
     
     poll_task.cancel()
-    server_status.destroy()
+    server_status.dispose()
 
 await main()
 ```
@@ -556,7 +556,7 @@ async def main():
     # Now status is RESOLVED with server response
     print(f"Status: {save_resource.status()}")  # RESOLVED
     print(f"Value: {save_resource.value()}")
-    save_resource.destroy()
+    save_resource.dispose()
 
 await main()
 ```
@@ -607,7 +607,7 @@ async def main():
     signal_a.set(3)
     await asyncio.sleep(0.2)
     print(f"Requests: {request_count}")  # 2 (new request)
-    data_resource.destroy()
+    data_resource.dispose()
 
 await main()
 ```
@@ -662,7 +662,7 @@ async def main():
         print(f"Error after retries: {data_resource.error()}")
     elif data_resource.has_value():
         print(f"Success: {data_resource.value()}")
-    data_resource.destroy()
+    data_resource.dispose()
 
 await main()
 ```
@@ -719,7 +719,7 @@ async def main():
     item_id.set(1)
     await asyncio.sleep(0.3)
     print(f"Cached load: {item_resource.value()}")
-    item_resource.destroy()
+    item_resource.dispose()
 
 await main()
 ```
@@ -771,7 +771,7 @@ async def main():
     await asyncio.sleep(0.3)
     print(f"Status: {user_details.status()}")  # RESOLVED
     print(f"Value: {user_details.value()}")
-    user_details.destroy()
+    user_details.dispose()
 
 await main()
 ```
@@ -927,7 +927,7 @@ async def main():
         # Use resource
         await asyncio.sleep(1)
     finally:
-        resource.destroy()  # Clean up pending tasks
+        resource.dispose()  # Clean up pending tasks
 ```
 
 ❌ **Bad:**
@@ -981,7 +981,7 @@ A: Use `reload()` for manual refreshes (e.g., refresh button) where you want to 
 
 **Q: Why does `value` throw when in ERROR state?**
 
-A: This design encourages proper error handling. Always check `has_value()` before accessing `value()()`, or use `snapshot()` for safe access to all states.
+A: This design encourages proper error handling. Always check `has_value()` before calling `value()`, or use `snapshot()` for safe access to all states.
 
 **Q: How do I handle None as a valid value?**
 

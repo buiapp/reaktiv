@@ -29,6 +29,49 @@ active_consumer: contextvars.ContextVar[Optional["_Consumer"]] = contextvars.Con
     "active_consumer", default=None
 )
 
+# Set while a Watcher notify callback runs on this thread. Thread-local rather
+# than a ContextVar: call_soon/create_task copy contexts, and work scheduled from
+# notify must be allowed to read. Independent of tracking, so untracked() cannot
+# lift it.
+class _NotificationState(threading.local):
+    # Class-level default: threads that never ran notify find ``active`` here
+    # without a failed instance lookup. This check runs on every read/write.
+    active = False
+
+
+_notification = _NotificationState()
+
+
+def assert_not_notifying(action: str) -> None:
+    """Reject signal reads and writes while a Watcher notify callback runs."""
+    if _notification.active:
+        raise RuntimeError(f"Cannot {action} signals inside a Watcher notify callback")
+
+
+# Set while a computed (or linked) computation runs on this thread, so writes
+# are rejected there. Independent of tracking: untracked() inside a computation
+# must not make writes legal. Sync effects clear it for their own run.
+class _ComputationState(threading.local):
+    active = False
+
+
+_computation = _ComputationState()
+
+
+def set_computing(active: bool) -> bool:
+    """Mark this thread as inside (or outside) a computation; return the previous state."""
+    previous = _computation.active
+    _computation.active = active
+    return previous
+
+
+def set_notifying(active: bool) -> bool:
+    """Mark this thread as inside (or outside) notify; return the previous state."""
+    previous = _notification.active
+    _notification.active = active
+    return previous
+
+
 global_version = 0  # incremented whenever a writable signal changes
 batch_depth = 0
 batch_iteration = 0  # cycle guard similar to preact
@@ -154,19 +197,18 @@ class Edge:
 # ---------------------------------------------------------------------------
 
 
-def _is_effect(consumer: _Consumer) -> bool:
-    """Check if consumer is an Effect."""
-    # Avoid circular import by checking type name
-    return type(consumer).__name__ == "Effect"
+def _has_weak_target(consumer: _Consumer) -> bool:
+    """Effects and watchers are retained by their owner, not by their sources."""
+    return getattr(type(consumer), "_reaktiv_weak_target", False)
 
 
 def _create_edge_with_weakref_cleanup(source: _Producer, consumer: _Consumer, prev_head: Optional[Edge]) -> Edge:
-    """Create an Edge with weakref for Effects and cleanup callback."""
-    
-    # Use weakref for Effects to allow garbage collection
-    if _is_effect(consumer):
+    """Create an Edge, weakly referencing effect/watcher targets."""
+
+    # Use weakref for effects and watchers to allow garbage collection
+    if _has_weak_target(consumer):
         def on_effect_gc(weak_ref: "weakref.ref[_Consumer]") -> None:
-            """Called when an Effect is garbage collected - clean up the edge."""
+            """Called when the target is garbage collected - clean up the edge."""
             # Remove edge from source's targets list
             with mutation_lock():
                 edge_to_remove = None
@@ -191,7 +233,11 @@ def add_dependency(source: _Producer) -> Optional[Edge]:
     consumer = active_consumer.get()
     if consumer is None:
         return None
+    return add_source(source, consumer)
 
+
+def add_source(source: _Producer, consumer: _Consumer) -> Optional[Edge]:
+    """Link ``source`` to ``consumer``; return None if already linked."""
     lock = consumer._graph_lock
     if lock is None:
         return _add_dependency_unlocked(source, consumer)
@@ -255,17 +301,32 @@ def _cleanup_sources_unlocked(target: _Consumer) -> None:
     while edge is not None:
         prev_edge = edge.prev_source
         if edge.version == -1:
-            edge.source._unsubscribe_edge(edge)
-            target._source_map.pop(id(edge.source), None)
-            if prev_edge is not None:
-                prev_edge.next_source = edge.next_source
-            if edge.next_source is not None:
-                edge.next_source.prev_source = prev_edge
-            if target._sources is edge:
-                target._sources = prev_edge
-            edge.prev_source = None
-            edge.next_source = None
+            _remove_source_unlocked(target, edge)
         edge = prev_edge
+
+
+def remove_source(target: _Consumer, source: _Producer) -> bool:
+    """Unlink ``source`` from ``target``; return False if it was not linked."""
+    with consumer_lock(target):
+        edge = target._source_map.get(id(source))
+        if edge is None:
+            return False
+        _remove_source_unlocked(target, edge)
+        return True
+
+
+def _remove_source_unlocked(target: _Consumer, edge: Edge) -> None:
+    prev_edge = edge.prev_source
+    edge.source._unsubscribe_edge(edge)
+    target._source_map.pop(id(edge.source), None)
+    if prev_edge is not None:
+        prev_edge.next_source = edge.next_source
+    if edge.next_source is not None:
+        edge.next_source.prev_source = prev_edge
+    if target._sources is edge:
+        target._sources = prev_edge
+    edge.prev_source = None
+    edge.next_source = None
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +335,13 @@ def _cleanup_sources_unlocked(target: _Consumer) -> None:
 
 
 def needs_to_recompute(target: _Consumer) -> bool:
+    # A known changed producer is sufficient: do not refresh obsolete computed
+    # branches first (e.g. a replaced implementation behind a stable slot).
+    edge = target._sources
+    while edge is not None:
+        if edge.source._version != edge.version:
+            return True
+        edge = edge.prev_source
     edge = target._sources
     while edge is not None:
         src = edge.source

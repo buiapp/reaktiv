@@ -18,6 +18,9 @@ def set_thread_safety(enabled: bool) -> None:
     - When True (default): Signal/Effect operations may use locking for thread safety.
     - When False: No thread safety measures are applied (not thread-safe!).
 
+    Call it at startup, before creating signals: locks are allocated when an
+    object is constructed, so existing objects keep their current setting.
+
     Args:
         enabled: Whether to enable thread safety features.
     """

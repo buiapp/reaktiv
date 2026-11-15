@@ -95,8 +95,10 @@ def test_linked_signal_initialization_patterns():
     with pytest.raises(ValueError, match="LinkedSignal requires either"):
         LinkedSignal(source=items)  # Missing computation
 
-    with pytest.raises(ValueError, match="LinkedSignal requires either"):
-        LinkedSignal(computation=lambda x, y: x)  # Missing source
+    # computation without a source is a decorator factory; the decorated
+    # function becomes the source (like @linked(equal=...)).
+    from_decorator = LinkedSignal(computation=lambda x, y: x * 2)(lambda: 21)
+    assert from_decorator() == 42
 
 
 def test_linked_signal_previous_state():
@@ -639,3 +641,110 @@ def test_linked_signal_smart_selection_use_case():
     fallback_item = selected_item()
     assert fallback_item is not None
     assert fallback_item["name"] == "Item A"  # Fallback to first
+
+
+# Linked writes apply pending source changes first, as Angular's linkedSignal does.
+
+def test_linked_update_before_first_read_receives_the_computed_value():
+    from reaktiv import linked, signal
+
+    source = signal(10)
+    value = linked(lambda: source() * 2)
+    received = []
+    value.update(lambda current: received.append(current) or current + 1)
+    assert received == [20]
+    assert value() == 21
+
+
+def test_linked_update_after_invalidation_receives_the_fresh_value():
+    from reaktiv import linked, signal
+
+    source = signal(10)
+    value = linked(lambda: source() * 2)
+    assert value() == 20
+    source.set(20)
+    received = []
+    value.update(lambda current: received.append(current) or current + 1)
+    assert received == [40]
+    assert value() == 41
+
+
+def test_linked_set_after_invalidation_is_not_overwritten_by_the_next_read():
+    from reaktiv import computed, linked, signal
+
+    source = signal(10)
+    value = linked(lambda: source() * 2)
+    downstream = computed(lambda: value())
+    assert downstream() == 20
+    source.set(20)
+    value.set(99)
+    assert value() == 99
+    assert downstream() == 99
+    source.set(30)  # a later source change still resets the override
+    assert value() == 60
+
+
+def test_linked_set_replaces_an_error_and_update_raises_it():
+    from reaktiv import linked, signal
+
+    source = signal(0)
+    value = linked(lambda: 10 // source())
+    with pytest.raises(ZeroDivisionError):
+        value()
+    calls = []
+    with pytest.raises(ZeroDivisionError):
+        value.update(lambda current: calls.append(current) or current)
+    assert calls == []
+    value.set(7)
+    assert value() == 7
+    source.set(2)
+    assert value() == 5
+
+
+def test_concurrent_linked_updates_are_not_lost():
+    import threading
+    import time
+
+    source = Signal(0)
+    counter = LinkedSignal(lambda: source())
+    counter()
+    start = threading.Barrier(4)
+
+    def slow_increment(value: int) -> int:
+        time.sleep(0.01)  # widen the read-modify-write window
+        return value + 1
+
+    def worker() -> None:
+        start.wait()
+        counter.update(slow_increment)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert counter() == 4
+
+
+def test_previous_state_subscripts_with_one_or_two_type_arguments():
+    from typing import Optional
+
+    from reaktiv import PreviousState, linked, signal
+
+    assert PreviousState[int] is not None  # source and value share the type
+    assert PreviousState[list, str] is not None
+
+    items = signal(["a"])
+
+    # Annotations evaluated at definition time (no postponed evaluation).
+    def summarize(source: list, previous: Optional[PreviousState[list, str]]) -> str:
+        if previous is not None:
+            assert previous.source == ["a"]
+            assert previous.value == "a"
+        return ",".join(source)
+
+    summary = linked(source=items, computation=summarize)
+    assert summary() == "a"
+    items.set(["a", "b"])
+    assert summary() == "a,b"

@@ -3,11 +3,14 @@ requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-license-files = []
+license-files = ["LICENSE"]
+
+[tool.setuptools.package-data]
+reaktiv = ["py.typed", "AGENTS.md"]
 
 [project]
 name = "reaktiv"
-version = "0.24.2"
+version = "0.25.0"
 description = "Signals for Python - inspired by Angular Signals / SolidJS. Reactive Declarative State Management Library for Python - automatic dependency tracking and reactive updates for your application state."
 readme = "README.md"
 authors = [{name = "Tuan Anh Bui", email = "mail@bui.app"}]
@@ -21,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 requires-python = ">=3.9"
-dependencies = []
+dependencies = ["typing-extensions>=4.11; python_version < '3.13'"]
 
 [dependency-groups]
 dev = [

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import inspect
 import threading
 import traceback
@@ -70,6 +71,25 @@ class EffectDescriptor(PerInstanceDescriptor["Effect"]):
             return self._func(owner())
 
         return _create_effect_instance(sync_without_cleanup)
+
+
+def _cancel_task(
+    task: Optional[Union[asyncio.Task[Any], concurrent.futures.Future[Any]]],
+) -> None:
+    """Cancel an async effect run from any thread.
+
+    An ``asyncio.Task`` may only be touched on its own loop, so from another
+    thread the cancellation is handed to that loop. A ``concurrent.futures.Future``
+    (from scheduling onto the loop from another thread) is thread-safe.
+    """
+    if task is None or task.done():
+        return
+    if isinstance(task, asyncio.Task):
+        loop = task.get_loop()
+        if _sched.running_loop() is not loop:
+            _sched.call_soon(loop, task.cancel)  # no-op if the loop is closed
+            return
+    task.cancel()
 
 
 class Effect:
@@ -212,6 +232,8 @@ class Effect:
         "_accepts_cleanup",
         "_async_task",
         "_executing",
+        "_rerun_requested",
+        "_loop",
         "_graph_lock",
         "__weakref__",  # Allow weak references for garbage collection
     )
@@ -235,6 +257,8 @@ class Effect:
             return EffectDescriptor(func)
         return super().__new__(cls)
 
+    _reaktiv_weak_target = True  # sources reference effects weakly
+
     def __init__(self, func: EffectFn):
         self._fn = func
         self._cleanup: Optional[Callable[[], None]] = None
@@ -244,8 +268,19 @@ class Effect:
         self._flags: int = graph.TRACKING
         self._is_async = asyncio.iscoroutinefunction(func)
         self._accepts_cleanup = len(inspect.signature(func).parameters) >= 1
-        self._async_task: Optional[asyncio.Task] = None
+        # asyncio.Task on the owner loop; concurrent Future when started from another thread
+        self._async_task: Optional[Union[asyncio.Task[Any], concurrent.futures.Future[Any]]] = None
         self._executing: bool = False
+        # Set when an async run is notified mid-run; it reruns when it finishes.
+        self._rerun_requested: bool = False
+        # Async effects run on the event loop they were created on, even when a
+        # write on another thread triggers them.
+        self._loop = _sched.running_loop() if self._is_async else None
+        if self._is_async and self._loop is None and _sched._create_task is None:
+            raise RuntimeError(
+                "Async effects must be created inside a running asyncio event loop, "
+                "for example in a coroutine started with asyncio.run()."
+            )
         self._graph_lock: Optional[threading.RLock] = threading.RLock()
         debug_log(
             lambda: f"Effect created with func: {func}, is_async: {self._is_async}"
@@ -272,6 +307,9 @@ class Effect:
             if self._flags & graph.DISPOSED:
                 return False
             if self._executing:
+                # Notified during its own run (e.g. it wrote a dependency):
+                # run again once this run ends instead of losing the change.
+                self._rerun_requested = True
                 return False
             # Always run on first execution (no sources yet)
             if self._sources is None:
@@ -280,24 +318,35 @@ class Effect:
             return graph.needs_to_recompute(self)
 
     # --------------------------- Execution helpers ----------------------------
-    def _start(self) -> Callable[[], None]:
+    def _start(self, batch: bool = True) -> Callable[[], None]:
+        """Begin a tracked run. Sync runs batch their writes until the run ends;
+        async runs must not, because a thread-wide batch held open across
+        ``await`` would defer every other effect on this thread."""
         if self._flags & graph.RUNNING:
             raise RuntimeError("Cycle detected in effects")
         self._flags |= graph.RUNNING
         self._flags &= ~graph.DISPOSED
+        # An effect may write even when it runs inside a computation (e.g. it
+        # was created there); async runs always start at the top of a task.
+        prev_computing = graph.set_computing(False) if batch else False
         self._run_cleanup()
         graph.prepare_sources(self)
         graph.batch_iteration = 0
 
-        _sched.start_batch()
+        if batch:
+            _sched.start_batch()
         prev = graph.set_active_consumer(self)
 
         def _finish():
-            self._end(prev)
+            try:
+                self._end(prev, batch)
+            finally:
+                if batch:
+                    graph.set_computing(prev_computing)
 
         return _finish
 
-    def _end(self, prev_consumer) -> None:
+    def _end(self, prev_consumer, batch: bool = True) -> None:
         if graph.active_consumer.get() is not self:
             raise RuntimeError("Out-of-order effect end")
         graph.cleanup_sources(self)
@@ -305,7 +354,8 @@ class Effect:
         self._flags &= ~graph.RUNNING
         if self._flags & graph.DISPOSED:
             self._dispose_now()
-        _sched.end_batch()
+        if batch:
+            _sched.end_batch()
 
     def _run_cleanup(self) -> None:
         if self._cleanup is not None:
@@ -330,7 +380,14 @@ class Effect:
 
             if self._is_async:
                 self._executing = True
-                self._async_task = _sched.create_task(self._run_effect_async())
+                try:
+                    self._async_task = _sched.create_task(
+                        self._run_effect_async(), self._loop
+                    )
+                except Exception:
+                    # e.g. the owner loop has been closed: report, stay runnable
+                    self._executing = False
+                    traceback.print_exc()
                 return
 
             self._executing = True
@@ -364,11 +421,24 @@ class Effect:
                     finish()
                 finally:
                     self._executing = False
+            # _run_callback is only called from the flush loop, which picks
+            # up the re-enqueued effect (and enforces the cycle limit).
+            self._rerun_if_requested(flush=False)
+
+    def _rerun_if_requested(self, flush: bool) -> None:
+        if not self._rerun_requested:
+            return
+        self._rerun_requested = False
+        if self._flags & graph.DISPOSED:
+            return
+        self._notify()
+        if flush and _sched.current_batch_depth() == 0:
+            _sched.flush_now()
 
     # --------------------------- Async execution ----------------------------
     async def _run_effect_async(self) -> None:
         try:
-            finish = self._start()
+            finish = self._start(batch=False)
             pending_cleanups: List[Callable[[], None]] = []
 
             def on_cleanup(fn_cleanup: Callable[[], None]) -> None:
@@ -386,12 +456,13 @@ class Effect:
                 else:
                     await cast(Callable[[], Coroutine[Any, Any, None]], self._fn)()
             except asyncio.CancelledError:
-                # run any collected cleanups even on cancel
+                # run any collected cleanups even on cancel, exactly once
                 for c in pending_cleanups:
                     try:
                         c()
                     except Exception:
                         traceback.print_exc()
+                pending_cleanups.clear()
                 raise
             except Exception:
                 traceback.print_exc()
@@ -410,6 +481,8 @@ class Effect:
             self._executing = False
             if self._async_task is not None and self._async_task.done():
                 self._async_task = None
+            # A dependency changed while this run was awaiting.
+            self._rerun_if_requested(flush=True)
 
     # --------------------------- Disposal ----------------------------
     def _dispose_now(self) -> None:
@@ -425,8 +498,7 @@ class Effect:
         # run cleanup
         self._run_cleanup()
         # cancel async task
-        if self._async_task is not None and not self._async_task.done():
-            self._async_task.cancel()
+        _cancel_task(self._async_task)
 
     def dispose(self) -> None:
         """Stop the effect and prevent it from running again.
@@ -464,6 +536,11 @@ class Effect:
             self._flags |= graph.DISPOSED
             if not (self._flags & graph.RUNNING):
                 self._dispose_now()
+                return
+            task = self._async_task
+        # A running async effect finishes its graph cleanup when the task ends;
+        # cancel it now so an effect awaiting indefinitely cannot outlive dispose.
+        _cancel_task(task)
 
     def __del__(self) -> None:
         """Run cleanup function when Effect is garbage collected.
@@ -506,4 +583,4 @@ class _EffectFactory:
         return Effect(func)
 
 
-effect = _EffectFactory()
+effect: _EffectFactory = _EffectFactory()

@@ -155,8 +155,8 @@ def test_decorator_approximate_equality() -> None:
 
     # Small change within tolerance
     value.set(1.00001)
-    # Value updates internally but version doesn't change
-    assert abs(computed_value() - 2.00002) < 0.0001
+    # Equal within tolerance: the previously published value is kept
+    assert computed_value() == 2.0
 
 
 def test_decorator_with_none_return() -> None:

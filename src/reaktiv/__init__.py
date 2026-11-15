@@ -6,6 +6,7 @@ from .signal import Signal, signal, Computed, computed, ComputeSignal, ReadonlyS
 from .linked import LinkedSignal, Linked, linked, PreviousState
 from .effect import Effect, effect
 from .model import ReactiveModel, field
+from . import subtle
 from .utils import to_async_iter
 from .thread_safety import set_thread_safety, is_thread_safety_enabled
 from .protocols import ReadableSignal, WritableSignal
@@ -23,7 +24,7 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
-__version__ = "0.24.1"
+__version__ = "0.25.0"
 __all__ = [
     "Signal",
     "signal",
@@ -34,6 +35,7 @@ __all__ = [
     "Effect",
     "effect",
     "ReactiveModel",
+    "subtle",
     "field",
     "LinkedSignal",
     "Linked",

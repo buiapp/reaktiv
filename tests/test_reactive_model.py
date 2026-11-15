@@ -303,3 +303,220 @@ async def _wait_for(predicate, timeout: float = 1.0) -> None:
             return
         await asyncio.sleep(0.001)
     raise AssertionError("condition was not reached before timeout")
+
+
+def test_field_accepts_custom_equality_for_defaults_and_explicit_initial_values():
+    class Model(ReactiveModel):
+        amount = field(1.0, equal=lambda previous, current: abs(previous - current) < 0.1)
+
+    for model in [Model(), Model(amount=1.0)]:
+        model.amount.set(1.05)
+        assert model.amount() == 1.0
+        model.amount.set(2.0)
+        assert model.amount() == 2.0
+        model.dispose()
+
+
+def test_equal_model_instances_keep_separate_reactive_state():
+    import gc
+
+    from reaktiv import ReactiveModel, computed, effect, field, linked
+
+    runs = []
+
+    class Point(ReactiveModel):
+        x = field(0)
+
+        @computed
+        def double(self):
+            return self.x() * 2
+
+        @linked
+        def chosen(self):
+            return self.x()
+
+        @effect
+        def log(self):
+            runs.append(self.x())
+
+        def __eq__(self, other):
+            return isinstance(other, Point)
+
+        def __hash__(self):
+            return 1
+
+    first, second = Point(), Point()
+    first.x.set(1)
+    second.x.set(2)
+    assert (first.x(), second.x()) == (1, 2)
+    assert (first.double(), second.double()) == (2, 4)
+    assert (first.chosen(), second.chosen()) == (1, 2)
+    assert first.log is not second.log
+    import weakref
+
+    refs = [weakref.ref(first), weakref.ref(second)]
+    first.dispose()
+    second.dispose()
+    del first, second
+    gc.collect()
+    assert [ref() for ref in refs] == [None, None]
+
+
+def test_subclass_overrides_of_eager_members_replace_the_base_member():
+    from reaktiv import ReactiveModel, effect, field
+
+    log = []
+
+    class Base(ReactiveModel):
+        x = field(0)
+
+        @effect
+        def watch(self):
+            log.append(("base", self.x()))
+
+        @effect
+        def kept(self):
+            log.append(("kept", self.x()))
+
+    class Child(Base):
+        @effect
+        def watch(self):
+            log.append(("child", self.x()))
+
+    class Plain(Base):
+        watch = None  # overriding with a non-reactive member disables the effect
+
+    child = Child()
+    child.watch
+    assert sorted(log) == [("child", 0), ("kept", 0)]
+    log.clear()
+    plain = Plain()
+    assert log == [("kept", 0)]
+    child.dispose()
+    plain.dispose()
+
+
+def test_model_dispose_attempts_every_cleanup_and_raises_the_first_error(capsys):
+    from reaktiv import ReactiveModel
+
+    order = []
+
+    class Cleanup:
+        def __init__(self, name, error=None):
+            self.name, self.error = name, error
+
+        def dispose(self):
+            order.append(self.name)
+            if self.error:
+                raise self.error
+
+    model = ReactiveModel()
+    model.own(Cleanup("first"))
+    model.own(Cleanup("second", RuntimeError("second failed")))
+    model.own(Cleanup("third", ValueError("third failed")))
+    with pytest.raises(ValueError, match="third failed"):
+        model.dispose()
+    assert order == ["third", "second", "first"]
+    assert "second failed" in capsys.readouterr().err
+    model.dispose()  # ownership was cleared: nothing runs twice
+    assert order == ["third", "second", "first"]
+
+
+def test_models_referenced_by_their_own_reactive_members_are_collected():
+    import gc
+    import weakref
+
+    from reaktiv import ReactiveModel, computed, effect, field, linked
+
+    class Node(ReactiveModel):
+        value = field(0)
+
+        @computed
+        def me(self):
+            self.value()
+            return self  # the cached result references the owner
+
+        @linked
+        def chosen(self):
+            return (self, self.value())
+
+        @effect
+        def watch(self, on_cleanup):
+            self.value()
+            on_cleanup(lambda: self.value)  # the cleanup closes over the owner
+
+    node = Node()
+    assert node.me() is node
+    node.chosen()
+    ref = weakref.ref(node)
+    del node
+    gc.collect()
+    assert ref() is None
+
+
+def test_slotted_owners_without_dict_keep_separate_reactive_state():
+    import gc
+    import weakref
+
+    from reaktiv import computed, field
+
+    class Slotted:
+        __slots__ = ("__weakref__",)
+        x = field(1)
+
+        @computed
+        def double(self):
+            return self.x() * 2
+
+    first, second = Slotted(), Slotted()
+    second.x.set(5)
+    assert (first.double(), second.double()) == (2, 10)
+    ref = weakref.ref(first)
+    del first
+    gc.collect()
+    assert ref() is None
+
+
+def test_objects_registered_after_dispose_are_disposed_immediately():
+    import asyncio
+
+    from reaktiv import ReactiveModel, field, resource
+
+    class Handle:
+        def __init__(self) -> None:
+            self.disposed = 0
+
+        def dispose(self) -> None:
+            self.disposed += 1
+
+    class Store(ReactiveModel):
+        user_id = field(1)
+
+        @resource[int, int]
+        def user(self):
+            return self.user_id()
+
+        @user.loader
+        async def load_user(self, params):
+            calls.append(params.params)
+            return params.params
+
+    calls: list[int] = []
+
+    async def main() -> None:
+        store = Store()
+        store.dispose()
+
+        late = Handle()
+        assert store.own(late) is late
+        assert late.disposed == 1  # nothing would ever clean it up otherwise
+
+        user = store.user  # first access after disposal: created disposed
+        await asyncio.sleep(0.01)
+        assert calls == []
+        assert user.is_loading() is False
+
+        store.dispose()  # idempotent
+        assert late.disposed == 1
+
+    asyncio.run(main())

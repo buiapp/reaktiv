@@ -14,7 +14,7 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from weakref import WeakKeyDictionary
+import weakref
 
 T = TypeVar("T")
 DescriptorT = TypeVar("DescriptorT", bound="PerInstanceDescriptor[Any]")
@@ -24,6 +24,81 @@ class _Missing:
 
 
 _MISSING = _Missing()
+
+
+class IdentityWeakMap(Generic[T]):
+    """Map objects to values by identity, without keeping the objects alive.
+
+    Unlike ``WeakKeyDictionary`` it never uses ``__eq__``/``__hash__``, so two
+    distinct owners that compare equal get separate entries. ``set`` raises
+    ``TypeError`` for objects that cannot be weakly referenced.
+    """
+
+    __slots__ = ("_entries",)
+
+    def __init__(self) -> None:
+        self._entries: dict[int, tuple["weakref.ref[Any]", T]] = {}
+
+    def get(self, key: object) -> Union[T, _Missing]:
+        entry = self._entries.get(id(key))
+        if entry is not None and entry[0]() is key:
+            return entry[1]
+        return _MISSING
+
+    def set(self, key: object, value: T) -> None:
+        entries = self._entries
+        key_id = id(key)
+
+        def remove(ref: "weakref.ref[Any]") -> None:
+            entry = entries.get(key_id)
+            if entry is not None and entry[0] is ref:
+                del entries[key_id]
+
+        entries[key_id] = (weakref.ref(key, remove), value)
+
+
+class InstanceStorage(Generic[T]):
+    """Per-instance values for one descriptor, owned by the instance.
+
+    Values live in the instance ``__dict__``, as with ``functools.cached_property``,
+    so they are released together with the instance even when they reference it
+    (a computed returning ``self``, a cleanup closing over it). Only instances
+    without a ``__dict__`` fall back to an identity-keyed weak map, which keeps
+    the value alive as long as the instance exists.
+    """
+
+    __slots__ = ("_key", "_fallback")
+
+    def __init__(self) -> None:
+        self._key = f"_reaktiv_{id(self):x}"
+        self._fallback: Optional[IdentityWeakMap[T]] = None
+
+    def set_name(self, name: str) -> None:
+        """Include the member name in the storage key, for readable ``vars()``."""
+        self._key = f"_reaktiv_{name}_{id(self):x}"
+
+    def get(self, instance: object) -> Union[T, _Missing]:
+        values = getattr(instance, "__dict__", None)
+        if values is not None:
+            return values.get(self._key, _MISSING)
+        if self._fallback is None:
+            return _MISSING
+        return self._fallback.get(instance)
+
+    def set(self, instance: object, value: T) -> None:
+        values = getattr(instance, "__dict__", None)
+        if values is not None:
+            values[self._key] = value
+            return
+        if self._fallback is None:
+            self._fallback = IdentityWeakMap()
+        try:
+            self._fallback.set(instance, value)
+        except TypeError:
+            raise TypeError(
+                "Reactive descriptors require instances with a __dict__ or "
+                "weak-referenceable instances"
+            ) from None
 
 
 def is_instance_method(func: Callable[..., object]) -> bool:
@@ -59,11 +134,10 @@ class PerInstanceDescriptor(Generic[T]):
     initialize_eagerly = False
 
     def __init__(self) -> None:
-        self._cache: WeakKeyDictionary[object, T] = WeakKeyDictionary()
-        self._storage_name: Optional[str] = None
+        self._storage: InstanceStorage[T] = InstanceStorage()
 
     def __set_name__(self, owner: type, name: str) -> None:
-        self._storage_name = f"__reaktiv_{owner.__name__}_{name}"
+        self._storage.set_name(name)
 
     @overload
     def __get__(
@@ -86,34 +160,13 @@ class PerInstanceDescriptor(Generic[T]):
         return self._get_or_create(instance)
 
     def _get_or_create(self, instance: object) -> T:
-        try:
-            return self._cache[instance]
-        except KeyError:
-            value = self._create(instance)
-            self._cache[instance] = value
-            retain_owner(instance, value)
+        value = self._storage.get(instance)
+        if not isinstance(value, _Missing):
             return value
-        except TypeError:
-            value = self._get_from_instance_dict(instance)
-            if not isinstance(value, _Missing):
-                return value
-            value = self._create(instance)
-            self._set_on_instance_dict(instance, value)
-            retain_owner(instance, value)
-            return value
-
-    def _get_from_instance_dict(self, instance: object) -> Union[T, _Missing]:
-        if self._storage_name is None or not hasattr(instance, "__dict__"):
-            return _MISSING
-        return vars(instance).get(self._storage_name, _MISSING)
-
-    def _set_on_instance_dict(self, instance: object, value: T) -> None:
-        if self._storage_name is None or not hasattr(instance, "__dict__"):
-            raise TypeError(
-                "Reactive descriptors require weak-referenceable instances or "
-                "instances with a __dict__"
-            )
-        vars(instance)[self._storage_name] = value
+        created = self._create(instance)
+        self._storage.set(instance, created)
+        retain_owner(instance, created)
+        return created
 
     def _create(self, instance: object) -> T:
         raise NotImplementedError

@@ -44,7 +44,9 @@ print(normalized_name())  # ada
 ```
 
 Custom equality can suppress downstream updates when two computed values should
-be treated as equivalent:
+be treated as equivalent. When it returns `True`, the computed keeps its
+previously published value (as in Angular and SolidJS), so later comparisons
+are made against that value:
 
 ```pyodide install="reaktiv" assets="no" height="14" theme="github,one_dark"
 from reaktiv import computed, signal
@@ -55,9 +57,11 @@ temperature = signal(21.04)
 def rounded_temperature():
     return temperature()
 
-print(rounded_temperature())
-temperature.set(21.05)
-print(rounded_temperature())
+print(rounded_temperature())  # 21.04
+temperature.set(21.03)        # rounds to the same 21.0: keeps 21.04
+print(rounded_temperature())  # 21.04
+temperature.set(21.16)        # rounds to 21.2: publishes the new value
+print(rounded_temperature())  # 21.16
 ```
 
 ::: reaktiv.ComputeSignal
@@ -66,4 +70,5 @@ print(rounded_temperature())
       heading_level: 2
       show_root_heading: true
       show_bases: false
+      inherited_members: true
       members_order: source

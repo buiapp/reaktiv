@@ -158,6 +158,7 @@ Effects:
 - Execute a function when created and whenever dependencies change
 - For synchronous effects outside `batch()`, every successful dependency update that changes a value triggers one effect execution
 - Updates inside `batch()` are intentionally coalesced, so the effect runs once after the outermost batch completes
+- If an effect writes a signal it read, it runs again after the current run, so it always ends up seeing the latest value. A synchronous effect that keeps changing its own inputs raises `RuntimeError` after 100 consecutive runs (async effects are not bounded this way); prefer `computed` or `linked` for derived state
 - Automatically track signal dependencies
 - Can be disposed when no longer needed
 - Support both synchronous and asynchronous functions
@@ -223,10 +224,10 @@ from reaktiv import linked, signal, PreviousState
 query = signal("shoes")
 page = signal(1)
 
-def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
+def compute_selection(src: tuple[str, int], prev: PreviousState[tuple[str, int], str] | None) -> str:
     current_query, _ = src
     # If only the page changed, keep previous selection
-    if prev is not None and isinstance(prev.source, tuple) and prev.source[0] == current_query:
+    if prev is not None and prev.source[0] == current_query:
         return prev.value
     # Otherwise, provide a new default for the new query
     return f"default-for-{current_query}"
@@ -307,6 +308,11 @@ with batch():
 # After batch completes, prints: "Sum: 20"
 logger.dispose()
 ```
+
+A batch only defers effects. Writes apply immediately, so reads inside the
+batch see the new values, and there is no rollback if the block raises. See
+[what `batch()` does and does not do](advanced-features.md#what-batch-does-and-does-not-do)
+for the details, including threads.
 
 ## Memory Management
 
@@ -479,11 +485,11 @@ config.set({"theme": "light", "font_size": 12})
 print(config())
 ```
 
-When working with mutable objects, you have two options:
-1. Provide a custom equality function that compares by value
-2. Always create new instances when updating (immutable approach)
-
-The immutable approach is often cleaner and less error-prone:
+In-place mutation is never detected, not even with a custom equality function:
+the signal already holds the mutated object, so the comparison sees the same
+object twice. Always create new instances when updating. A custom equality
+function only decides whether a *new* instance counts as a change; when it
+returns `True`, the previous value is kept and nothing is notified.
 
 ```pyodide install="reaktiv" assets="no" height="18" theme="github,one_dark"
 from reaktiv import signal

@@ -43,6 +43,8 @@ Full documentation is available at [https://reaktiv.bui.app/](https://reaktiv.bu
 
 For a comprehensive guide, check out [The Missing Manual for Signals: State Management for Python Developers](https://bui.app/the-missing-manual-for-signals-state-management-for-python-developers/).
 
+**Using a coding agent?** reaktiv ships a short guide for AI coding agents, matching the installed version, at `reaktiv/AGENTS.md` inside the package (also [online](https://reaktiv.bui.app/docs/agents/)). Point your project's `AGENTS.md` or `CLAUDE.md` at it so the agent writes declarative, reactive code. An index for agents is at [`llms.txt`](https://reaktiv.bui.app/docs/llms.txt).
+
 ## Quick Start
 
 ```python
@@ -645,10 +647,10 @@ from reaktiv import linked, signal, PreviousState
 query = signal("shoes")
 page = signal(1)
 
-def compute_selection(src: tuple[str, int], prev: PreviousState[str] | None) -> str:
+def compute_selection(src: tuple[str, int], prev: PreviousState[tuple[str, int], str] | None) -> str:
     current_query, _ = src
     # If only the page changed, keep previous selection
-    if prev is not None and isinstance(prev.source, tuple) and prev.source[0] == current_query:
+    if prev is not None and prev.source[0] == current_query:
         return prev.value
     # Otherwise, provide a new default for the new query
     return f"default-for-{current_query}"
@@ -725,6 +727,17 @@ asyncio.run(main())
 For complete documentation, examples, and design patterns, see the [Resource User Guide](https://reaktiv.bui.app/docs/resource-guide.html).
 
 ### Custom Equality
+
+Model fields and async resource values also accept `equal=` callbacks:
+
+```python
+amount = field(1.0, equal=lambda previous, current: abs(previous - current) < 0.01)
+loaded = resource(params=get_params, loader=load_data, equal=compare_results)
+```
+
+Returning `True` retains the previous value and skips value-change notifications.
+Resource equality applies to loaded or manually set values, independently of
+request parameters and loading/error status.
 ```python
 # For objects where you want value-based comparison
 items = signal([1, 2, 3], equal=lambda a, b: a == b)
@@ -1036,31 +1049,30 @@ config.update(lambda d: {k: v for k, v in d.items() if k != "retries"})  # Remov
 config.update(lambda d: {**d, **{"max_conn": 100, "pool_size": 5}})      # Merge multiple
 ```
 
-#### Alternative: Value-Based Equality
-If you prefer to modify objects in place, provide a custom equality function:
+#### What `equal=` Does (and Doesn't)
+Mutating a value in place is never detected, not even with a custom `equal=`:
+after `current.append(4)` the signal already holds the mutated list, so the
+comparison receives the same object twice. Always create a new value.
+
+`equal=` decides whether a **new** value counts as a change. When it returns
+`True`, the signal keeps its previous value and notifies nobody:
 
 ```python
-# For lists - compares actual values
-def list_equal(a, b):
-    return len(a) == len(b) and all(x == y for x, y in zip(a, b))
+items = signal([1, 2, 3], equal=lambda a, b: a == b)
 
-items = signal([1, 2, 3], equal=list_equal)
+items.set([1, 2, 3])                  # new list, same content: no update
+items.update(lambda xs: [*xs, 4])     # new list, new content: updates
 
-# Now you can modify in place and trigger updates manually
 current = items()
-current.append(4)
-items.set(current)  # Triggers update because values changed
-
-# For dictionaries - compares actual content
-def dict_equal(a, b):
-    return a == b
-
-config = signal({"timeout": 30}, equal=dict_equal)
-
-current = config()
-current["retries"] = 3
-config.set(current)  # Triggers update
+current.append(5)
+items.set(current)                    # ❌ in-place mutation: never detected
 ```
+
+The same rule applies to `computed`, `linked`, model fields and resources, and
+matches Angular and SolidJS: equality is checked against the last published
+value, and when it reports "equal" the previous value is kept. If the function
+raises, `set()` raises and the old value stays; in a computed the exception
+becomes the computed's error.
 
 ## More Examples
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import traceback
+
 from typing import (
     Any,
     Callable,
@@ -13,12 +15,24 @@ from typing import (
     overload,
     runtime_checkable,
 )
-from weakref import WeakKeyDictionary
 
-from ._descriptor import PerInstanceDescriptor
+from ._descriptor import InstanceStorage, PerInstanceDescriptor, _Missing
 from .signal import Signal
 
 T = TypeVar("T")
+
+
+@runtime_checkable
+class Disposable(Protocol):
+    def dispose(self) -> None: ...
+
+
+@runtime_checkable
+class Destroyable(Protocol):
+    def destroy(self) -> None: ...
+
+
+OwnedT = TypeVar("OwnedT", bound=Union[Disposable, Destroyable])
 
 
 class ReactiveModel:
@@ -136,58 +150,96 @@ class ReactiveModel:
         return fields
 
     def _reaktiv_initialize_eager_members(self) -> None:
-        seen: set[str] = set()
-        for cls in reversed(type(self).mro()):
+        mro = type(self).mro()
+        # The member Python resolves for each name: the most-derived definition.
+        effective: dict[str, object] = {}
+        for cls in mro:
+            for name, member in cls.__dict__.items():
+                effective.setdefault(name, member)
+        # Initialize base classes first, skipping members a subclass overrides.
+        for cls in reversed(mro):
             for name, member in tuple(cls.__dict__.items()):
-                if name in seen:
-                    continue
-                seen.add(name)
                 if (
-                    isinstance(member, PerInstanceDescriptor)
+                    effective.get(name) is member
+                    and isinstance(member, PerInstanceDescriptor)
                     and member.initialize_eagerly
                 ):
                     member.initialize(self)
 
     def _reaktiv_retain(self, value: object) -> None:
+        if getattr(self, "_reaktiv_disposed", False):
+            # Nothing would ever clean it up: dispose it right away instead.
+            _dispose_one(value)
+            return
         if not hasattr(self, "_reaktiv_owned"):
             self._reaktiv_owned = []
-        if value not in self._reaktiv_owned:
+        if not any(owned is value for owned in self._reaktiv_owned):
             self._reaktiv_owned.append(value)
 
+    def own(self, value: OwnedT) -> OwnedT:
+        """Retain a disposable object until this model is disposed.
+
+        Extensions can register their own lifecycle without depending on private
+        descriptor machinery. Cleanup follows reverse registration order; the
+        object must implement ``dispose()`` or ``destroy()``. On a model that
+        is already disposed, the object is disposed immediately (and returned).
+
+        Raises:
+            TypeError: If ``value`` has neither ``dispose()`` nor ``destroy()``.
+        """
+        if not isinstance(value, (Disposable, Destroyable)):
+            raise TypeError("own() requires an object with dispose() or destroy()")
+        self._reaktiv_retain(value)
+        return value
+
     def dispose(self) -> None:
-        """Dispose model-owned effects and resources."""
-        for value in reversed(self._reaktiv_owned):
-            if isinstance(value, Disposable):
-                value.dispose()
-                continue
-            if isinstance(value, Destroyable):
-                value.destroy()
-        self._reaktiv_owned.clear()
+        """Dispose model-owned effects, resources and registered extensions.
+
+        Every owned object is cleaned up, in reverse registration order, even
+        if an earlier cleanup raises. The first exception is re-raised after
+        all cleanups ran; further exceptions are printed. Afterwards the model
+        stays disposed: objects registered later with ``own()``, and members
+        first accessed later, are disposed immediately. Calling ``dispose()``
+        again does nothing.
+        """
+        self._reaktiv_disposed = True
+        owned = list(getattr(self, "_reaktiv_owned", ()))
+        if hasattr(self, "_reaktiv_owned"):
+            self._reaktiv_owned.clear()
+        first_error: Optional[BaseException] = None
+        for value in reversed(owned):
+            try:
+                _dispose_one(value)
+            except Exception as error:
+                if first_error is None:
+                    first_error = error
+                else:
+                    traceback.print_exception(type(error), error, error.__traceback__)
+        if first_error is not None:
+            raise first_error
 
 
-@runtime_checkable
-class Disposable(Protocol):
-    def dispose(self) -> None: ...
-
-
-@runtime_checkable
-class Destroyable(Protocol):
-    def destroy(self) -> None: ...
+def _dispose_one(value: object) -> None:
+    if isinstance(value, Disposable):
+        value.dispose()
+    elif isinstance(value, Destroyable):
+        value.destroy()
 
 
 class SignalField(Generic[T]):
     """Descriptor that creates one writable Signal per model instance."""
 
     @overload
-    def __init__(self, default: T, /) -> None: ...
+    def __init__(self, default: T, /, *, equal: Optional[Callable[[T, T], bool]] = None) -> None: ...
 
     @overload
-    def __init__(self, *, factory: Callable[[], T]) -> None: ...
+    def __init__(self, *, factory: Callable[[], T], equal: Optional[Callable[[T, T], bool]] = None) -> None: ...
 
     def __init__(
         self,
         *defaults: T,
         factory: Optional[Callable[[], T]] = None,
+        equal: Optional[Callable[[T, T], bool]] = None,
     ) -> None:
         if len(defaults) == 1 and factory is None:
             default = defaults[0]
@@ -196,11 +248,11 @@ class SignalField(Generic[T]):
             self._initial_value = factory
         else:
             raise TypeError("field() requires exactly one default value or a factory")
-        self._cache: WeakKeyDictionary[object, Signal[T]] = WeakKeyDictionary()
-        self._storage_name: Optional[str] = None
+        self._equal = equal
+        self._storage: InstanceStorage[Signal[T]] = InstanceStorage()
 
     def __set_name__(self, owner: type, name: str) -> None:
-        self._storage_name = f"__reaktiv_field_{owner.__name__}_{name}"
+        self._storage.set_name(name)
 
     @overload
     def __get__(self, instance: None, owner: Optional[type] = None) -> "SignalField[T]": ...
@@ -224,7 +276,7 @@ class SignalField(Generic[T]):
             signal.set(value)
             return signal
 
-        signal = Signal(value)
+        signal = Signal(value, equal=self._equal)
         self._store(instance, signal)
         return signal
 
@@ -233,44 +285,16 @@ class SignalField(Generic[T]):
         if signal is not None:
             return signal
 
-        signal = Signal(self._initial_value())
+        signal = Signal(self._initial_value(), equal=self._equal)
         self._store(instance, signal)
         return signal
 
     def _get_existing(self, instance: object) -> Optional[Signal[T]]:
-        try:
-            return self._cache[instance]
-        except KeyError:
-            return None
-        except TypeError:
-            return self._get_from_instance_dict(instance)
+        value = self._storage.get(instance)
+        return None if isinstance(value, _Missing) else value
 
     def _store(self, instance: object, signal: Signal[T]) -> None:
-        try:
-            self._cache[instance] = signal
-        except TypeError:
-            self._set_on_instance_dict(instance, signal)
-
-    def _get_from_instance_dict(self, instance: object) -> Optional[Signal[T]]:
-        if self._storage_name is None:
-            return None
-        try:
-            value = vars(instance).get(self._storage_name)
-        except TypeError:
-            return None
-        if value is None:
-            return None
-        if not isinstance(value, Signal):
-            raise TypeError(f"Invalid reactive field storage: {self._storage_name}")
-        return value
-
-    def _set_on_instance_dict(self, instance: object, value: Signal[T]) -> None:
-        if self._storage_name is None or not hasattr(instance, "__dict__"):
-            raise TypeError(
-                "Reactive model fields require weak-referenceable instances or "
-                "instances with a __dict__"
-            )
-        vars(instance)[self._storage_name] = value
+        self._storage.set(instance, signal)
 
 
 field = SignalField

@@ -18,71 +18,20 @@ from .thread_safety import is_thread_safety_enabled
 T = TypeVar("T")
 
 
-class Signal(Generic[T]):
-    """A reactive writable signal that notifies dependents when its value changes.
-    
-    Signal is the core building block in reaktiv. It creates a container for values
-    that can change over time and automatically notify effects and computed signals
-    that depend on it.
-    
-    Args:
-        value: The initial value of the signal
-        equal: Optional custom equality function to determine if two values should be 
-            considered equal. By default, identity (`is`) is used.
-    
-    Examples:
-        Basic usage:
-        ```python
-        from reaktiv import signal
-        
-        # Create a signal with an initial value
-        counter = signal(0)
-        
-        # Get the current value
-        value = counter()  # 0
-        
-        # Set a new value
-        counter.set(5)
-        
-        # Update using a function
-        counter.update(lambda x: x + 1)  # Now 6
-        ```
-        
-        Custom equality:
-        ```python
-        from reaktiv import signal
-        
-        # Custom equality function for dictionaries
-        def dict_equal(a, b):
-            return isinstance(a, dict) and isinstance(b, dict) and a == b
-        
-        user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
-        
-        # This won't trigger updates (same key-value pairs)
-        user.set({"name": "Alice", "age": 30})
-        
-        # This will trigger updates (different age)
-        user.set({"name": "Alice", "age": 31})
-        ```
-        
-        Readonly wrapper:
-        ```python
-        from reaktiv import signal
-        
-        # Internal writable signal
-        _counter = signal(0)
-        
-        # Expose readonly view
-        counter = _counter.as_readonly()
-        
-        def increment():
-            _counter.update(lambda x: x + 1)
-        
-        print(counter())  # 0
-        increment()
-        print(counter())  # 1
-        # counter.set(5)  # Error: ReadonlySignal has no 'set' method
-        ```
+def _assert_writable() -> None:
+    """Reject writes from computations and Watcher notify callbacks."""
+    graph.assert_not_notifying("set")
+    if graph._computation.active:  # also inside untracked() within a computation
+        raise RuntimeError(
+            "Side effect detected: Cannot set Signal from within a ComputeSignal computation"
+        )
+
+
+class _SignalBase(Generic[T]):
+    """Readable signal node shared by ``Signal``, ``ComputeSignal`` and
+    ``LinkedSignal``. Internal: it holds the value, version and dependents.
+    Write methods are added only by the writable classes, so a computed
+    signal has no ``set``/``update`` at runtime or for type checkers.
     """
 
     __slots__ = (
@@ -168,6 +117,7 @@ class Signal(Generic[T]):
             value = counter()      # 42
             ```
         """
+        graph.assert_not_notifying("read")
         # Use lock to protect the read operation only when thread safety is enabled
         if self._lock is not None:
             with self._lock:
@@ -182,6 +132,137 @@ class Signal(Generic[T]):
                 edge.version = self._version
             debug_log(lambda: f"Signal get() returning value: {self._value}")
             return self._value
+
+    def _set_internal(self, new_value: T) -> Optional[list[graph._Consumer]]:
+        """Internal set method that does the actual work without locking.
+
+        When the values are equal the previous value is kept. An exception
+        raised by ``equal`` propagates and leaves the signal unchanged.
+        """
+        if self._equal is not None:
+            if self._equal(self._value, new_value):
+                return None
+        elif self._value is new_value:
+            return None
+
+        self._value = new_value
+        self._version += 1
+        graph.global_version += 1
+
+        if self._targets is None:
+            return None
+
+        return graph.snapshot_targets(self)
+
+    def _notify_targets(self, targets: list[graph._Consumer]) -> None:
+        if not targets:
+            return
+        start_batch()
+        try:
+            for target in targets:
+                target._notify()
+        finally:
+            end_batch()
+
+    def as_readonly(self) -> "ReadonlySignal[T]":
+        """Return a readonly wrapper that exposes only read access to this signal.
+        
+        Useful for encapsulation when you want to share a value but prevent
+        external code from mutating it.
+        
+        Returns:
+            A ReadonlySignal that wraps this signal
+            
+        Examples:
+            ```python
+            # Keep internal signal private
+            _counter = signal(0)
+            
+            # Expose readonly view
+            counter = _counter.as_readonly()
+            
+            def increment():
+                _counter.update(lambda x: x + 1)
+            
+            print(counter())  # 0
+            increment()
+            print(counter())  # 1
+            # counter.set(5)  # AttributeError: 'ReadonlySignal' has no attribute 'set'
+            ```
+        """
+        if self._readonly_cache is None:
+            self._readonly_cache = ReadonlySignal(self)
+        return self._readonly_cache
+
+
+class Signal(_SignalBase[T]):
+    """A reactive writable signal that notifies dependents when its value changes.
+    
+    Signal is the core building block in reaktiv. It creates a container for values
+    that can change over time and automatically notify effects and computed signals
+    that depend on it.
+    
+    Args:
+        value: The initial value of the signal
+        equal: Optional custom equality function to determine if two values should be 
+            considered equal. By default, identity (`is`) is used.
+    
+    Examples:
+        Basic usage:
+        ```python
+        from reaktiv import signal
+        
+        # Create a signal with an initial value
+        counter = signal(0)
+        
+        # Get the current value
+        value = counter()  # 0
+        
+        # Set a new value
+        counter.set(5)
+        
+        # Update using a function
+        counter.update(lambda x: x + 1)  # Now 6
+        ```
+        
+        Custom equality:
+        ```python
+        from reaktiv import signal
+        
+        # Custom equality function for dictionaries
+        def dict_equal(a, b):
+            return isinstance(a, dict) and isinstance(b, dict) and a == b
+        
+        user = signal({"name": "Alice", "age": 30}, equal=dict_equal)
+        
+        # This won't trigger updates (same key-value pairs)
+        user.set({"name": "Alice", "age": 30})
+        
+        # This will trigger updates (different age)
+        user.set({"name": "Alice", "age": 31})
+        ```
+        
+        Readonly wrapper:
+        ```python
+        from reaktiv import signal
+        
+        # Internal writable signal
+        _counter = signal(0)
+        
+        # Expose readonly view
+        counter = _counter.as_readonly()
+        
+        def increment():
+            _counter.update(lambda x: x + 1)
+        
+        print(counter())  # 0
+        increment()
+        print(counter())  # 1
+        # counter.set(5)  # Error: ReadonlySignal has no 'set' method
+        ```
+    """
+
+    __slots__ = ()
 
     def set(self, new_value: T, /) -> None:
         """Set a new value for the signal and notify subscribers if it changed.
@@ -215,13 +296,7 @@ class Signal(Generic[T]):
                 f"(old_value: {self._value})"
             )
         )
-        # Disallow side effects from within a ComputeSignal's computation
-        active = graph.active_consumer.get()
-        if active is not None:
-            if isinstance(active, ComputeSignal):
-                raise RuntimeError(
-                    "Side effect detected: Cannot set Signal from within a ComputeSignal computation"
-                )
+        _assert_writable()
 
         # Update the value under the signal lock, then notify outside it so
         # effects can safely read other signals without lock-order deadlocks.
@@ -232,44 +307,6 @@ class Signal(Generic[T]):
             targets = self._set_internal(new_value)
         if targets is not None:
             self._notify_targets(targets)
-
-    def _set_internal(self, new_value: T) -> Optional[list[graph._Consumer]]:
-        """Internal set method that does the actual work without locking."""
-        should_update = True
-        if self._equal is not None:
-            try:
-                if self._equal(self._value, new_value):
-                    should_update = False
-            except Exception as e:
-                    debug_log(
-                        lambda exc=e: (
-                            f"Error in custom equality check during set: {exc}"
-                        )
-                    )
-        else:
-            if self._value is new_value:
-                should_update = False
-        if not should_update:
-            return None
-
-        self._value = new_value
-        self._version += 1
-        graph.global_version += 1
-
-        if self._targets is None:
-            return None
-
-        return graph.snapshot_targets(self)
-
-    def _notify_targets(self, targets: list[graph._Consumer]) -> None:
-        if not targets:
-            return
-        start_batch()
-        try:
-            for target in targets:
-                target._notify()
-        finally:
-            end_batch()
 
     def update(self, update_fn: Callable[[T], T]) -> None:
         """Atomically update the signal using a function of its current value.
@@ -295,6 +332,7 @@ class Signal(Generic[T]):
             print(name())  # "ALICE"
             ```
         """
+        _assert_writable()
         # Use lock to protect the read-modify-write operation when thread safety is enabled
         if self._lock is not None:
             with self._lock:
@@ -305,36 +343,6 @@ class Signal(Generic[T]):
             targets = self._set_internal(new_value)
         if targets is not None:
             self._notify_targets(targets)
-
-    def as_readonly(self) -> "ReadonlySignal[T]":
-        """Return a readonly wrapper that exposes only read access to this signal.
-        
-        Useful for encapsulation when you want to share a value but prevent
-        external code from mutating it.
-        
-        Returns:
-            A ReadonlySignal that wraps this signal
-            
-        Examples:
-            ```python
-            # Keep internal signal private
-            _counter = signal(0)
-            
-            # Expose readonly view
-            counter = _counter.as_readonly()
-            
-            def increment():
-                _counter.update(lambda x: x + 1)
-            
-            print(counter())  # 0
-            increment()
-            print(counter())  # 1
-            # counter.set(5)  # AttributeError: 'ReadonlySignal' has no attribute 'set'
-            ```
-        """
-        if self._readonly_cache is None:
-            self._readonly_cache = ReadonlySignal(self)
-        return self._readonly_cache
 
 
 signal = Signal
@@ -370,7 +378,7 @@ class ReadonlySignal(Generic[T]):
 
     __slots__ = ("_signal",)
 
-    def __init__(self, signal: Signal[T]):
+    def __init__(self, signal: _SignalBase[T]):
         self._signal = signal
 
     def __repr__(self) -> str:
@@ -391,7 +399,7 @@ class ReadonlySignal(Generic[T]):
         return self._signal.get()
 
 
-class ComputeSignal(Signal[T]):
+class ComputeSignal(_SignalBase[T]):
     """A computed signal that derives its value from other signals.
     
     ComputeSignal automatically tracks dependencies on other signals and recomputes
@@ -506,7 +514,7 @@ class ComputeSignal(Signal[T]):
         "_thread_local",
         "_computation_lock",
         "_graph_lock",
-    ) + Signal.__slots__
+    ) + _SignalBase.__slots__
 
     def __init__(
         self,
@@ -582,19 +590,19 @@ class ComputeSignal(Signal[T]):
         if self._is_running_in_current_thread():
             return False  # cycle guard: appear stale to caller
 
-        force = bool(self._flags & graph.HAS_ERROR)
+        # An error is memoized like a value (as in Angular and Preact): it is
+        # re-raised without recomputing until a dependency changes.
 
         # If tracking and not marked outdated, value can't have changed
         if (
-            not force
-            and (self._flags & (graph.OUTDATED | graph.TRACKING)) == graph.TRACKING
+            (self._flags & (graph.OUTDATED | graph.TRACKING)) == graph.TRACKING
             and self._global_version_seen == graph.global_version
         ):
             return True
         # clear outdated bit
         self._flags &= ~graph.OUTDATED
 
-        if not force and self._global_version_seen == graph.global_version:
+        if self._global_version_seen == graph.global_version:
             return True
         self._global_version_seen = graph.global_version
 
@@ -602,60 +610,43 @@ class ComputeSignal(Signal[T]):
         self._set_running_in_current_thread(True)
 
         # Skip recompute if nothing changed in sources
-        if not force and self._version > 0 and not graph.needs_to_recompute(self):
+        if self._version > 0 and not graph.needs_to_recompute(self):
             self._set_running_in_current_thread(False)
             return True
 
         prev = graph.set_active_consumer(self)
+        prev_computing = graph.set_computing(True)
         try:
             graph.prepare_sources(self)
             try:
                 self._dependencies.clear()
                 value = self._fn()
-                # equality check
-                if (
-                    self._equal is not None
-                    and self._version > 0
+                # When equal() reports no change, keep the previously published
+                # value and revision (as Angular and Solid do), so every reader
+                # sees the same value and tolerances compare against what was
+                # published. equal() is not called for the first value or after
+                # an error; if it raises, the error becomes this node's error.
+                unchanged = (
+                    self._version > 0
                     and not (self._flags & graph.HAS_ERROR)
-                ):
-                    old_value = cast(T, self._value)
-                    try:
-                        if self._equal(old_value, value):
-                            # Update internal value without bumping version
-                            self._value = value
-                            # clear previous error if any
-                            self._flags &= ~graph.HAS_ERROR
-                            self._last_error = None
-                        else:
-                            self._value = value
-                            self._version += 1
-                            self._flags &= ~graph.HAS_ERROR
-                            self._last_error = None
-                    except Exception as e:
-                        debug_log(
-                            lambda exc=e: f"Error in custom equality check: {exc}"
-                        )
-                        self._value = value
-                        self._version += 1
-                        self._flags &= ~graph.HAS_ERROR
-                        self._last_error = None
-                else:
-                    # default identity equality: bump only when identity changes
-                    if not (
-                        self._version > 0
-                        and not (self._flags & graph.HAS_ERROR)
-                        and self._value is value
-                    ):
-                        self._value = value
-                        self._version += 1
-                        self._flags &= ~graph.HAS_ERROR
-                        self._last_error = None
+                    and (
+                        self._equal(cast(T, self._value), value)
+                        if self._equal is not None
+                        else self._value is value
+                    )
+                )
+                if not unchanged:
+                    self._value = value
+                    self._version += 1
+                    self._flags &= ~graph.HAS_ERROR
+                    self._last_error = None
             except BaseException as err:  # sticky error until next recompute attempt
                 self._last_error = err
                 self._flags |= graph.HAS_ERROR
                 self._value = err  # for debug repr
                 self._version += 1
         finally:
+            graph.set_computing(prev_computing)
             graph.cleanup_sources(self)
             graph.set_active_consumer(prev)
             # Remove current thread from running state (thread-safe cleanup)
@@ -687,6 +678,12 @@ class ComputeSignal(Signal[T]):
         return graph.snapshot_targets(self)
 
     def get(self) -> T:
+        """Return the current value, recomputing it first if a dependency changed.
+
+        Raises the computation's error if the last evaluation failed.
+        """
+        # Check before refreshing: a forbidden read must not evaluate anything.
+        graph.assert_not_notifying("read")
         # Thread-safe circular dependency detection
         if self._is_running_in_current_thread():
             raise RuntimeError("Circular dependency detected")
@@ -702,8 +699,6 @@ class ComputeSignal(Signal[T]):
             raise self._last_error
         return cast(T, self._value)
 
-    def set(self, new_value: T, /) -> None:
-        raise AttributeError("Cannot manually set value of ComputeSignal")
 
 
 class ComputedDescriptor(PerInstanceDescriptor[ComputeSignal[T]], Generic[T]):
@@ -750,22 +745,22 @@ class _TypedComputedFactory(Generic[T]):
     """Typed computed decorator used by ``computed[T]`` and ``Computed[T]`` syntax."""
 
     @overload
-    def __call__(self, func: Callable[[], object], /) -> ComputeSignal[T]: ...
+    def __call__(self, func: Callable[[], T], /) -> ComputeSignal[T]: ...
 
     @overload
-    def __call__(self, func: Callable[[Any], object], /) -> ComputedDescriptor[T]: ...
+    def __call__(self, func: Callable[[Any], T], /) -> ComputedDescriptor[T]: ...
 
     @overload
     def __call__(
         self, /, *, equal: Callable[[T, T], bool]
     ) -> Callable[
-        [Union[Callable[[], object], Callable[[Any], object]]],
+        [Union[Callable[[], T], Callable[[Any], T]]],
         Union[ComputeSignal[T], ComputedDescriptor[T]],
     ]: ...
 
     def __call__(
         self,
-        func: Optional[Callable[..., object]] = None,
+        func: Optional[Callable[..., T]] = None,
         /,
         *,
         equal: Optional[Callable[[T, T], bool]] = None,
@@ -773,7 +768,7 @@ class _TypedComputedFactory(Generic[T]):
         ComputeSignal[T],
         ComputedDescriptor[T],
         Callable[
-            [Union[Callable[[], object], Callable[[Any], object]]],
+            [Union[Callable[[], T], Callable[[Any], T]]],
             Union[ComputeSignal[T], ComputedDescriptor[T]],
         ],
     ]:
@@ -781,7 +776,7 @@ class _TypedComputedFactory(Generic[T]):
             return _create_computed(cast(Callable[..., T], func), equal=equal)
 
         def decorator(
-            f: Union[Callable[[], object], Callable[[Any], object]],
+            f: Union[Callable[[], T], Callable[[Any], T]],
         ) -> Union[ComputeSignal[T], ComputedDescriptor[T]]:
             return _create_computed(cast(Callable[..., T], f), equal=equal)
 
@@ -855,5 +850,5 @@ class _ComputedFactory:
         return _TypedComputedFactory()
 
 
-Computed = _ComputedFactory()
-computed = Computed
+Computed: _ComputedFactory = _ComputedFactory()
+computed: _ComputedFactory = Computed

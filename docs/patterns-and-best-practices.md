@@ -6,68 +6,39 @@ This guide covers common patterns, best practices, and real-world examples for u
 
 ### Dependency Tracking
 
-**Important:** Signal dependencies are established when signals are called within the effect function. Call dependent signals at the beginning of your effect to ensure proper dependency tracking.
+Dependencies are whatever an effect (or computed) reads during its **latest
+run**. Tracking is dynamic: a signal read only in a branch that was not taken
+is not a dependency, and that is correct. When the condition changes, the
+effect reruns, takes the other branch and starts tracking the signals it reads
+there.
 
 ```pyodide install="reaktiv" height="24" theme="github,one_dark"
 from reaktiv import signal, effect
 
 name = signal("Alice")
-age = signal(30)
 enabled = signal(True)
 
-def my_effect():
-    # ✅ GOOD: Call all dependent signals first
-    current_name = name()
-    current_age = age()
-    is_enabled = enabled()
-    
-    # Then use the values
-    if is_enabled:
-        print(f"{current_name} is {current_age} years old")
+def greet():
+    if enabled():
+        print(f"Hello, {name()}")  # tracked only while enabled is True
 
-# Keep reference to prevent GC
-effect = effect(my_effect)
-name.set("Grace")
-effect.dispose()
+greeter = effect(greet)   # Prints: "Hello, Alice"
+enabled.set(False)        # reruns; name is no longer a dependency
+name.set("Grace")         # does not rerun: the effect would print nothing
+enabled.set(True)         # Prints: "Hello, Grace"
+greeter.dispose()
 ```
 
-**Why this matters:**
+**Structure effects as "read, then act":**
 
-- Dependencies are tracked during effect execution
-- Conditional signal reads can lead to inconsistent dependencies
-- Reading signals early ensures they're always tracked
-
-```pyodide install="reaktiv" assets="no" height="24" theme="github,one_dark"
-from reaktiv import effect, signal
-
-name = signal("Alice")
-enabled = signal(True)
-
-# ❌ AVOID: Conditional dependency tracking
-def problematic_effect():
-    is_enabled = enabled()
-    
-    if is_enabled:
-        # This creates dependency only when enabled is True
-        print(name())
-    # Effect won't re-run when name changes if enabled is False
-
-# ✅ BETTER: Always establish dependencies
-def better_effect():
-    # Read all dependencies first
-    current_name = name()
-    is_enabled = enabled()
-    
-    # Then use conditionally
-    if is_enabled:
-        print(current_name)
-
-
-effect = effect(better_effect)
-enabled.set(False)
-name.set("Grace")
-effect.dispose()
-```
+- Read the signals the effect reacts to at the start, then perform the side
+  effect. A read placed after code that can raise or return early is never
+  tracked when that happens, so the effect stops reacting to it.
+- Do the side-effect work inside `with untracked():`. Helpers and callbacks
+  you call may read signals; untracked, they cannot subscribe the effect by
+  accident.
+- Branches are still fine: a signal the effect does not need in this run does
+  not have to be read. Extra "just in case" reads only cause extra runs.
 
 ### Memory Management
 

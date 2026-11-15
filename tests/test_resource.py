@@ -596,3 +596,508 @@ async def _wait_for(predicate, timeout: float = 1.0) -> None:
             return
         await asyncio.sleep(0)
     raise AssertionError("condition was not reached before timeout")
+
+
+@pytest.mark.asyncio
+async def test_resource_accepts_custom_value_equality():
+    async def load(params):
+        return 1.0
+
+    resource = Resource(params=lambda: 1, loader=load, equal=lambda previous, current: abs(previous - current) < 0.1)
+    resource.set(1.0)
+    resource.set(1.05)
+    assert resource.value() == 1.0
+    resource.set(2.0)
+    assert resource.value() == 2.0
+    resource.destroy()
+
+
+@pytest.mark.asyncio
+async def test_resource_value_signal_preserves_always_changed_comparison():
+    async def load(params):
+        return []
+
+    resource = Resource(params=lambda: None, loader=load, equal=lambda previous, current: False)
+    value = [1]
+    resource.set(value)
+    values = resource.value
+    runs = []
+    observer = Effect(lambda: runs.append(values()))
+    resource.set(value)
+    assert len(runs) == 2
+    observer.dispose()
+    resource.destroy()
+
+
+@pytest.mark.asyncio
+async def test_cancel_suppresses_late_results_and_new_parameters_can_load():
+    request = Signal(1)
+    started, cleanup = asyncio.Event(), asyncio.Event()
+
+    async def loader(context):
+        if context.params == 1:
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                # Cancellation-resistant user code must not publish a late value.
+                return 999
+            finally:
+                cleanup.set()
+        return context.params * 10
+
+    value = create_resource(params=request, loader=loader)
+    await started.wait()
+    cancellation = value.cancellation_event
+    assert value.cancel()
+    assert cancellation.is_set()
+    assert value.status() == ResourceStatus.CANCELLED
+    assert not value.is_loading() and not value.has_value()
+    await asyncio.wait_for(cleanup.wait(), 1)
+    await asyncio.sleep(0)
+    assert value.value() is None
+    assert not value.cancel()
+    request.set(2)
+    await asyncio.sleep(0)
+    assert value.value() == 20 and value.status() == ResourceStatus.RESOLVED
+
+
+@pytest.mark.asyncio
+async def test_cancel_retains_last_value_and_reload_retries_the_same_parameters():
+    release = asyncio.Event()
+    calls = 0
+
+    async def loader(context):
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            await release.wait()
+        return calls
+
+    value = create_resource(params=lambda: 'request', loader=loader)
+    await asyncio.sleep(0)
+    assert value.value() == 1
+    value.reload()
+    await asyncio.sleep(0)
+    assert value.cancel()
+    assert value.snapshot()().value == 1
+    assert value.snapshot()().status == ResourceStatus.CANCELLED
+    assert value.error() is None
+    await asyncio.sleep(0)
+    value.reload()
+    release.set()
+    await asyncio.sleep(0)
+    assert value.value() == 3 and value.status() == ResourceStatus.RESOLVED
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_loader_starts_does_not_run_user_code():
+    calls = []
+
+    async def loader(context):
+        calls.append(context.params)
+        return 1
+
+    value = create_resource(params=lambda: 1, loader=loader)
+    assert value.cancel()
+    await asyncio.sleep(0)
+    assert calls == [] and value.status() == ResourceStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_resource_dispose_stops_params_tracking_and_late_results():
+    from reaktiv import resource, signal
+
+    params = signal(1)
+    loads = []
+    release = asyncio.Event()
+
+    async def loader(request):
+        loads.append(request.params)
+        if request.params == 2:
+            await release.wait()
+        return request.params
+
+    res = resource(params=lambda: params(), loader=loader)
+    await asyncio.sleep(0.01)
+    assert res.value() == 1
+
+    params.set(2)
+    await asyncio.sleep(0.01)
+    res.dispose()
+    release.set()
+    await asyncio.sleep(0.01)
+    assert res.value() == 1  # the in-flight result is never published
+    assert res.status() == ResourceStatus.CANCELLED
+
+    params.set(3)
+    res.reload()
+    await asyncio.sleep(0.01)
+    assert loads == [1, 2]
+    res.dispose()  # idempotent
+
+
+@pytest.mark.asyncio
+async def test_resource_destroy_is_an_alias_of_dispose():
+    from reaktiv import resource, signal
+
+    params = signal(1)
+    loads = []
+
+    async def loader(request):
+        loads.append(request.params)
+        return request.params
+
+    res = resource(params=lambda: params(), loader=loader)
+    await asyncio.sleep(0.01)
+    res.destroy()
+    params.set(2)
+    await asyncio.sleep(0.01)
+    assert loads == [1]
+
+
+@pytest.mark.asyncio
+async def test_rejected_resource_writes_leave_the_load_running():
+    from reaktiv import computed, effect, resource, signal
+
+    gate = asyncio.Event()
+    params = signal(1)
+
+    async def slow(request):
+        await gate.wait()
+        return 42
+
+    res = resource(params=lambda: params(), loader=slow)
+    await asyncio.sleep(0.01)
+    calls = []
+    with pytest.raises(RuntimeError, match="Side effect detected"):
+        computed(lambda: res.set(5))()
+    with pytest.raises(RuntimeError, match="Side effect detected"):
+        computed(lambda: res.update(lambda v: calls.append(v) or 5))()
+    assert calls == []
+    gate.set()
+    await asyncio.sleep(0.01)
+    assert res.status() == ResourceStatus.RESOLVED
+    assert res.value() == 42
+    assert not res.is_loading()
+
+    # update() does not subscribe the calling effect to the resource
+    runs = []
+    writer = effect(lambda: runs.append(params()) or res.update(lambda v: (v or 0) + 1))
+    res.set(100)
+    assert runs == [1]
+    writer.dispose()
+    res.dispose()
+
+
+@pytest.mark.asyncio
+async def test_resource_transitions_are_published_atomically():
+    from reaktiv import effect, resource, signal
+
+    params = signal(1)
+
+    async def load(request):
+        await asyncio.sleep(0)
+        if request.params == 2:
+            raise ValueError("failed")
+        return request.params * 10
+
+    res = resource(params=lambda: params(), loader=load)
+    seen = []
+    observer = effect(
+        lambda: seen.append((res.status().value, res.value() if res.status() != ResourceStatus.ERROR else "error", res.is_loading()))
+    )
+    await asyncio.sleep(0.02)
+    params.set(2)
+    await asyncio.sleep(0.02)
+    res.set(7)
+    assert seen == [
+        ("loading", None, True),
+        ("resolved", 10, False),
+        ("loading", 10, True),
+        ("error", "error", False),
+        ("local", 7, False),
+    ]
+    observer.dispose()
+    res.dispose()
+
+
+@pytest.mark.asyncio
+async def test_resource_signal_handles_are_stable():
+    from reaktiv import resource
+
+    async def load(request):
+        return 1
+
+    res = resource(params=lambda: 1, loader=load)
+    assert res.value is res.value
+    assert res.status is res.status
+    assert res.error is res.error
+    assert res.is_loading is res.is_loading
+    assert res.snapshot() is res.snapshot()
+    await asyncio.sleep(0.01)
+    assert res.value() == 1
+    res.dispose()
+
+
+@pytest.mark.asyncio
+async def test_resource_params_changed_on_another_thread_load_on_its_loop():
+    import threading
+
+    from reaktiv import resource, signal
+
+    params = signal(1)
+    loads = []
+
+    async def load(request):
+        loads.append((request.params, threading.current_thread() is threading.main_thread()))
+        return request.params
+
+    res = resource(params=lambda: params(), loader=load)
+    await asyncio.sleep(0.01)
+    writer = threading.Thread(target=lambda: params.set(2))
+    writer.start()
+    writer.join()
+    await asyncio.sleep(0.05)
+    assert loads == [(1, True), (2, True)]
+    assert res.status() == ResourceStatus.RESOLVED
+    assert res.value() == 2
+    res.dispose()
+
+
+def test_params_changed_on_another_thread_cancel_a_waiting_loader_on_its_loop():
+    import threading
+
+    from reaktiv import resource, signal
+
+    async def main():
+        params = signal(1)
+        loads, superseded = [], []
+
+        async def load(request):
+            loads.append(request.params)
+            if request.params == 1:
+                await request.cancellation.wait()  # wait until superseded
+                superseded.append(threading.current_thread() is threading.main_thread())
+                return "stale"
+            return request.params
+
+        res = resource(params=lambda: params(), loader=load)
+        await asyncio.sleep(0.01)
+        writer = threading.Thread(target=lambda: params.set(2))
+        writer.start()
+        writer.join()
+        await asyncio.sleep(0.05)
+        assert loads == [1, 2]
+        assert superseded == [True]  # woken on the owner loop's thread
+        assert res.status() == ResourceStatus.RESOLVED
+        assert res.value() == 2  # the stale result was never published
+        res.dispose()
+
+    # Debug mode makes asyncio reject calls from the wrong thread.
+    asyncio.run(main(), debug=True)
+
+
+def _queue_params_change_from_worker(params, value):
+    import threading
+
+    writer = threading.Thread(target=lambda: params.set(value))
+    writer.start()
+    writer.join()  # the owner-loop callback is queued but has not run yet
+
+
+def test_queued_params_change_does_not_override_a_newer_owner_loop_change():
+    from reaktiv import resource, signal
+
+    async def main():
+        params = signal(1)
+        calls = []
+
+        async def load(request):
+            calls.append(request.params)
+            return request.params
+
+        res = resource(params=lambda: params(), loader=load)
+        await asyncio.sleep(0.01)
+        _queue_params_change_from_worker(params, 2)
+        params.set(3)  # applied immediately on the owner loop, before the queued 2
+        await asyncio.sleep(0.05)
+        assert calls == [1, 3]
+        assert res.value() == 3
+        res.dispose()
+
+    asyncio.run(main(), debug=True)
+
+
+def test_queued_params_change_is_superseded_by_set_and_reload():
+    from reaktiv import resource, signal
+
+    async def main():
+        params = signal(1)
+        calls = []
+
+        async def load(request):
+            calls.append(request.params)
+            return request.params * 10
+
+        res = resource(params=lambda: params(), loader=load)
+        await asyncio.sleep(0.01)
+        _queue_params_change_from_worker(params, 2)
+        res.set(99)  # newer than the queued change: the local value stays
+        await asyncio.sleep(0.05)
+        assert calls == [1]
+        assert res.value() == 99
+        assert res.status() == ResourceStatus.LOCAL
+
+        _queue_params_change_from_worker(params, 3)
+        res.reload()  # newer: reloads the current params once
+        await asyncio.sleep(0.05)
+        assert calls == [1, 3]
+        assert res.value() == 30
+        res.dispose()
+
+    asyncio.run(main(), debug=True)
+
+
+@pytest.mark.parametrize("writer", ["worker", "owner"])
+@pytest.mark.parametrize("action", ["dispose", "cancel", "set"])
+def test_loader_does_not_start_when_its_loading_status_observer_stops_it(action, writer):
+    import threading
+    from reaktiv import effect, resource, signal
+
+    async def main():
+        params = signal(1)
+        calls = []
+
+        async def load(request):
+            calls.append(request.params)
+            return request.params * 10
+
+        res = resource(params=lambda: params(), loader=load)
+        await asyncio.sleep(0.01)
+        assert calls == [1]
+
+        def stop_on_loading():
+            if res.status() == ResourceStatus.LOADING and params() == 2:
+                with untracked():
+                    if action == "dispose":
+                        res.dispose()
+                    elif action == "cancel":
+                        res.cancel()
+                    else:
+                        res.set(99)
+
+        observer = effect(stop_on_loading)
+        if writer == "owner":
+            params.set(2)
+        else:
+            worker = threading.Thread(target=lambda: params.set(2))
+            worker.start()
+            worker.join()
+        await asyncio.sleep(0.05)
+
+        assert calls == [1]
+        expected = {
+            "dispose": ResourceStatus.CANCELLED,
+            "cancel": ResourceStatus.CANCELLED,
+            "set": ResourceStatus.LOCAL,
+        }[action]
+        assert res.status() == expected
+        assert res.is_loading() is False
+        observer.dispose()
+        res.dispose()
+
+    asyncio.run(main(), debug=True)
+
+
+def test_rejected_lifecycle_calls_leave_the_resource_unchanged():
+    from reaktiv import computed, resource, signal
+    from reaktiv.subtle import Watcher
+
+    async def main():
+        release = asyncio.Event()
+
+        async def load(request):
+            await release.wait()
+            return 42
+
+        res = resource(params=lambda: 1, loader=load)
+        await asyncio.sleep(0)
+        assert res.status() == ResourceStatus.LOADING
+
+        trigger = signal(0)
+        errors = []
+
+        def notify():
+            for action in (res.dispose, res.cancel, res.reload):
+                try:
+                    action()
+                except RuntimeError:
+                    errors.append(action.__name__)
+
+        watcher = Watcher(notify)
+        watcher.watch(trigger)
+        trigger.set(1)  # notify runs: every lifecycle call must be rejected
+        assert errors == ["dispose", "cancel", "reload"]
+        assert res.status() == ResourceStatus.LOADING
+
+        for action in (res.cancel, res.reload, res.dispose):
+            with pytest.raises(RuntimeError):
+                computed(lambda action=action: action())()
+        assert res.status() == ResourceStatus.LOADING
+
+        res.dispose()  # retrying outside the forbidden context works
+        release.set()
+        await asyncio.sleep(0.01)
+        assert res.status() == ResourceStatus.CANCELLED
+        assert res.value() is None
+        watcher.dispose()
+
+    asyncio.run(main(), debug=True)
+
+
+def test_params_change_after_a_manual_reload_is_loading_not_reloading():
+    from reaktiv import effect, resource, signal
+
+    async def main():
+        params = signal(1)
+
+        async def load(request):
+            return request.params * 10
+
+        res = resource(params=lambda: params(), loader=load)
+        await asyncio.sleep(0.01)
+        res.reload()
+        await asyncio.sleep(0.01)
+        assert res.value() == 10
+
+        statuses = []
+        observer = effect(lambda: statuses.append(res.status()))
+        params.set(2)
+        await asyncio.sleep(0.01)
+        assert ResourceStatus.LOADING in statuses
+        assert ResourceStatus.RELOADING not in statuses
+        assert res.value() == 20
+        observer.dispose()
+        res.dispose()
+
+    asyncio.run(main(), debug=True)
+
+
+def test_resource_snapshots_are_immutable():
+    import dataclasses
+    from reaktiv import resource
+
+    async def main():
+        async def load(request):
+            return 2
+
+        res = resource(params=lambda: 1, loader=load)
+        await asyncio.sleep(0.01)
+        snapshot = res.snapshot()()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            snapshot.value = 999
+        assert res.snapshot()().value == 2
+        res.dispose()
+
+    asyncio.run(main())

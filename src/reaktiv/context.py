@@ -96,15 +96,21 @@ def untracked(
         @contextmanager
         def _ctx():
             prev = graph.set_active_consumer(None)
+            # Like Angular, an explicit untracked() block may also write, even
+            # inside a computation (e.g. lazily initializing a signal on read).
+            prev_computing = graph.set_computing(False)
             try:
                 yield
             finally:
+                graph.set_computing(prev_computing)
                 graph.set_active_consumer(prev)
 
         return _ctx()
 
     prev = graph.set_active_consumer(None)
+    prev_computing = graph.set_computing(False)
     try:
         return func_or_signal()
     finally:
+        graph.set_computing(prev_computing)
         graph.set_active_consumer(prev)

@@ -5,7 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 import asyncio
 import threading
-from typing import Optional, Callable, Generator
+import concurrent.futures
+from typing import Any, Coroutine, Optional, Callable, Generator, Union
 
 from ._debug import debug_log
 from . import graph
@@ -151,11 +152,11 @@ def batch() -> Generator[None, None, None]:
 # ---------------------------------------------------------------------------
 
 
-def start_batch():
+def start_batch() -> None:
     _get_state().batch_depth += 1
 
 
-def end_batch():
+def end_batch() -> None:
     state = _get_state()
     state.batch_depth -= 1
     if state.batch_depth == 0:
@@ -172,11 +173,24 @@ def _flush_effects():
     if state.batch_depth > 0:
         return
 
+    # Effect callbacks report their own exceptions; what reaches this loop is
+    # a reactive error such as a cycle in a nested flush. Run the remaining
+    # effects, then raise it to the writer instead of hiding it.
+    error: Optional[BaseException] = None
+
     # Cycle guard
     iterations = 0
     while state.batched_effect_head is not None:
         iterations += 1
         if iterations > graph.MAX_BATCH_ITERATIONS:
+            # Drop the queue but keep its effects runnable for later changes.
+            current = state.batched_effect_head
+            state.batched_effect_head = None
+            while current is not None:
+                nxt = current._next_batched_effect
+                current._next_batched_effect = None
+                current._flags &= ~graph.NOTIFIED
+                current = nxt
             raise RuntimeError("Reactive cycle detected (effect iterations exceeded)")
 
         head = state.batched_effect_head
@@ -193,7 +207,12 @@ def _flush_effects():
                     current._run_callback()
                 except Exception as e:
                     debug_log(lambda exc=e: f"Effect execution error: {exc}")
+                    if error is None:
+                        error = e
             current = nxt
+
+    if error is not None:
+        raise error
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +220,7 @@ def _flush_effects():
 # ---------------------------------------------------------------------------
 
 
-def enqueue_effect(effect):
+def enqueue_effect(effect: Any) -> None:
     state = _get_state()
     if state.batched_effect_head is not None:
         effect._next_batched_effect = state.batched_effect_head
@@ -212,11 +231,57 @@ def enqueue_effect(effect):
 _create_task: Optional[Callable] = None
 
 
-def create_task(coro):
+def running_loop() -> Optional[asyncio.AbstractEventLoop]:
+    """Return the event loop running in this thread, or None."""
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def call_soon(loop: asyncio.AbstractEventLoop, callback: Callable[..., object], *args: Any) -> bool:
+    """Schedule ``callback(*args)`` on ``loop`` from any thread.
+
+    Callbacks run on the loop's own thread in the order they were scheduled.
+    Returns False, without calling anything, when the loop is closed.
+    """
+    try:
+        if running_loop() is loop:
+            loop.call_soon(callback, *args)
+        else:
+            loop.call_soon_threadsafe(callback, *args)
+    except RuntimeError:
+        if loop.is_closed():
+            return False
+        raise
+    return True
+
+
+def create_task(
+    coro: Coroutine[Any, Any, Any], loop: Optional[asyncio.AbstractEventLoop] = None
+) -> Union["asyncio.Task[Any]", "concurrent.futures.Future[Any]"]:
+    """Run ``coro`` on ``loop`` (default: this thread's running loop).
+
+    Callable from any thread: on the loop's own thread this returns an
+    ``asyncio.Task``; elsewhere the coroutine is handed to the loop and a
+    ``concurrent.futures.Future`` (same done/cancel/add_done_callback API) is
+    returned. Raises RuntimeError, closing ``coro``, when no loop is available.
+    """
     if _create_task is not None:
         return _create_task(coro)
-    return asyncio.create_task(coro)
+    running = running_loop()
+    target = loop if loop is not None else running
+    if target is None:
+        coro.close()
+        raise RuntimeError("no running event loop to run the async work on")
+    if target is running:
+        return target.create_task(coro)
+    try:
+        return asyncio.run_coroutine_threadsafe(coro, target)
+    except BaseException:
+        coro.close()
+        raise
 
 
-def flush_now():
+def flush_now() -> None:
     _flush_effects()

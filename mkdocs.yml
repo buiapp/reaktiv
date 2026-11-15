@@ -47,7 +47,8 @@ markdown_extensions:
       pygments_lang_class: true
       use_pygments: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      check_paths: true
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
@@ -79,6 +80,7 @@ nav:
     - Advanced Features: advanced-features.md
     - Patterns & Best Practices: patterns-and-best-practices.md
     - Resource Guide: resource-guide.md
+    - Guide for Coding Agents: agents.md
   - Examples: examples/index.md
   - API Reference:
     - signal: api/signal.md
@@ -87,6 +89,7 @@ nav:
     - ReactiveModel: api/reactive-model.md
     - linked: api/linked-signal.md
     - resource: api/resource-signal.md
+    - subtle: api/subtle.md
     - Utils: api/utils.md
 
 watch:

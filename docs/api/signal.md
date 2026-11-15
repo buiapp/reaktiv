@@ -29,6 +29,7 @@ print(count())  # 1
       heading_level: 2
       show_root_heading: true
       show_bases: false
+      inherited_members: true
       members_order: source
       group_by_category: false
 

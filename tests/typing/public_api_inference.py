@@ -7,7 +7,7 @@ public decorators and factory functions preserve their user-visible value types.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Optional
+from typing import Any, Optional
 
 from reaktiv import (
     Computed,
@@ -28,6 +28,7 @@ from reaktiv import (
     resource,
     untracked,
 )
+from reaktiv.subtle import Watcher, current_consumer, signal_version
 
 
 count: Signal[int] = Signal(1)
@@ -193,3 +194,14 @@ model_effect: Effect = model.track
 model_loud_name_effect: Effect = model.track_loud_name
 model_resource: Resource[dict[str, str], dict[str, str]] = model.user
 model_cached_resource: Resource[dict[str, str], dict[str, str]] = model.cached_user
+
+
+# Framework primitives in reaktiv.subtle preserve public types.
+
+revision: int = signal_version(model.count.as_readonly())
+consumer: Optional[object] = current_consumer()
+watcher = Watcher(lambda: None)
+watcher.watch(model.doubled, model.count.as_readonly())
+pending: list[ReadableSignal[Any]] = watcher.get_pending()
+pending_value: Any = pending[0]()
+owned_effect: Effect = model.own(effect(lambda: None))

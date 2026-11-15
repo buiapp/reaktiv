@@ -2,20 +2,38 @@
 
 from __future__ import annotations
 
+import sys
 import weakref
-from typing import Generic, TypeVar, Optional, Callable, Union, cast, Any, overload
+from typing import Generic, Optional, Callable, Union, cast, Any, overload
 
+if sys.version_info >= (3, 13):
+    from typing import TypeVar
+else:  # TypeVar defaults (PEP 696)
+    from typing_extensions import TypeVar
+
+from . import graph
 from ._descriptor import PerInstanceDescriptor, is_instance_method
-from .signal import Signal, ComputeSignal, debug_log
+from .protocols import ReadableSignal
+from .signal import ComputeSignal, _SignalBase, debug_log, _assert_writable
 from .context import untracked
 
 T = TypeVar("T")
 U = TypeVar("U")
+S = TypeVar("S")
+
+# PreviousState's own parameters: source type, then value type. The value type
+# defaults to the source type, so ``PreviousState[X]`` keeps meaning "both X".
+_PrevSource = TypeVar("_PrevSource")
+_PrevValue = TypeVar("_PrevValue", default=_PrevSource)
 
 
-class PreviousState(Generic[T]):
+class PreviousState(Generic[_PrevSource, _PrevValue]):
     """Container for previous state in LinkedSignal computations.
-    
+
+    ``PreviousState[S, T]``: ``S`` is the source type and ``T`` the linked value
+    type, as in Angular's ``linkedSignal<S, D>``. ``PreviousState[X]`` means
+    both are ``X``.
+
     Attributes:
         value: The previous value of the LinkedSignal
         source: The previous value of the source signal
@@ -23,7 +41,10 @@ class PreviousState(Generic[T]):
 
     __slots__ = ("value", "source")
 
-    def __init__(self, value: T, source: T):
+    value: _PrevValue
+    source: _PrevSource
+
+    def __init__(self, value: _PrevValue, source: _PrevSource):
         """Initialize previous state with value and source."""
         self.value = value
         self.source = source
@@ -37,10 +58,12 @@ class LinkedDescriptor(PerInstanceDescriptor["LinkedSignal[T]"], Generic[T]):
         func: Callable[[Any], T],
         *,
         equal: Optional[Callable[[T, T], bool]] = None,
+        computation: Optional[Callable[[Any, Any, Optional[PreviousState[Any, T]]], T]] = None,
     ) -> None:
         super().__init__()
         self._func = func
         self._equal = equal
+        self._computation = computation
 
     def _create(self, instance: object) -> "LinkedSignal[T]":
         try:
@@ -53,11 +76,23 @@ class LinkedDescriptor(PerInstanceDescriptor["LinkedSignal[T]"], Generic[T]):
                 return self._func(current)
 
         except TypeError:
+            def instance_ref() -> object:
+                return instance
 
             def compute() -> T:
                 return self._func(instance)
 
-        return LinkedSignal(compute, equal=self._equal)
+        if self._computation is None:
+            return LinkedSignal(compute, equal=self._equal)
+
+        def derive(source: Any, previous: Optional[PreviousState[Any, T]]) -> T:
+            current = instance_ref()
+            if current is None:
+                raise ReferenceError("Reactive owner has been garbage collected")
+            assert self._computation is not None
+            return self._computation(current, source, previous)
+
+        return LinkedSignal(source=compute, computation=derive, equal=self._equal)
 
 
 class LinkedSignal(ComputeSignal[T], Generic[T]):
@@ -141,8 +176,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             if max_page == 0:
                 return None
             
-            # First time or source changed - use default
-            if prev is None or prev.source != max_page:
+            # First time: use the default; otherwise preserve and clamp the override.
+            if prev is None:
                 return 1
             
             # Clamp to valid range
@@ -188,6 +223,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         "_computation",
         "_previous_source",
         "_simple_pattern",
+        "_has_previous",
+        "_previous_value",
     )
 
     @overload
@@ -235,39 +272,39 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
 
     @overload
     def __new__(
+        cls, *, computation: Callable[[Any, S, Optional[PreviousState[S, T]]], T],
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Callable[[Callable[[Any], S]], LinkedDescriptor[T]]: ...
+
+    @overload
+    def __new__(
         cls,
-        computation_or_source: Union[Callable[..., T], Signal[U], None] = None,
+        computation_or_source: Union[Callable[..., T], ReadableSignal[U], None] = None,
         *,
-        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
-        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        source: Optional[Union[ReadableSignal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[[U, Optional[PreviousState[U, T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
     ) -> LinkedSignal[T]: ...
 
     def __new__(
         cls,
-        computation_or_source: Union[Callable[..., T], Signal[U], None] = None,
-        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
-        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        computation_or_source: Union[Callable[..., T], ReadableSignal[U], None] = None,
+        source: Optional[Union[ReadableSignal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[..., T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Union[
-        LinkedSignal[T],
-        LinkedDescriptor[T],
-        Callable[
-            [Union[Callable[[], T], Callable[[Any], T]]],
-            Union[LinkedSignal[T], LinkedDescriptor[T]],
-        ],
-    ]:
+    ) -> Any:
         if (
-            equal is not None
+            (equal is not None or computation is not None)
             and computation_or_source is None
             and source is None
-            and computation is None
         ):
-            # Parameterized decorator: @linked(equal=...)
+            # Parameterized decorator: @linked(equal=..., computation=...).
+            # The decorated function is the source; for methods, the computation
+            # receives the owner first: computation(self, source, previous).
             def decorator(
                 f: Union[Callable[[], T], Callable[[Any], T]],
             ) -> Union[LinkedSignal[T], LinkedDescriptor[T]]:
-                return cls(f, equal=equal)
+                return cls(f, equal=equal, computation=computation)
 
             return decorator
 
@@ -276,10 +313,10 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             and callable(computation_or_source)
             and is_instance_method(computation_or_source)
             and source is None
-            and computation is None
         ):
             return LinkedDescriptor(
-                cast(Callable[[Any], T], computation_or_source), equal=equal
+                cast(Callable[[Any], T], computation_or_source), equal=equal,
+                computation=cast(Any, computation),
             )
 
         # Direct call: linked(lambda: ...) or @linked decorator
@@ -287,17 +324,20 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
 
     def __init__(
         self,
-        computation_or_source: Union[Callable[..., T], Signal[U], None] = None,
+        computation_or_source: Union[Callable[..., T], ReadableSignal[U], None] = None,
         *,
-        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
-        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        source: Optional[Union[ReadableSignal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[..., T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
     ):
+        # A parameterized decorator uses its decorated function as the source.
+        if source is None and computation is not None and callable(computation_or_source):
+            source = cast(Callable[[], U], computation_or_source)
         # Determine pattern
         if source is not None and computation is not None:
             # Advanced pattern
             self._simple_pattern = False
-            if isinstance(source, Signal):
+            if isinstance(source, _SignalBase):
                 self._source = source
                 self._source_fn = cast(Callable[[], U], source.get)
             elif callable(source):
@@ -320,6 +360,8 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
 
         # Previous-source tracking (prev.value comes from ComputeSignal _value)
         self._previous_source: Optional[Any] = None
+        self._has_previous = False
+        self._previous_value: Optional[T] = None
 
         # Compute function used by ComputeSignal
         def _compute() -> T:
@@ -329,25 +371,36 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
             if self._source_fn is None:
                 raise RuntimeError("Source function is None in advanced pattern")
 
+            # ComputeSignal stores exceptions in _value after a failed attempt.
+            # Keep the last successful value (including a manual override) for recovery.
+            if self._has_previous and self._last_error is None:
+                self._previous_value = cast(T, self._value)
             src_val = self._source_fn()  # tracked
 
-            prev_state: Optional[PreviousState[T]] = None
-            try:
-                prev_val = cast(Optional[T], self._value)
-            except Exception:
-                prev_val = None
-            if prev_val is not None:
-                prev_state = PreviousState(prev_val, cast(Any, self._previous_source))
+            prev_state: Optional[PreviousState[Any, T]] = None
+            if self._has_previous:
+                prev_state = PreviousState(cast(T, self._previous_value), self._previous_source)
 
-            with untracked():
+            # Only the source is a dependency, so the computation's reads are
+            # not tracked. Unlike an explicit untracked() block, it stays a
+            # computation: writes are still rejected.
+            prev_consumer = graph.set_active_consumer(None)
+            try:
                 result = cast(
-                    Callable[[Any, Optional[PreviousState[T]]], T], self._computation
+                    Callable[[Any, Optional[PreviousState[Any, T]]], T], self._computation
                 )(src_val, prev_state)
+            finally:
+                graph.set_active_consumer(prev_consumer)
 
             self._previous_source = src_val
+            self._previous_value = result
+            self._has_previous = True
             return result
 
         super().__init__(_compute, equal=equal)
+        # Recomputation and manual writes both replace the value, so they share
+        # one lock; this also makes update() a single atomic operation.
+        self._lock = self._computation_lock
         debug_log(
             lambda: f"LinkedSignal created with simple_pattern={self._simple_pattern}"
         )
@@ -365,21 +418,60 @@ class LinkedSignal(ComputeSignal[T], Generic[T]):
         return self.get()
 
     def set(self, new_value: T, /) -> None:
+        """Override the linked value until the source changes again.
+
+        Like Angular, pending source changes are applied first, so the written
+        value is current and is not replaced by the next read. Writing also
+        clears an error state.
+        """
         debug_log(lambda: f"LinkedSignal manual set() called with value: {new_value}")
-        # If never computed, trigger initial computation to establish dependencies
-        if self._version == 0:
-            super()._refresh()
+        _assert_writable()  # before refreshing: a rejected write must not evaluate
         if self._lock is not None:
             with self._lock:
-                targets = super()._set_internal(new_value)
+                targets = self._refresh_and_override(new_value)
         else:
-            targets = super()._set_internal(new_value)
+            targets = self._refresh_and_override(new_value)
         if targets is not None:
             self._notify_targets(targets)
 
     def update(self, update_fn: Callable[[T], T]) -> None:
-        self.set(update_fn(cast(T, self._value)))
+        """Override with ``update_fn(current)``, where current is up to date.
 
+        Refreshing, calling ``update_fn`` and writing happen under one lock, so
+        concurrent updates from several threads are not lost.
+        """
+        _assert_writable()  # before calling update_fn: a rejected write runs nothing
+        if self._lock is not None:
+            with self._lock:
+                targets = self._refresh_and_update(update_fn)
+        else:
+            targets = self._refresh_and_update(update_fn)
+        if targets is not None:
+            self._notify_targets(targets)
+
+    def _refresh_and_override(self, new_value: T) -> Optional[list[graph._Consumer]]:
+        self._refresh()
+        return self._set_override(new_value)
+
+    def _refresh_and_update(
+        self, update_fn: Callable[[T], T]
+    ) -> Optional[list[graph._Consumer]]:
+        self._refresh()
+        if self._flags & graph.HAS_ERROR:
+            assert self._last_error is not None
+            raise self._last_error
+        return self._set_override(update_fn(cast(T, self._value)))
+
+    def _set_override(self, new_value: T) -> Optional[list[graph._Consumer]]:
+        if self._flags & graph.HAS_ERROR:
+            # Nothing to compare against: the error is replaced by the override.
+            self._flags &= ~graph.HAS_ERROR
+            self._last_error = None
+            self._value = new_value
+            self._version += 1
+            graph.global_version += 1
+            return graph.snapshot_targets(self)
+        return super()._set_internal(new_value)
 
 Linked = LinkedSignal
 
@@ -388,18 +480,24 @@ class _TypedLinkedFactory(Generic[T]):
     """Typed Linked decorator used by ``linked[T]`` syntax."""
 
     @overload
-    def __call__(self, func: Callable[[], object], /) -> LinkedSignal[T]: ...
+    def __call__(self, func: Callable[[], T], /) -> LinkedSignal[T]: ...
 
     @overload
-    def __call__(self, func: Callable[[Any], object], /) -> LinkedDescriptor[T]: ...
+    def __call__(self, func: Callable[[Any], T], /) -> LinkedDescriptor[T]: ...
 
     @overload
     def __call__(
         self, /, *, equal: Callable[[T, T], bool]
     ) -> Callable[
-        [Union[Callable[[], object], Callable[[Any], object]]],
+        [Union[Callable[[], T], Callable[[Any], T]]],
         Union[LinkedSignal[T], LinkedDescriptor[T]],
     ]: ...
+
+    @overload
+    def __call__(
+        self, /, *, computation: Callable[[Any, S, Optional[PreviousState[S, T]]], T],
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Callable[[Callable[[Any], S]], LinkedDescriptor[T]]: ...
 
     def __call__(
         self,
@@ -407,26 +505,20 @@ class _TypedLinkedFactory(Generic[T]):
         /,
         *,
         equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Union[
-        LinkedSignal[T],
-        LinkedDescriptor[T],
-        Callable[
-            [Union[Callable[[], object], Callable[[Any], object]]],
-            Union[LinkedSignal[T], LinkedDescriptor[T]],
-        ],
-    ]:
+        computation: Optional[Callable[..., T]] = None,
+    ) -> Any:
         if func is not None:
             return cast(
                 Union[LinkedSignal[T], LinkedDescriptor[T]],
-                LinkedSignal(cast(Callable[..., T], func), equal=equal),
+                LinkedSignal(cast(Callable[..., T], func), equal=equal, computation=computation),
             )
 
         def decorator(
-            f: Union[Callable[[], object], Callable[[Any], object]],
+            f: Union[Callable[[], T], Callable[[Any], T]],
         ) -> Union[LinkedSignal[T], LinkedDescriptor[T]]:
             return cast(
                 Union[LinkedSignal[T], LinkedDescriptor[T]],
-                LinkedSignal(cast(Callable[..., T], f), equal=equal),
+                LinkedSignal(cast(Callable[..., T], f), equal=equal, computation=computation),
             )
 
         return decorator
@@ -461,29 +553,28 @@ class _LinkedFactory:
 
     @overload
     def __call__(
+        self, *, computation: Callable[[Any, S, Optional[PreviousState[S, T]]], T],
+        equal: Optional[Callable[[T, T], bool]] = None,
+    ) -> Callable[[Callable[[Any], S]], LinkedDescriptor[T]]: ...
+
+    @overload
+    def __call__(
         self,
-        computation_or_source: Union[Callable[..., T], Signal[U], None] = None,
+        computation_or_source: Union[Callable[..., T], ReadableSignal[U], None] = None,
         *,
-        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
-        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        source: Optional[Union[ReadableSignal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[[U, Optional[PreviousState[U, T]]], T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
     ) -> LinkedSignal[T]: ...
 
     def __call__(
         self,
-        computation_or_source: Union[Callable[..., T], Signal[U], None] = None,
+        computation_or_source: Union[Callable[..., T], ReadableSignal[U], None] = None,
         *,
-        source: Optional[Union[Signal[U], Callable[[], U]]] = None,
-        computation: Optional[Callable[[U, Optional[PreviousState[T]]], T]] = None,
+        source: Optional[Union[ReadableSignal[U], Callable[[], U]]] = None,
+        computation: Optional[Callable[..., T]] = None,
         equal: Optional[Callable[[T, T], bool]] = None,
-    ) -> Union[
-        LinkedSignal[T],
-        LinkedDescriptor[T],
-        Callable[
-            [Union[Callable[[], T], Callable[[Any], T]]],
-            Union[LinkedSignal[T], LinkedDescriptor[T]],
-        ],
-    ]:
+    ) -> Any:
         return LinkedSignal(
             computation_or_source,
             source=source,
@@ -502,4 +593,4 @@ class _LinkedFactory:
         return _TypedLinkedFactory()
 
 
-linked = _LinkedFactory()
+linked: _LinkedFactory = _LinkedFactory()

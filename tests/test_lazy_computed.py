@@ -93,12 +93,38 @@ def test_error_handling():
     # Function was called once
     compute_fn.assert_called_once()
 
-    # Next access should also raise (no caching of errors)
+    # Next access re-raises the memoized error without recomputing
     with pytest.raises(RuntimeError, match="Oops"):
         computed.get()
+    assert compute_fn.call_count == 1
 
-    # Function should be called again
-    assert compute_fn.call_count == 2
+
+def test_errors_are_memoized_until_a_dependency_changes():
+    from reaktiv import computed, effect, signal
+
+    divisor = signal(0)
+    runs = []
+    quotient = computed(lambda: runs.append(divisor()) or 10 // divisor())
+    for _ in range(3):
+        with pytest.raises(ZeroDivisionError):
+            quotient()
+    assert runs == [0]
+
+    seen = []
+
+    def observe():
+        try:
+            seen.append(quotient())
+        except ZeroDivisionError:
+            seen.append("error")
+
+    observer = effect(observe)  # a subscribed reader shares the cached error
+    assert runs == [0]
+    divisor.set(2)
+    assert quotient() == 5
+    assert runs == [0, 2]
+    assert seen == ["error", 5]
+    observer.dispose()
 
 
 def test_nested_computations():

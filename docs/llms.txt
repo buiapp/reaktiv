@@ -1,0 +1,18 @@
+# reaktiv
+
+> Signals for Python: reactive, declarative state management with automatic dependency tracking. Signals hold state, computed values derive from them lazily, effects run side effects, and resources load async data from reactive parameters.
+
+Read the agent guide first: it states the mental model and the rules for writing reaktiv code. The installed package contains the same guide, matching its version, at `reaktiv/AGENTS.md`.
+
+## Guide
+
+- [Agent guide](https://raw.githubusercontent.com/buiapp/reaktiv/main/src/reaktiv/AGENTS.md): mental model, which primitive to use, rules, patterns and pitfalls
+- [Core concepts](https://reaktiv.bui.app/docs/core-concepts/): signals, computed values, effects and dependency tracking
+- [Reactive models](https://reaktiv.bui.app/docs/api/reactive-model/): grouping state, derived values, effects and resources in a class
+- [Resource guide](https://reaktiv.bui.app/docs/resource-guide/): async loading, status, cancellation
+
+## Optional
+
+- [Advanced features](https://reaktiv.bui.app/docs/advanced-features/): custom equality, batching, threads and event loops
+- [subtle](https://reaktiv.bui.app/docs/api/subtle/): Watcher and primitives for framework authors
+- [Changelog](https://raw.githubusercontent.com/buiapp/reaktiv/main/CHANGELOG.md)

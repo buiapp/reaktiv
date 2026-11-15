@@ -23,7 +23,7 @@ jobs:
       - name: astral-sh/setup-uv
         uses: astral-sh/setup-uv@v5.3.1
         with:
-          python-version: 3.9
+          python-version: ${{ matrix.python-version }}
 
       - name: Run Ruff linting
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Run Pyright
         run: |
-          uv run pyright src/
+          uv run pyright src/ tests/typing/
 
       - name: Run tests
         run: |
@@ -43,7 +43,7 @@ jobs:
 
       - name: Test clean install (catch undeclared dependencies)
         run: |
-          uv venv .test-venv --python 3.9
+          uv venv .test-venv --python ${{ matrix.python-version }}
           uv pip install --python .test-venv/bin/python dist/*.whl
           .test-venv/bin/python -c "import reaktiv"
 

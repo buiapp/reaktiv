@@ -299,7 +299,7 @@ async def main() -> None:
 await main()
 ```
 
-Changing `user_id` starts a new load. `dispose()` destroys model-owned resources
+Changing `user_id` starts a new load. `dispose()` disposes model-owned resources
 and cancels pending work.
 
 ## Lifecycle And Disposal
@@ -308,11 +308,26 @@ and cancels pending work.
 
 - disposes model-owned effects;
 - runs their pending cleanup functions;
-- destroys model-owned resources and cancels pending loads;
+- disposes model-owned resources: cancels pending loads and stops parameter tracking;
 - leaves ordinary fields, computed values, and linked signals readable.
 
-Disposal is idempotent. Prefer explicit disposal when a model has effects or
-resources instead of relying on garbage collection.
+Disposal is idempotent and final. Objects registered with `model.own(obj)`
+after disposal, and effects or resources first accessed after it, are disposed
+immediately instead of being kept for a cleanup that would never come. Prefer
+explicit disposal when a model has effects or resources instead of relying on
+garbage collection.
+
+### Limitations
+
+- **Copies share reactive state.** Members live in the instance `__dict__`, so
+  `copy.copy(model)` shares its signals, computed values and effects with the
+  original, and `copy.deepcopy()` and `pickle` raise `TypeError`. Create a new
+  model from the values instead: `Counter(count=model.count())`.
+- **Classes without `__dict__`** (`__slots__` without `"__dict__"`) keep their
+  members in a weak map keyed by the instance. A member that references its
+  owner (a computed returning `self`, a cleanup closing over it) then keeps the
+  model alive. Give such classes a `__dict__`, or avoid owner references in
+  members.
 
 ```pyodide install="reaktiv" assets="no" height="12" theme="github,one_dark"
 from reaktiv import ReactiveModel, field
@@ -387,3 +402,10 @@ functions, linked overrides, effect cleanup, and disposal.
       show_root_heading: true
       show_bases: false
       members_order: source
+
+### Field equality
+
+`field(default, equal=comparator)` and `field(factory=make_value, equal=comparator)`
+forward a two-argument equality function to each instance's signal. Returning True
+retains the previous value and skips notifying dependents. Omitting it keeps the
+signal's default identity comparison.
